@@ -219,9 +219,6 @@
     .attempt-date { color:#9ca3af; font-size:0.68rem; }
     .attempt-desc { color:#374151; margin-top:1px; }
 
-    /* ── Notes / WhatsApp ── */
-    .note-row { display:flex; gap:12px; align-items:flex-end; margin-top:12px; flex-wrap:wrap; }
-    .note-row .form-group { flex:1; min-width:180px; }
     .form-group { display:flex; flex-direction:column; gap:4px; }
     .form-group label { font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
     .form-group input, .form-group textarea {
@@ -230,17 +227,6 @@
     }
     .form-group input:focus, .form-group textarea:focus { border-color:#0d9488; box-shadow:0 0 0 3px rgba(13,148,136,0.1); }
     textarea { min-height:60px; resize:vertical; }
-    .btn-whatsapp { background:#25D366; color:#fff; padding:10px 18px; }
-    .btn-whatsapp:hover:not(:disabled) { background:#128C7E; }
-    .btn-save { background:#0d9488; color:#fff; padding:10px 18px; }
-    .btn-save:hover:not(:disabled) { background:#0f766e; }
-
-    #result-box {
-      background:#111827; color:#86efac; border-radius:10px; padding:12px;
-      font-family:'Cascadia Code','Consolas',monospace; font-size:0.74rem; white-space:pre-wrap;
-      word-break:break-all; max-height:180px; overflow-y:auto; line-height:1.5; margin-top:8px;
-    }
-    #result-box.error { color:#fca5a5; }
 
     /* ── Log ── */
     .log-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#9ca3af; margin:14px 0 6px 0; }
@@ -453,33 +439,6 @@
         <div class="attempts-log" id="po-history"></div>
       </div>
     </div>
-
-    <div class="note-row">
-      <div class="form-group">
-        <label>Contact Phone (for WhatsApp)</label>
-        <input type="text" id="inp-phone" placeholder="e.g. 0123456789" />
-      </div>
-      <div class="form-group" style="flex:2;">
-        <label>Note</label>
-        <input type="text" id="inp-note" placeholder="e.g. Discussed lead time improvement, follow up next week." />
-      </div>
-    </div>
-    <div class="btn-row" style="margin-top:10px;">
-      <button class="btn-save" id="btn-save" disabled>&#128231; Save note</button>
-      <button class="btn-whatsapp" id="btn-whatsapp" disabled>&#128241; Send via WhatsApp &amp; save note</button>
-    </div>
-    <div class="sub" style="margin-top:6px;">
-      Requires a Get Token above first. Attempts a REAL POST to <code>{apiUrl}api/Udf/SetValues</code> against a
-      custom "SupplierNote" module (Menu Code configurable below).
-    </div>
-    <div class="form-group" style="margin-top:8px;max-width:280px;">
-      <label>Note Menu Code (UT_TableName)</label>
-      <input type="text" id="inp-note-tablecode" value="SupplierNote" />
-    </div>
-    <div id="result-section" style="display:none;">
-      <h2 style="margin-top:12px;">API Result - <span id="result-endpoint"></span></h2>
-      <div id="result-box"></div>
-    </div>
   </div>
 </div>
 
@@ -533,8 +492,6 @@
         authToken = r.token_type + ' ' + r.access_token;
         addLog('Token obtained');
         $('#btn-load').prop('disabled', false);
-        $('#btn-save').prop('disabled', false);
-        $('#btn-whatsapp').prop('disabled', false);
         $('#btn-debug').prop('disabled', false);
       },
       error: function (r) {
@@ -802,11 +759,6 @@
     // PO history (demo)
     renderPOHistory(s);
 
-    // Phone
-    $('#inp-phone').val(c.phone.replace(/-/g, ''));
-    $('#inp-note').val('');
-    $('#result-section').hide();
-
     addLog('Selected ' + s.code + ' - score ' + s.score);
   }
 
@@ -878,58 +830,6 @@
     var email = s.name.toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.+|\.+$/g,'') || 'supplier';
     return { name:name, role:role, phone:phone, email:email+'@example.com' };
   }
-
-  /* ── WhatsApp ── */
-  function openWhatsApp(phone, message) {
-    var clean = phone.replace(/[\s\-\+]/g, '');
-    if (clean.startsWith('0')) clean = '60' + clean.substring(1);
-    var url = 'https://wa.me/' + clean + '?text=' + encodeURIComponent(message);
-    addLog('Opening WhatsApp: ' + url);
-    window.open(url, '_blank');
-  }
-
-  /* ── Save Note ── */
-  function saveNote(callback) {
-    if (!apiUrl || !authToken) { alert('Get a token first.'); return false; }
-    if (!selectedSupplier) { alert('Select a supplier first.'); return false; }
-    var tableCode = $('#inp-note-tablecode').val().trim() || 'SupplierNote';
-    var endpoint = apiUrl + 'api/Udf/SetValues';
-    var payload = {
-      tableName: tableCode,
-      values: {
-        SupplierCode: selectedSupplier.code,
-        SupplierName: selectedSupplier.name,
-        Recommendation: $('#recommendation').val(),
-        Note: $('#inp-note').val(),
-        ReliabilityScore: selectedSupplier.score,
-      }
-    };
-    $('#result-endpoint').text('POST api/Udf/SetValues');
-    $('#result-box').removeClass('error').text('Calling...');
-    $('#result-section').show();
-    addLog('POST ' + endpoint);
-    $.ajax({
-      url: endpoint, type:'POST', cache:false, contentType:'application/json',
-      headers: { 'Authorization': authToken },
-      data: JSON.stringify(payload),
-      success: function(r) { $('#result-box').removeClass('error').text(JSON.stringify(r,null,2)); addLog('Save succeeded'); if(callback) callback(); },
-      error: function(xhr) {
-        var msg; try{msg=JSON.stringify(JSON.parse(xhr.responseText),null,2);}catch(e){msg=xhr.responseText||('HTTP '+xhr.status);}
-        $('#result-box').addClass('error').text(msg); addLog('Save failed ('+xhr.status+')');
-      }
-    });
-    return true;
-  }
-
-  $('#btn-save').on('click', function() { saveNote(); });
-  $('#btn-whatsapp').on('click', function() {
-    if (!selectedSupplier) { alert('Select a supplier first.'); return; }
-    var phone = $('#inp-phone').val().trim();
-    if (!phone) { alert('Enter a phone number.'); return; }
-    var msg = $('#recommendation').val() || $('#inp-note').val();
-    if (!msg) { alert('Enter a recommendation or note.'); return; }
-    saveNote(function() { openWhatsApp(phone, msg); });
-  });
 
   addLog('Page loaded - listening for ALAYA_INIT');
 </script>
