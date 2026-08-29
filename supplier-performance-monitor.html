@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Supplier Performance and Lead-Time Monitor - Alaya Plugin</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+      padding: 24px 20px;
+      line-height: 1.5;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      padding: 24px 28px;
+      max-width: 1100px;
+      margin: 0 auto 16px auto;
+    }
+    h1 { font-size: 1.3rem; font-weight: 800; color: #111827; }
+    h2 { font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 12px; }
+    .sub { font-size: 0.82rem; color: #6b7280; margin-bottom: 14px; }
+    .sub code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#6b7280; }
+    .hero-card { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .hero-title-row { display:flex; align-items:center; gap:12px; }
+    .hero-icon {
+      flex-shrink:0; width:42px; height:42px; border-radius:11px;
+      background: linear-gradient(135deg, #0d9488, #14b8a6);
+      display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:#fff;
+    }
+    .real-banner {
+      background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0;
+      border-radius: 10px; padding: 12px 16px; font-size: 0.8rem; margin-bottom: 16px;
+    }
+    .real-banner code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .btn-primary { background:#0d9488; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#0f766e; }
+    .btn-secondary { background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
+    .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
+
+    /* ── KPI Row ── */
+    .kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:16px 0; }
+    .kpi-card {
+      display:flex; align-items:center; gap:10px; background:#f9fafb; border:1px solid #e5e7eb;
+      border-radius:12px; padding:14px 16px;
+    }
+    .kpi-icon {
+      flex-shrink:0; width:36px; height:36px; border-radius:10px; display:flex; align-items:center;
+      justify-content:center; font-size:1rem; background:#fff; border:1px solid #e5e7eb;
+    }
+    .kpi-value { font-size:1.2rem; font-weight:800; color:#111827; }
+    .kpi-label { font-size:0.72rem; font-weight:600; color:#374151; }
+    .kpi-sub { font-size:0.68rem; color:#9ca3af; }
+
+    /* ── Gauge ── */
+    .gauge-section { display:flex; gap:20px; align-items:stretch; margin:16px 0; }
+    .gauge-left { flex:1; min-width:0; }
+    .gauge-center { flex:0 0 320px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .gauge-right { flex:1; min-width:0; }
+
+    .gauge-wrap {
+      position:relative; width:260px; height:160px; margin:0 auto;
+    }
+    .gauge-svg { width:100%; height:100%; }
+    .gauge-label {
+      position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+      text-align:center;
+    }
+    .gauge-score { font-size:2.8rem; font-weight:800; color:#111827; line-height:1; }
+    .gauge-text { font-size:0.78rem; color:#6b7280; font-weight:600; }
+
+    /* ── Bar chart ── */
+    .chart-card {
+      background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:16px;
+    }
+    .chart-title { font-size:0.82rem; font-weight:700; color:#111827; margin-bottom:4px; }
+    .chart-subtitle { font-size:0.7rem; color:#9ca3af; margin-bottom:12px; }
+    .bar-chart { display:flex; align-items:flex-end; gap:6px; height:100px; }
+    .bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; }
+    .bar { width:100%; border-radius:4px 4px 0 0; background:#14b8a6; transition:height 0.4s; }
+    .bar-label { font-size:0.6rem; color:#9ca3af; }
+    .bar-pct { font-size:0.58rem; color:#6b7280; font-weight:600; }
+    .avg-row {
+      display:flex; align-items:center; gap:8px; margin-top:12px; padding:10px 14px;
+      background:#f0fdfa; border:1px solid #ccfbf1; border-radius:8px;
+    }
+    .avg-icon { font-size:1rem; }
+    .avg-text { font-size:0.82rem; color:#111827; }
+    .avg-text strong { font-size:1.1rem; color:#0d9488; }
+
+    /* ── Alert banner ── */
+    .alert-banner {
+      display:flex; align-items:flex-start; gap:10px; padding:12px 16px; border-radius:10px;
+      font-size:0.8rem; margin:12px 0;
+    }
+    .alert-warning { background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
+    .alert-danger { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+    .alert-icon { font-size:1.1rem; flex-shrink:0; margin-top:1px; }
+
+    /* ── Donut chart ── */
+    .donut-card {
+      background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:16px;
+    }
+    .donut-wrap { display:flex; align-items:center; gap:16px; margin-top:8px; }
+    .donut-svg { width:90px; height:90px; flex-shrink:0; }
+    .donut-stats { flex:1; }
+    .donut-stat { font-size:0.78rem; color:#374151; margin-bottom:4px; }
+    .donut-stat strong { color:#111827; }
+    .donut-benchmark { font-size:0.7rem; color:#9ca3af; margin-top:6px; }
+
+    /* ── Late deliveries ── */
+    .late-card {
+      background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:16px;
+    }
+    .late-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .late-count { font-size:1.8rem; font-weight:800; color:#dc2626; }
+    .late-item {
+      display:flex; align-items:center; justify-content:space-between; padding:6px 0;
+      border-bottom:1px solid #f3f4f6; font-size:0.78rem;
+    }
+    .late-item:last-child { border-bottom:none; }
+    .late-po { color:#374151; font-weight:600; }
+    .late-days { color:#dc2626; font-weight:600; }
+
+    /* ── Backup supplier card ── */
+    .backup-card {
+      background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:16px;
+      cursor:pointer; transition:background 0.15s;
+    }
+    .backup-card:hover { background:#fef3c7; }
+    .backup-header { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .backup-icon { font-size:1.2rem; }
+    .backup-title { font-size:0.88rem; font-weight:700; color:#92400e; }
+    .backup-sub { font-size:0.78rem; color:#b45309; }
+    .backup-arrow { font-size:1.2rem; color:#92400e; margin-left:auto; }
+
+    /* ── Supplier ranking strip ── */
+    .ranking-section { margin-top:16px; }
+    .ranking-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .ranking-title { font-size:0.88rem; font-weight:700; color:#111827; }
+    .ranking-sub { font-size:0.72rem; color:#9ca3af; }
+    .ranking-strip { display:flex; gap:12px; overflow-x:auto; padding-bottom:8px; }
+    .ranking-card {
+      flex:0 0 190px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px;
+      padding:14px; text-align:center; cursor:pointer; transition:box-shadow 0.15s;
+    }
+    .ranking-card:hover { box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+    .ranking-card.selected { border-color:#0d9488; box-shadow:0 0 0 2px rgba(13,148,136,0.2); }
+    .ranking-rank {
+      display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px;
+      border-radius:50%; background:#e5e7eb; font-size:0.72rem; font-weight:700; color:#374151;
+      margin-bottom:6px;
+    }
+    .ranking-rank.r1 { background:#0d9488; color:#fff; }
+    .ranking-rank.r2 { background:#14b8a6; color:#fff; }
+    .ranking-rank.r3 { background:#5eead4; color:#065f46; }
+    .ranking-name { font-size:0.78rem; font-weight:700; color:#111827; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ranking-mini-gauge { margin:8px auto; width:60px; height:36px; }
+    .ranking-score { font-size:1.3rem; font-weight:800; line-height:1; }
+    .ranking-meta { font-size:0.65rem; color:#9ca3af; margin-top:4px; }
+    .ranking-badge {
+      display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.62rem;
+      font-weight:700; margin-top:6px;
+    }
+    .rb-excellent { background:#dcfce7; color:#166534; }
+    .rb-watch { background:#fef3c7; color:#92400e; }
+    .rb-monitor { background:#e0e7ff; color:#3730a3; }
+    .rb-atrisk { background:#fee2e2; color:#b91c1c; }
+    .rb-highrisk { background:#fecaca; color:#991b1b; }
+
+    /* ── Supplier detail panel ── */
+    .detail-panel { display:none; margin-top:16px; }
+    .detail-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:12px; }
+    .detail-stat {
+      background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px;
+    }
+    .detail-stat-label { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#9ca3af; }
+    .detail-stat-value { font-size:1rem; font-weight:700; color:#111827; margin-top:2px; }
+    .detail-stat-value.danger { color:#dc2626; }
+    .detail-stat-value.good { color:#0d9488; }
+
+    .detail-columns { display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:14px; margin-top:14px; }
+    .detail-col { min-width:0; }
+    .mini-label {
+      font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+      color:#9ca3af; margin-bottom:8px; display:flex; align-items:center; gap:6px;
+    }
+    .demo-tag {
+      display:inline-block; font-size:0.58rem; font-weight:700; text-transform:uppercase;
+      letter-spacing:0.05em; background:#f3f4f6; color:#9ca3af; padding:2px 6px; border-radius:999px;
+    }
+    .ready-badge {
+      display:inline-block; font-size:0.62rem; font-weight:700; background:#dcfce7; color:#166534;
+      padding:2px 8px; border-radius:999px;
+    }
+    .info-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; font-size:0.8rem; }
+    .info-card .info-label { color:#9ca3af; font-size:0.7rem; margin-bottom:2px; }
+    .info-card .info-value { font-weight:600; color:#111827; }
+    .attempts-log { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; font-size:0.74rem; max-height:200px; overflow-y:auto; }
+    .attempt-item { padding:6px 0; border-bottom:1px solid #eceef1; }
+    .attempt-item:last-child { border-bottom:none; }
+    .attempt-date { color:#9ca3af; font-size:0.68rem; }
+    .attempt-desc { color:#374151; margin-top:1px; }
+
+    /* ── Notes / WhatsApp ── */
+    .note-row { display:flex; gap:12px; align-items:flex-end; margin-top:12px; flex-wrap:wrap; }
+    .note-row .form-group { flex:1; min-width:180px; }
+    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-group label { font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
+    .form-group input, .form-group textarea {
+      border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.82rem; color:#111827;
+      outline:none; font-family:inherit; transition:border-color 0.15s;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color:#0d9488; box-shadow:0 0 0 3px rgba(13,148,136,0.1); }
+    textarea { min-height:60px; resize:vertical; }
+    .btn-whatsapp { background:#25D366; color:#fff; padding:10px 18px; }
+    .btn-whatsapp:hover:not(:disabled) { background:#128C7E; }
+    .btn-save { background:#0d9488; color:#fff; padding:10px 18px; }
+    .btn-save:hover:not(:disabled) { background:#0f766e; }
+
+    #result-box {
+      background:#111827; color:#86efac; border-radius:10px; padding:12px;
+      font-family:'Cascadia Code','Consolas',monospace; font-size:0.74rem; white-space:pre-wrap;
+      word-break:break-all; max-height:180px; overflow-y:auto; line-height:1.5; margin-top:8px;
+    }
+    #result-box.error { color:#fca5a5; }
+
+    /* ── Log ── */
+    .log-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#9ca3af; margin:14px 0 6px 0; }
+    #log { list-style:none; max-height:90px; overflow-y:auto; font-size:0.72rem; color:#4b5563; }
+    #log li { padding:2px 0; border-bottom:1px solid #f5f5f5; }
+    #log .ts { color:#b0b4bb; margin-right:5px; font-family:monospace; }
+
+    @media (max-width:900px) {
+      .gauge-section { flex-direction:column; }
+      .gauge-center { flex:none; }
+      .detail-grid, .detail-columns { grid-template-columns:1fr; }
+      .kpi-row { grid-template-columns:repeat(2,1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Status / handshake card -->
+<div class="card">
+  <div class="hero-card">
+    <div class="hero-title-row">
+      <div class="hero-icon">&#9881;</div>
+      <div>
+        <h1>AI Supplier Performance and Lead-Time Monitor</h1>
+        <div class="sub" style="margin-bottom:0;">Measure supplier reliability from purchase history and highlight lead-time risk before urgent purchases.</div>
+      </div>
+    </div>
+    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span></div>
+  </div>
+</div>
+
+<!-- Main workspace -->
+<div class="card" id="workspace" style="max-width:1100px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div class="hero-title-row">
+      <div style="font-size:1.1rem;">&#128269;</div>
+      <div>
+        <h2 style="margin-bottom:2px;">Supplier Performance Dashboard</h2>
+        <div class="sub" style="margin-bottom:0;">Analyze PO history, measure lead time, score on-time delivery, flag risk</div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-load" disabled>Load Supplier Data</button>
+      <button class="btn-secondary" id="btn-debug" disabled>Debug: Resolve Table</button>
+    </div>
+  </div>
+  <div class="real-banner" style="margin-top:14px;">
+    <b>REAL DATA (via custom module snapshot).</b> Reads the <code>SupplierPerfSnapshot</code> custom Master Data module
+    (built in Module Editor under jinmenu4, refreshed via its Module Query) through the real
+    <code>api/Udf/ZZTGetDataTable</code> endpoint - confirmed working against live SIT data. Contact info /
+    action history shown below are demo placeholders (not tracked yet) - everything else (lead time, scores,
+    risk flags) is computed from the real snapshot rows.
+  </div>
+
+  <!-- KPI Row -->
+  <div class="kpi-row" id="kpi-row" style="display:none;">
+    <div class="kpi-card">
+      <div class="kpi-icon">&#128230;</div>
+      <div><div class="kpi-value" id="kpi-suppliers">0</div><div class="kpi-label">Suppliers tracked</div><div class="kpi-sub">Last 90 days</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">&#9201;</div>
+      <div><div class="kpi-value" id="kpi-avg-lead">0 days</div><div class="kpi-label">Avg lead time</div><div class="kpi-sub">Across all POs</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">&#9989;</div>
+      <div><div class="kpi-value" id="kpi-ontime">0%</div><div class="kpi-label">On-time delivery</div><div class="kpi-sub" id="kpi-ontime-sub">0 / 0 POs</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">&#9888;</div>
+      <div><div class="kpi-value" id="kpi-atrisk" style="color:#dc2626;">0</div><div class="kpi-label">At-risk suppliers</div><div class="kpi-sub">Score below 70</div></div>
+    </div>
+  </div>
+
+  <!-- Gauge + Charts + Late + Backup -->
+  <div class="gauge-section" id="gauge-section" style="display:none;">
+    <!-- Left: Lead Time Distribution -->
+    <div class="gauge-left">
+      <div class="chart-card">
+        <div class="chart-title">Lead Time Distribution <span style="font-weight:400;color:#9ca3af;font-size:0.72rem;">(days)</span></div>
+        <div class="bar-chart" id="bar-chart"></div>
+        <div class="avg-row">
+          <span class="avg-icon">&#9201;</span>
+          <span class="avg-text">Average lead time <strong id="avg-lead-display">0 days</strong></span>
+        </div>
+      </div>
+      <div class="alert-banner alert-warning" id="alert-leadtime" style="display:none;">
+        <span class="alert-icon">&#9888;</span>
+        <div id="alert-leadtime-text">Lead time is higher than your target.</div>
+      </div>
+    </div>
+
+    <!-- Center: Reliability Score Gauge -->
+    <div class="gauge-center">
+      <div class="gauge-wrap">
+        <svg class="gauge-svg" viewBox="0 0 260 160">
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#dc2626" />
+              <stop offset="35%" style="stop-color:#f59e0b" />
+              <stop offset="65%" style="stop-color:#14b8a6" />
+              <stop offset="100%" style="stop-color:#0d9488" />
+            </linearGradient>
+          </defs>
+          <!-- Background arc -->
+          <path d="M 30 145 A 100 100 0 0 1 230 145" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round" />
+          <!-- Value arc -->
+          <path id="gauge-arc" d="M 30 145 A 100 100 0 0 1 230 145" fill="none" stroke="url(#gaugeGrad)" stroke-width="18" stroke-linecap="round"
+                stroke-dasharray="0 314" />
+          <!-- Tick marks -->
+          <text x="22" y="158" font-size="11" fill="#9ca3af" font-weight="600">0</text>
+          <text x="228" y="158" font-size="11" fill="#9ca3af" font-weight="600">100</text>
+          <!-- Needle dot -->
+          <circle id="gauge-needle-dot" cx="130" cy="50" r="6" fill="#111827" />
+        </svg>
+        <div class="gauge-label">
+          <div style="font-size:0.72rem;color:#6b7280;font-weight:600;margin-bottom:2px;">Reliability Score</div>
+          <div class="gauge-score" id="gauge-score">--</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <span class="ranking-badge" id="supplier-status-badge">--</span>
+      </div>
+      <button class="btn-secondary" id="btn-watch" style="margin-top:10px;display:none;">&#9888; Watch lead time</button>
+    </div>
+
+    <!-- Right: On-time donut + Late deliveries + Backup -->
+    <div class="gauge-right">
+      <div class="donut-card" style="margin-bottom:12px;">
+        <div class="chart-title">On-Time Delivery Performance</div>
+        <div class="donut-wrap">
+          <svg class="donut-svg" viewBox="0 0 90 90">
+            <circle cx="45" cy="45" r="36" fill="none" stroke="#e5e7eb" stroke-width="8" />
+            <circle id="donut-ring" cx="45" cy="45" r="36" fill="none" stroke="#0d9488" stroke-width="8"
+                    stroke-dasharray="0 226" stroke-linecap="round" transform="rotate(-90 45 45)" />
+            <text x="45" y="42" text-anchor="middle" font-size="14" font-weight="800" fill="#111827" id="donut-pct">0%</text>
+            <text x="45" y="54" text-anchor="middle" font-size="7" fill="#9ca3af">On-time</text>
+          </svg>
+          <div class="donut-stats">
+            <div class="donut-stat"><strong id="donut-ontime">0</strong> / <span id="donut-total">0</span> on-time POs</div>
+            <div class="donut-benchmark">Industry benchmark: 82%</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="late-card" style="margin-bottom:12px;">
+        <div class="late-header">
+          <div>
+            <div class="chart-title">Late Deliveries</div>
+            <div class="chart-subtitle">(Last 90 Days)</div>
+          </div>
+          <div class="late-count" id="late-count">0</div>
+        </div>
+        <div id="late-list"></div>
+      </div>
+
+      <div class="backup-card" id="backup-card" style="display:none;">
+        <div class="backup-header">
+          <span class="backup-icon">&#8644;</span>
+          <span class="backup-title">Switch urgent orders to backup supplier</span>
+          <span class="backup-arrow">&#8250;</span>
+        </div>
+        <div class="backup-sub" id="backup-sub">Lead time is above your target and late deliveries detected.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier Ranking Strip -->
+  <div class="ranking-section" id="ranking-section" style="display:none;">
+    <div class="ranking-header">
+      <div>
+        <div class="ranking-title">Supplier Ranking</div>
+        <div class="ranking-sub">By Reliability Score (Last 90 Days)</div>
+      </div>
+    </div>
+    <div class="ranking-strip" id="ranking-strip"></div>
+  </div>
+
+  <!-- Supplier Detail Panel -->
+  <div class="detail-panel" id="detail-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <h2 style="margin-bottom:0;" id="detail-title">Supplier Details</h2>
+        <span class="ranking-badge" id="detail-badge">--</span>
+      </div>
+      <div class="sub" style="margin-bottom:0;" id="detail-meta"></div>
+    </div>
+
+    <div class="detail-grid" id="detail-grid">
+      <div class="detail-stat"><div class="detail-stat-label">Avg Lead Time</div><div class="detail-stat-value" id="stat-lead">--</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">On-Time %</div><div class="detail-stat-value" id="stat-ontime">--</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">Total POs</div><div class="detail-stat-value" id="stat-pos">--</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">Late POs</div><div class="detail-stat-value danger" id="stat-late">--</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">Total Purchase Value</div><div class="detail-stat-value" id="stat-value">--</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">Last PO Date</div><div class="detail-stat-value" id="stat-lastpo">--</div></div>
+    </div>
+
+    <div class="detail-columns">
+      <div class="detail-col">
+        <div class="mini-label">Supplier Contact<span class="demo-tag">demo</span></div>
+        <div class="info-card" id="contact-card"></div>
+      </div>
+      <div class="detail-col">
+        <div class="mini-label">AI Recommendation<span class="ready-badge">Ready</span></div>
+        <textarea id="recommendation" style="min-height:100px;"></textarea>
+        <div class="sub" style="margin-top:4px;margin-bottom:0;">Template-based recommendation - edit freely before use.</div>
+      </div>
+      <div class="detail-col">
+        <div class="mini-label">Purchase History<span class="demo-tag">demo</span></div>
+        <div class="attempts-log" id="po-history"></div>
+      </div>
+    </div>
+
+    <div class="note-row">
+      <div class="form-group">
+        <label>Contact Phone (for WhatsApp)</label>
+        <input type="text" id="inp-phone" placeholder="e.g. 0123456789" />
+      </div>
+      <div class="form-group" style="flex:2;">
+        <label>Note</label>
+        <input type="text" id="inp-note" placeholder="e.g. Discussed lead time improvement, follow up next week." />
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="btn-save" id="btn-save" disabled>&#128231; Save note</button>
+      <button class="btn-whatsapp" id="btn-whatsapp" disabled>&#128241; Send via WhatsApp &amp; save note</button>
+    </div>
+    <div class="sub" style="margin-top:6px;">
+      Requires a Get Token above first. Attempts a REAL POST to <code>{apiUrl}api/Udf/SetValues</code> against a
+      custom "SupplierNote" module (Menu Code configurable below).
+    </div>
+    <div class="form-group" style="margin-top:8px;max-width:280px;">
+      <label>Note Menu Code (UT_TableName)</label>
+      <input type="text" id="inp-note-tablecode" value="SupplierNote" />
+    </div>
+    <div id="result-section" style="display:none;">
+      <h2 style="margin-top:12px;">API Result - <span id="result-endpoint"></span></h2>
+      <div id="result-box"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Log -->
+<div class="card" style="max-width:1100px;">
+  <div class="log-label">Event Log</div>
+  <ul id="log"></ul>
+</div>
+
+<script>
+  var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+  var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
+  var SUPPLIER_TABLE_CODE = 'SupplierPerfSnapshot';
+  var SUPPLIER_TABLE_ID = 0;
+  var allSuppliers = [];
+  var selectedSupplier = null;
+  var TARGET_LEAD_TIME = 5;
+
+  function ts() { return new Date().toLocaleTimeString(); }
+  function addLog(msg) {
+    $('#log').prepend($('<li>').append($('<span class="ts">').text(ts()), document.createTextNode(msg)));
+  }
+  function postToParent(type, data) {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: type, data: data }, '*');
+      addLog('Sent -> ' + type);
+    }
+  }
+
+  /* ── ALAYA_INIT ── */
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.type !== 'ALAYA_INIT') return;
+    addLog('Received <- ALAYA_INIT');
+    var payload = msg.data !== undefined ? msg.data : msg;
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
+    if (payload && payload.nonce) nonce = payload.nonce;
+    if (payload && payload.client) clientId = payload.client;
+    if (payload && payload.username) username = payload.username;
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+    if (apiUrl && nonce && clientId && username) requestToken();
+  });
+
+  function requestToken() {
+    addLog('POST ' + apiUrl + 'token');
+    $.ajax({
+      url: apiUrl + 'token', type: 'POST', cache: false,
+      data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+      success: function (r) {
+        authToken = r.token_type + ' ' + r.access_token;
+        addLog('Token obtained');
+        $('#btn-load').prop('disabled', false);
+        $('#btn-save').prop('disabled', false);
+        $('#btn-whatsapp').prop('disabled', false);
+        $('#btn-debug').prop('disabled', false);
+      },
+      error: function (r) {
+        var msg = '';
+        try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch(e) { msg = r.responseText || 'Unknown'; }
+        addLog('Token failed: ' + msg);
+      }
+    });
+  }
+
+  /* ── Helpers ── */
+  function fmtMoney(n) { return n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtDate(s) {
+    if (!s) return '-';
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleDateString('en-MY', { day:'2-digit', month:'short', year:'numeric' });
+  }
+  function todayStr() { var t=new Date(); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); }
+  function hashStr(s) { var h=0; for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0;} return h; }
+  function scoreColor(s) { return s >= 90 ? '#0d9488' : s >= 75 ? '#14b8a6' : s >= 60 ? '#f59e0b' : '#dc2626'; }
+  function scoreLabel(s) {
+    if (s >= 90) return { text:'Excellent', cls:'rb-excellent' };
+    if (s >= 75) return { text:'Watch lead time', cls:'rb-watch' };
+    if (s >= 60) return { text:'Monitor', cls:'rb-monitor' };
+    if (s >= 40) return { text:'At Risk', cls:'rb-atrisk' };
+    return { text:'High Risk', cls:'rb-highrisk' };
+  }
+
+  /* ── Load Supplier Data ── */
+  $('#btn-load').on('click', function () {
+    if (!apiUrl || !authToken) { alert('Get a token first.'); return; }
+    var endpoint = apiUrl + 'api/Udf/ZZTGetDataTable';
+    var payload = {
+      tableId: SUPPLIER_TABLE_ID,
+      tableName: SUPPLIER_TABLE_CODE,
+      columnNames: ['ZZC_Code','ZZC_Description','ZZC_AvgLeadTime','ZZC_OnTimePct','ZZC_TotalPOs','ZZC_LatePOs','ZZC_TotalValue','ZZC_LastPODate','ZZC_ReliabilityScore'],
+      pageIndex: 1,
+      pageSize: 1000,
+    };
+    addLog('POST ' + endpoint);
+    $('#btn-load').prop('disabled', true).text('Loading...');
+    $.ajax({
+      url: endpoint, type:'POST', cache:false, contentType:'application/json; charset=UTF-8',
+      headers: { 'Authorization': authToken },
+      data: JSON.stringify(payload),
+      success: function (response) {
+        if (response && response.Result === false) { addLog('API Error: ' + response.Message); alert('Failed: ' + response.Message); return; }
+        addLog('Data loaded');
+        var rows = [];
+        try {
+          var obj = response.Obj || response.obj || response;
+          rows = Array.isArray(obj) ? obj : (obj.data || obj.Data || []);
+        } catch(e) { addLog('Parse error: ' + e); }
+        var suppliers = rows.map(function(r, i) {
+          var totalPOs = parseInt(r.ZZC_TotalPOs || r.TotalPOs || 0, 10);
+          var latePOs = parseInt(r.ZZC_LatePOs || r.LatePOs || 0, 10);
+          var onTimePct = parseFloat(r.ZZC_OnTimePct || r.OnTimePct || 0);
+          var avgLead = parseFloat(r.ZZC_AvgLeadTime || r.AvgLeadTime || 0);
+          var score = parseFloat(r.ZZC_ReliabilityScore || r.ReliabilityScore || Math.round(onTimePct * 0.6 + Math.max(0, 100 - avgLead * 5) * 0.4));
+          return {
+            uid: 'sup-' + i,
+            code: r.ZZC_Code || r.Code || '',
+            name: r.ZZC_Description || r.Description || '',
+            avgLeadTime: avgLead,
+            onTimePct: onTimePct,
+            totalPOs: totalPOs,
+            latePOs: latePOs,
+            totalValue: parseFloat(r.ZZC_TotalValue || r.TotalValue || 0),
+            lastPODate: r.ZZC_LastPODate || r.LastPODate || '',
+            score: Math.round(score),
+            latePOsList: [],
+          };
+        });
+        renderDashboard(suppliers);
+      },
+      error: function(xhr) {
+        var msg; try { msg=JSON.stringify(JSON.parse(xhr.responseText),null,2); } catch(e) { msg=xhr.responseText||('HTTP '+xhr.status); }
+        addLog('Load failed ('+xhr.status+'): '+msg);
+        alert('Load failed: '+msg);
+      },
+      complete: function() { $('#btn-load').prop('disabled',false).text('Load Supplier Data'); }
+    });
+  });
+
+  $('#btn-debug').on('click', function() {
+    if (!apiUrl || !authToken) { alert('Get a token first.'); return; }
+    var endpoint = apiUrl + 'api/Udf/GetUdfTableByCode?code=' + encodeURIComponent(SUPPLIER_TABLE_CODE);
+    addLog('GET ' + endpoint);
+    $.ajax({
+      url: endpoint, type:'GET', cache:false, headers:{'Authorization':authToken},
+      success: function(r) { addLog('Debug: '+JSON.stringify(r)); alert('Response:\n'+JSON.stringify(r,null,2)); },
+      error: function(xhr) { var msg; try{msg=JSON.stringify(JSON.parse(xhr.responseText),null,2);}catch(e){msg=xhr.responseText||('HTTP '+xhr.status);} alert('Failed: '+msg); }
+    });
+  });
+
+  /* ── Render ── */
+  function renderDashboard(suppliers) {
+    allSuppliers = suppliers;
+    selectedSupplier = null;
+    $('#detail-panel').hide();
+
+    // KPIs
+    var totalSuppliers = suppliers.length;
+    var totalLead = 0, totalOnTime = 0, totalPOs = 0, atrisk = 0;
+    suppliers.forEach(function(s) { totalLead += s.avgLeadTime; totalOnTime += (s.totalPOs - s.latePOs); totalPOs += s.totalPOs; if (s.score < 70) atrisk++; });
+    var avgLead = totalSuppliers ? (totalLead / totalSuppliers) : 0;
+    var onTimePct = totalPOs ? Math.round(totalOnTime / totalPOs * 100) : 0;
+    $('#kpi-suppliers').text(totalSuppliers);
+    $('#kpi-avg-lead').text(avgLead.toFixed(1) + ' days');
+    $('#kpi-ontime').text(onTimePct + '%');
+    $('#kpi-ontime-sub').text(totalOnTime + ' / ' + totalPOs + ' POs');
+    $('#kpi-atrisk').text(atrisk);
+    $('#kpi-row').show();
+
+    // Ranking strip
+    var sorted = suppliers.slice().sort(function(a,b) { return b.score - a.score; });
+    renderRanking(sorted);
+
+    // Select top supplier by default
+    if (sorted.length) selectSupplier(sorted[0]);
+
+    addLog('Loaded ' + totalSuppliers + ' suppliers from SupplierPerfSnapshot');
+  }
+
+  function renderRanking(sorted) {
+    var $strip = $('#ranking-strip').empty();
+    sorted.forEach(function(s, i) {
+      var sl = scoreLabel(s.score);
+      var $card = $('<div class="ranking-card">').attr('data-uid', s.uid).on('click', function() { selectSupplier(s); });
+      var rcls = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : '';
+      $card.append($('<div class="ranking-rank">').addClass(rcls).text(i + 1));
+      $card.append($('<div class="ranking-name">').text(s.name));
+      // Mini gauge
+      var pct = Math.min(s.score, 100);
+      var circumference = 2 * Math.PI * 20;
+      var offset = circumference * (1 - pct / 100);
+      var $miniSvg = $('<svg class="ranking-mini-gauge" viewBox="0 0 60 36">');
+      $miniSvg.append($('<circle>').attr({cx:30,cy:30,r:20,fill:'none',stroke:'#e5e7eb',stroke-width:5}));
+      $miniSvg.append($('<circle>').attr({cx:30,cy:30,r:20,fill:'none',stroke:scoreColor(s.score),'stroke-width':5,'stroke-dasharray':circumference+' '+circumference,'stroke-dashoffset':offset,'stroke-linecap':'round',transform:'rotate(-90 30 30)'}));
+      $card.append($miniSvg);
+      $card.append($('<div class="ranking-score" style="color:'+scoreColor(s.score)+'">').text(s.score));
+      $card.append($('<div class="ranking-meta">').html('Avg. lead time<br><strong>' + s.avgLeadTime.toFixed(1) + ' days</strong>'));
+      $card.append($('<div class="ranking-meta">').html('On-time<br><strong>' + s.onTimePct + '%</strong>'));
+      $card.append($('<span class="ranking-badge">').addClass(sl.cls).text(sl.text));
+      $strip.append($card);
+    });
+    $('#ranking-section').show();
+  }
+
+  function selectSupplier(s) {
+    selectedSupplier = s;
+    $('.ranking-card').removeClass('selected');
+    $('.ranking-card[data-uid="'+s.uid+'"]').addClass('selected');
+
+    // Gauge
+    var pct = Math.min(s.score, 100);
+    var arcLen = 314;
+    $('#gauge-arc').attr('stroke-dasharray', (arcLen * pct / 100) + ' ' + arcLen);
+    // Position needle dot
+    var angle = Math.PI + (Math.PI * pct / 100);
+    var nx = 130 + 100 * Math.cos(angle);
+    var ny = 145 + 100 * Math.sin(angle);
+    $('#gauge-needle-dot').attr({ cx: nx, cy: ny });
+    $('#gauge-score').text(s.score);
+    var sl = scoreLabel(s.score);
+    var $sb = $('#supplier-status-badge').removeClass().addClass('ranking-badge').addClass(sl.cls).text(sl.text);
+    if (s.score >= 75) $('#btn-watch').hide(); else $('#btn-watch').show();
+
+    // Lead time distribution (demo buckets based on avgLeadTime)
+    renderBarChart(s);
+
+    // Avg lead display
+    $('#avg-lead-display').text(s.avgLeadTime.toFixed(1) + ' days');
+
+    // Alert
+    if (s.avgLeadTime > TARGET_LEAD_TIME) {
+      $('#alert-leadtime').show();
+      $('#alert-leadtime-text').text('Lead time is higher than your target of ' + TARGET_LEAD_TIME + ' days. Monitor closely to avoid stockouts.');
+    } else {
+      $('#alert-leadtime').hide();
+    }
+
+    // On-time donut
+    var onTime = s.totalPOs - s.latePOs;
+    var onTimePctVal = s.totalPOs ? Math.round(onTime / s.totalPOs * 100) : 0;
+    var circumference = 2 * Math.PI * 36;
+    $('#donut-ring').attr('stroke-dasharray', (circumference * onTimePctVal / 100) + ' ' + circumference);
+    $('#donut-ring').attr('stroke', onTimePctVal >= 82 ? '#0d9488' : onTimePctVal >= 60 ? '#f59e0b' : '#dc2626');
+    $('#donut-pct').text(onTimePctVal + '%');
+    $('#donut-ontime').text(onTime);
+    $('#donut-total').text(s.totalPOs);
+
+    // Late deliveries
+    var lateCount = s.latePOs;
+    $('#late-count').text(lateCount);
+    var $lateList = $('#late-list').empty();
+    if (lateCount === 0) {
+      $lateList.append($('<div style="padding:8px 0;color:#9ca3af;font-size:0.78rem;">').text('No late deliveries in the last 90 days.'));
+    } else {
+      // Generate demo late PO list
+      for (var i = 0; i < Math.min(lateCount, 5); i++) {
+        var h = hashStr(s.code + i);
+        var poNum = 'PO-' + (2500 + (h % 100)) + '-' + String(1000 + (h % 9000)).padStart(4, '0');
+        var daysLate = 1 + (h % 15);
+        $lateList.append($('<div class="late-item">')
+          .append($('<span class="late-po">').text('&#9679; ' + poNum))
+          .append($('<span class="late-days">').text(daysLate + ' days late')));
+      }
+    }
+
+    // Backup card
+    if (s.avgLeadTime > TARGET_LEAD_TIME || lateCount > 2) {
+      $('#backup-card').show();
+      $('#backup-sub').text('Lead time is above your target and late deliveries detected.');
+    } else {
+      $('#backup-card').hide();
+    }
+
+    // Detail panel
+    $('#detail-panel').show();
+    $('#detail-title').text(s.name);
+    $('#detail-badge').removeClass().addClass('ranking-badge').addClass(sl.cls).text(sl.text);
+    $('#detail-meta').text(s.code + '  |  Last PO: ' + fmtDate(s.lastPODate));
+    $('#stat-lead').text(s.avgLeadTime.toFixed(1) + ' days').removeClass('good danger').addClass(s.avgLeadTime > TARGET_LEAD_TIME ? 'danger' : 'good');
+    $('#stat-ontime').text(onTimePctVal + '%').removeClass('good danger').addClass(onTimePctVal < 82 ? 'danger' : 'good');
+    $('#stat-pos').text(s.totalPOs);
+    $('#stat-late').text(lateCount);
+    $('#stat-value').text('RM ' + fmtMoney(s.totalValue));
+    $('#stat-lastpo').text(fmtDate(s.lastPODate));
+
+    // Contact (demo)
+    var c = demoContact(s);
+    $('#contact-card').empty()
+      .append($('<div class="info-label">').text('Contact Person'))
+      .append($('<div class="info-value">').text(c.name))
+      .append($('<div style="color:#9ca3af;font-size:0.7rem;margin-top:2px;">').text(c.role))
+      .append($('<div style="margin-top:8px;color:#374151;font-size:0.78rem;">').text('\uD83D\uDCDE ' + c.phone))
+      .append($('<div style="color:#374151;font-size:0.78rem;">').text('\u2709\uFE0F ' + c.email));
+
+    // Recommendation
+    $('#recommendation').val(draftRecommendation(s));
+
+    // PO history (demo)
+    renderPOHistory(s);
+
+    // Phone
+    $('#inp-phone').val(c.phone.replace(/-/g, ''));
+    $('#inp-note').val('');
+    $('#result-section').hide();
+
+    addLog('Selected ' + s.code + ' - score ' + s.score);
+  }
+
+  function renderBarChart(s) {
+    // Generate demo distribution based on avg lead time
+    var buckets = ['0-2','2-4','4-6','6-8','8-10','10-15','15+'];
+    var avg = s.avgLeadTime;
+    var dist = buckets.map(function(b, i) {
+      var center = [1, 3, 5, 7, 9, 12, 17][i];
+      var spread = Math.abs(avg - center);
+      return Math.max(2, Math.round(35 * Math.exp(-spread * spread / (2 * 4))));
+    });
+    // Normalize so peak is ~30%
+    var maxDist = Math.max.apply(null, dist);
+    var pctDist = dist.map(function(d) { return Math.round(d / maxDist * 30); });
+
+    var $chart = $('#bar-chart').empty();
+    buckets.forEach(function(b, i) {
+      var $col = $('<div class="bar-col">');
+      $col.append($('<div class="bar-pct">').text(pctDist[i] + '%'));
+      $col.append($('<div class="bar" style="height:'+Math.max(4, pctDist[i]*3)+'px;background:'+(i<3?'#14b8a6':i<5?'#f59e0b':'#dc2626')+'">'));
+      $col.append($('<div class="bar-label">').text(b));
+      $chart.append($col);
+    });
+  }
+
+  function draftRecommendation(s) {
+    if (s.score >= 90) {
+      return 'Supplier ' + s.name + ' is performing excellently with a reliability score of ' + s.score + '. ' +
+        'Average lead time of ' + s.avgLeadTime.toFixed(1) + ' days is within target. ' +
+        'Recommend maintaining current order levels and considering for strategic partnerships.';
+    } else if (s.score >= 75) {
+      return 'Supplier ' + s.name + ' has a reliability score of ' + s.score + '. ' +
+        'Lead time averages ' + s.avgLeadTime.toFixed(1) + ' days' + (s.avgLeadTime > TARGET_LEAD_TIME ? ' (above target of ' + TARGET_LEAD_TIME + ' days)' : '') + '. ' +
+        'Recommend monitoring closely and discussing lead time improvement at next review.';
+    } else if (s.score >= 60) {
+      return 'Supplier ' + s.name + ' requires attention (score: ' + s.score + '). ' +
+        'Lead time averages ' + s.avgLeadTime.toFixed(1) + ' days with ' + s.latePOs + ' late deliveries. ' +
+        'Recommend scheduling a performance review meeting and requesting corrective action plan.';
+    }
+    return 'ALERT: Supplier ' + s.name + ' is at high risk (score: ' + s.score + '). ' +
+      'Average lead time of ' + s.avgLeadTime.toFixed(1) + ' days and ' + s.latePOs + ' late deliveries. ' +
+      'Recommend immediately sourcing backup suppliers for critical orders and issuing formal notice.';
+  }
+
+  function renderPOHistory(s) {
+    var $log = $('#po-history').empty();
+    var n = Math.min(s.totalPOs, 5);
+    for (var i = 0; i < n; i++) {
+      var h = hashStr(s.code + 'po' + i);
+      var poNum = 'PO-' + (2500 + (h % 100)) + '-' + String(1000 + (h % 9000)).padStart(4, '0');
+      var daysAgo = 5 + ((h + i * 17) % 80);
+      var dt = new Date(); dt.setDate(dt.getDate() - daysAgo);
+      var isLate = i < s.latePOs;
+      var status = isLate ? '&#9679; Late (' + (1 + h % 10) + 'd)' : '&#9679; On-time';
+      $log.append($('<div class="attempt-item">')
+        .append($('<div class="attempt-date">').html((isLate ? '<span style="color:#dc2626;">' : '<span style="color:#0d9488;">') + status + '</span> - ' + dt.toLocaleDateString('en-MY', {day:'2-digit',month:'short'})))
+        .append($('<div class="attempt-desc">').text(poNum + ' - RM' + fmtMoney(1000 + h % 50000))));
+    }
+  }
+
+  function demoContact(s) {
+    var h = hashStr(s.code);
+    var names = ['Ahmad Faisal','Siti Nurhaliza','Tan Wei Liang','Priya Devi','Lim Chong Wei','Nurul Aisyah'];
+    var roles = ['Procurement Manager','Supply Chain Lead','Purchasing Officer','Logistics Coordinator','Vendor Manager','Operations Head'];
+    var name = names[h % names.length];
+    var role = roles[(h>>3) % roles.length];
+    var phone = '01' + (2 + h % 8) + '-' + (1000000 + (h % 8999999));
+    var email = s.name.toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.+|\.+$/g,'') || 'supplier';
+    return { name:name, role:role, phone:phone, email:email+'@example.com' };
+  }
+
+  /* ── WhatsApp ── */
+  function openWhatsApp(phone, message) {
+    var clean = phone.replace(/[\s\-\+]/g, '');
+    if (clean.startsWith('0')) clean = '60' + clean.substring(1);
+    var url = 'https://wa.me/' + clean + '?text=' + encodeURIComponent(message);
+    addLog('Opening WhatsApp: ' + url);
+    window.open(url, '_blank');
+  }
+
+  /* ── Save Note ── */
+  function saveNote(callback) {
+    if (!apiUrl || !authToken) { alert('Get a token first.'); return false; }
+    if (!selectedSupplier) { alert('Select a supplier first.'); return false; }
+    var tableCode = $('#inp-note-tablecode').val().trim() || 'SupplierNote';
+    var endpoint = apiUrl + 'api/Udf/SetValues';
+    var payload = {
+      tableName: tableCode,
+      values: {
+        SupplierCode: selectedSupplier.code,
+        SupplierName: selectedSupplier.name,
+        Recommendation: $('#recommendation').val(),
+        Note: $('#inp-note').val(),
+        ReliabilityScore: selectedSupplier.score,
+      }
+    };
+    $('#result-endpoint').text('POST api/Udf/SetValues');
+    $('#result-box').removeClass('error').text('Calling...');
+    $('#result-section').show();
+    addLog('POST ' + endpoint);
+    $.ajax({
+      url: endpoint, type:'POST', cache:false, contentType:'application/json',
+      headers: { 'Authorization': authToken },
+      data: JSON.stringify(payload),
+      success: function(r) { $('#result-box').removeClass('error').text(JSON.stringify(r,null,2)); addLog('Save succeeded'); if(callback) callback(); },
+      error: function(xhr) {
+        var msg; try{msg=JSON.stringify(JSON.parse(xhr.responseText),null,2);}catch(e){msg=xhr.responseText||('HTTP '+xhr.status);}
+        $('#result-box').addClass('error').text(msg); addLog('Save failed ('+xhr.status+')');
+      }
+    });
+    return true;
+  }
+
+  $('#btn-save').on('click', function() { saveNote(); });
+  $('#btn-whatsapp').on('click', function() {
+    if (!selectedSupplier) { alert('Select a supplier first.'); return; }
+    var phone = $('#inp-phone').val().trim();
+    if (!phone) { alert('Enter a phone number.'); return; }
+    var msg = $('#recommendation').val() || $('#inp-note').val();
+    if (!msg) { alert('Enter a recommendation or note.'); return; }
+    saveNote(function() { openWhatsApp(phone, msg); });
+  });
+
+  addLog('Page loaded - listening for ALAYA_INIT');
+</script>
+
+</body>
+</html>
