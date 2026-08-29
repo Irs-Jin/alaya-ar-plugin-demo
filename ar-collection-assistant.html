@@ -88,13 +88,6 @@
     #log li { padding:3px 0; border-bottom:1px solid #f5f5f5; }
     #log .ts { color:#b0b4bb; margin-right:6px; font-family:monospace; }
 
-    #result-box {
-      background:#111827; color:#86efac; border-radius:10px; padding:14px;
-      font-family:'Cascadia Code','Consolas',monospace; font-size:0.78rem; white-space:pre-wrap; word-break:break-all;
-      max-height:220px; overflow-y:auto; line-height:1.6; margin-top:8px;
-    }
-    #result-box.error { color:#fca5a5; }
-
     /* ── AR workspace: KPI row + split queue/detail layout ── */
     .ar-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
     .demo-tag {
@@ -326,22 +319,6 @@
         <div class="btn-row" style="margin-top:12px;">
           <button class="btn-send" id="btn-save-note" disabled>📨 Save note only</button>
           <button class="btn-whatsapp" id="btn-whatsapp" disabled>📱 Send via WhatsApp & update note</button>
-        </div>
-        <div class="sub" style="margin-top:6px;">
-          Requires a Get Token above first. Attempts a REAL POST to <code>{apiUrl}api/Udf/SetValues</code> against a
-          custom "Collection Note" module (Menu Code configurable below) - set one up via Module Editor first if it
-          doesn't exist yet. The exact request shape here is my best guess from the Udf API naming convention, not a
-          confirmed Swagger schema, so the first real attempt may come back with a schema-validation error - that
-          error message is actually useful, it tells us the real expected shape so I can correct this.
-        </div>
-        <div class="form-group" style="margin-top:10px; max-width:260px;">
-          <label>Collection Note Menu Code (UT_TableName)</label>
-          <input type="text" id="inp-note-tablecode" value="CollectionNote" />
-        </div>
-
-        <div id="result-section" style="display:none;">
-          <h2 style="margin-top:14px;">API Result - <span id="result-endpoint"></span></h2>
-          <div id="result-box"></div>
         </div>
       </div>
     </div>
@@ -711,7 +688,6 @@
     $('#inp-promise-amount').val(saved.amount || '');
     $('#inp-collection-note').val('');
     $('#inp-phone').val((d.phone || '').replace(/-/g, ''));
-    $('#result-section').hide();
     addLog('Selected ' + d.code + ' (' + (d.invoiceDocNo || '-') + ') - drafted reminder');
   }
 
@@ -743,7 +719,7 @@
     if (!apiUrl || !authToken) { alert('Get a token first.'); return false; }
     if (!selectedDebtor) { alert('Select a debtor first.'); return false; }
 
-    var tableCode = $('#inp-note-tablecode').val().trim() || 'CollectionNote';
+    var tableCode = 'CollectionNote';
     var endpoint = apiUrl + 'api/Udf/SetValues';
     var payload = {
       tableName: tableCode,
@@ -757,9 +733,6 @@
       }
     };
 
-    $('#result-endpoint').text('POST api/Udf/SetValues');
-    $('#result-box').removeClass('error').text('Calling...');
-    $('#result-section').show();
     addLog('POST ' + endpoint);
 
     $.ajax({
@@ -767,7 +740,6 @@
       headers: { 'Authorization': authToken },
       data: JSON.stringify(payload),
       success: function (response) {
-        $('#result-box').removeClass('error').text(JSON.stringify(response, null, 2));
         addLog('SetValues succeeded');
         if (callback) callback();
       },
@@ -775,8 +747,8 @@
         var msg;
         try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
         catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
-        $('#result-box').addClass('error').text(msg);
-        addLog('SetValues failed (' + xhr.status + ') - see result box for the real expected schema, if returned');
+        addLog('SetValues failed (' + xhr.status + '): ' + msg);
+        alert('Failed to save collection note: ' + msg);
       }
     });
     return true;
