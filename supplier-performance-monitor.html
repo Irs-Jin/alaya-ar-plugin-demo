@@ -426,7 +426,7 @@
 
     <div class="detail-columns">
       <div class="detail-col">
-        <div class="mini-label">Supplier Contact<span class="demo-tag">demo</span></div>
+        <div class="mini-label">Supplier Contact</div>
         <div class="info-card" id="contact-card"></div>
       </div>
       <div class="detail-col">
@@ -528,7 +528,7 @@
     var payload = {
       tableId: SUPPLIER_TABLE_ID,
       tableName: SUPPLIER_TABLE_CODE,
-      columnNames: ['ZZC_Code','ZZC_Description','ZZC_AvgLeadTime','ZZC_OnTimePct','ZZC_TotalPOs','ZZC_LatePOs','ZZC_TotalValue','ZZC_LastPODate','ZZC_ReliabilityScore'],
+      columnNames: ['ZZC_Code','ZZC_Description','ZZC_AvgLeadTime','ZZC_OnTimePct','ZZC_TotalPOs','ZZC_LatePOs','ZZC_TotalValue','ZZC_LastPODate','ZZC_ReliabilityScore','ZZC_ContactPerson','ZZC_Phone','ZZC_Email'],
       pageIndex: 1,
       pageSize: 1000,
     };
@@ -573,6 +573,9 @@
             lastPODate: r.ZZC_LastPODate || r.LastPODate || '',
             score: Math.round(score),
             latePOsList: [],
+            contactPerson: r.ZZC_ContactPerson || r.ContactPerson || '',
+            phone: r.ZZC_Phone || r.Phone || '',
+            email: r.ZZC_Email || r.Email || '',
           };
         });
         renderDashboard(suppliers);
@@ -744,14 +747,11 @@
     $('#stat-value').text('RM ' + fmtMoney(s.totalValue));
     $('#stat-lastpo').text(fmtDate(s.lastPODate));
 
-    // Contact (demo)
-    var c = demoContact(s);
     $('#contact-card').empty()
       .append($('<div class="info-label">').text('Contact Person'))
-      .append($('<div class="info-value">').text(c.name))
-      .append($('<div style="color:#9ca3af;font-size:0.7rem;margin-top:2px;">').text(c.role))
-      .append($('<div style="margin-top:8px;color:#374151;font-size:0.78rem;">').text('\uD83D\uDCDE ' + c.phone))
-      .append($('<div style="color:#374151;font-size:0.78rem;">').text('\u2709\uFE0F ' + c.email));
+      .append($('<div class="info-value">').text(s.contactPerson || 'Not on file'))
+      .append($('<div style="margin-top:8px;color:#374151;font-size:0.78rem;">').text('\uD83D\uDCDE ' + (s.phone || 'Not on file')))
+      .append($('<div style="color:#374151;font-size:0.78rem;">').text('\u2709\uFE0F ' + (s.email || 'Not on file')));
 
     // Recommendation
     $('#recommendation').val(draftRecommendation(s));
@@ -818,17 +818,6 @@
         .append($('<div class="attempt-date">').html((isLate ? '<span style="color:#dc2626;">' : '<span style="color:#0d9488;">') + status + '</span> - ' + dt.toLocaleDateString('en-MY', {day:'2-digit',month:'short'})))
         .append($('<div class="attempt-desc">').text(poNum + ' - RM' + fmtMoney(1000 + h % 50000))));
     }
-  }
-
-  function demoContact(s) {
-    var h = hashStr(s.code);
-    var names = ['Ahmad Faisal','Siti Nurhaliza','Tan Wei Liang','Priya Devi','Lim Chong Wei','Nurul Aisyah'];
-    var roles = ['Procurement Manager','Supply Chain Lead','Purchasing Officer','Logistics Coordinator','Vendor Manager','Operations Head'];
-    var name = names[h % names.length];
-    var role = roles[(h>>3) % roles.length];
-    var phone = '01' + (2 + h % 8) + '-' + (1000000 + (h % 8999999));
-    var email = s.name.toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.+|\.+$/g,'') || 'supplier';
-    return { name:name, role:role, phone:phone, email:email+'@example.com' };
   }
 
   addLog('Page loaded - listening for ALAYA_INIT');

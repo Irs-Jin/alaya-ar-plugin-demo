@@ -174,7 +174,6 @@
     }
     .contact-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; font-size:0.82rem; }
     .contact-card .contact-name { font-weight:700; color:#111827; margin-bottom:2px; }
-    .contact-card .contact-role { color:#9ca3af; font-size:0.72rem; margin-bottom:8px; }
     .contact-card .contact-line { color:#4b5563; margin-top:4px; }
     .attempts-log { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; font-size:0.76rem; max-height:180px; overflow-y:auto; }
     .attempt-item { padding:6px 0; border-bottom:1px solid #eceef1; }
@@ -286,7 +285,7 @@
 
         <div class="detail-columns">
           <div class="detail-col">
-            <div class="mini-label">Contact person<span class="demo-tag">demo</span></div>
+            <div class="mini-label">Contact person</div>
             <div class="contact-card" id="contact-card"></div>
           </div>
           <div class="detail-col detail-col-wide">
@@ -451,7 +450,8 @@
     // listing on a custom module - which is what we actually want. Pivoting to ZZTGetDataTable.
     var AR_SNAPSHOT_TABLE_ID = 475;
     var AR_SNAPSHOT_COLUMNS = ['ZZC_Code', 'ZZC_Description', 'ZZC_InvoiceDocNo', 'ZZC_DueDate',
-      'ZZC_InvoiceTotal', 'ZZC_OutstandingAmt', 'ZZC_DaysOverdue'];
+      'ZZC_InvoiceTotal', 'ZZC_OutstandingAmt', 'ZZC_DaysOverdue',
+      'ZZC_ARContactPerson', 'ZZC_ARPhone', 'ZZC_AREmail'];
     var endpoint = apiUrl + 'api/Udf/ZZTGetDataTable';
     // ZZTGetDataTable rejected GET with "does not support http method 'GET'" - opposite of
     // GetGridValues, so this one wants POST with a JSON body.
@@ -496,6 +496,9 @@
             overdue: parseFloat(r.ZZC_OutstandingAmt || r.OutstandingAmt || 0),
             days: parseInt(r.ZZC_DaysOverdue || r.DaysOverdue || 0, 10),
             lastReminder: 'None',
+            contactPerson: r.ZZC_ARContactPerson || r.ARContactPerson || '',
+            phone: r.ZZC_ARPhone || r.ARPhone || '',
+            email: r.ZZC_AREmail || r.AREmail || '',
           };
         });
         renderAr(debtors);
@@ -560,16 +563,6 @@
   // isn't tracked anywhere real yet, unlike the amounts/dates/priority above which come from the
   // real AROverdueSnapshot row.
   function hashStr(s) { var h = 0; for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; } return h; }
-  var FIRST_NAMES = ['Wei Ming', 'Siti', 'Ah Kow', 'Priya', 'Farid', 'Mei Ling', 'Ravi', 'Yusof'];
-  var ROLES = ['Account Executive', 'Finance Manager', 'Owner', 'Accounts Clerk', 'Director'];
-  function demoContact(d) {
-    var h = hashStr(d.code + d.invoiceDocNo);
-    var name = FIRST_NAMES[h % FIRST_NAMES.length];
-    var role = ROLES[(h >> 3) % ROLES.length];
-    var phone = '01' + (2 + h % 8) + '-' + (1000000 + (h % 8999999));
-    var emailName = d.name.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') || 'contact';
-    return { name: name, role: role, phone: phone, email: emailName + '@example.com' };
-  }
   function demoAttempts(d) {
     var h = hashStr(d.uid);
     var kinds = [
@@ -699,12 +692,10 @@
     $('#stat-amount').text('RM ' + fmtMoney(d.overdue));
     $('#stat-last-reminder').text(d.lastReminder || 'None');
 
-    var c = demoContact(d);
     $('#contact-card').empty()
-      .append($('<div class="contact-name">').text(c.name))
-      .append($('<div class="contact-role">').text(c.role))
-      .append($('<div class="contact-line">').text('📞 ' + c.phone))
-      .append($('<div class="contact-line">').text('✉️ ' + c.email));
+      .append($('<div class="contact-name">').text(d.contactPerson || 'Not on file'))
+      .append($('<div class="contact-line">').text('📞 ' + (d.phone || 'Not on file')))
+      .append($('<div class="contact-line">').text('✉️ ' + (d.email || 'Not on file')));
 
     var $attempts = $('#attempts-log').empty();
     $.each(demoAttempts(d), function (i, a) {
