@@ -229,10 +229,13 @@
     <code>module-query-aroverdue.sql</code>) through the real <code>api/Udf/ZZTGetDataTable</code> endpoint - confirmed
     working against live SIT data. Authenticates automatically once loaded inside Alaya. Contact person /
     phone / email are the customer's real record where on file (shown as "Not on file" otherwise).
-    Promise Date / Amount / Collection Note are saved locally in this browser tab only (not synced to any
-    backend yet - refreshing the page loses them). Contact-attempts history shown below is a demo
-    placeholder (not tracked anywhere yet) - everything else (amounts, dates, priority, reminder draft) is
-    computed from the real snapshot rows.
+    "Save note only" appends a timestamped entry to the real Customer Master Notes field via
+    <code>api/Customer/PostCustomer</code> (accepted tradeoff: this also clears that customer's Registration
+    Branch and Inter-Company Billing "Transfer PO To" setting, and flips their "User Generated Acc No" flag
+    to true - known side effects of this write API with no safe workaround found; fix manually in Customer
+    Master if it matters for a given customer). Contact-attempts history shown below is a demo placeholder
+    (not tracked anywhere yet) - everything else (amounts, dates, priority, reminder draft) is computed from
+    the real snapshot rows.
   </div>
 
   <div class="kpi-row" id="kpi-row" style="display:none;">
@@ -732,28 +735,179 @@
     window.open(whatsappUrl, '_blank');
   }
 
-  /* ── Save Collection Note ── client-side only (this browser tab/session), not persisted to
-     any backend. Two real backend write paths were tried and ruled out as unsafe/nonfunctional:
-     (1) api/Customer/PostCustomer - full-record overwrite, confirmed to silently corrupt other
-         real Customer Master fields (Sales Branch, Sales Agent, Inter-Company Billing) due to
-         read/write encoding mismatches and derived fields with no safe round-trip.
-     (2) api/Udf/SetValues against the custom CollectionNote Master Data table - returns
-         Result:true but never actually inserts a row (confirmed via direct SQL check); no
-         working insert endpoint for custom Master Data tables was found. Revisit if a real
-         insert API is confirmed later. */
+  /* ── Save Collection Note ── appends to the real Customer Master "Notes" field via
+     api/Customer/PostCustomer (read-modify-write against GetCustomerByAccountCode). Accepted
+     known side effects on the target customer, confirmed by direct testing and explicitly
+     accepted by the business owner (no working alternative found - see below):
+       - Registration Branch gets cleared (API requires the exact real branch code to preserve
+         it, keyed by a lookup the plugin's API surface has no endpoint for; sending blank,
+         omitting the field, or guessing a branch code all fail the same way).
+       - Inter-Company Billing "Transfer PO To" setting gets cleared (no working field name found
+         that preserves it, even when echoing back its original value).
+       - "User Generated Acc No" flag gets forced to true (cause unconfirmed - possibly
+         intentional server-side behavior marking the record as API-edited).
+       - Sales Agent description gets recomputed from the real Salesperson code rather than kept
+         as whatever stale text was cached (not a real loss - it re-syncs to the true value).
+     CreditLimitPreference is deliberately omitted from the payload - including it causes a hard
+     validation error ("Credit Limit Preference not valid") because its read/write encodings
+     differ; omitting it is confirmed safe (verified unchanged before/after). */
+  function buildCustomerPayload(rec, newRemarks) {
+    return {
+      CompanyID: '548',
+      AccountCode: rec.Cust_AccountCode,
+      Name: rec.Cust_NAME,
+      RegNo: rec.Cust_RegNo,
+      RegNo2: rec.Cust_RegNo2,
+      Status: rec.Cust_Status,
+      SalutationID: String(rec.Cust_SalutationID || ''),
+      ContactPerson: rec.Cust_ContactPerson,
+      Phone1: rec.Cust_Phone1,
+      Phone2: rec.Cust_Phone2,
+      Mobile: rec.Cust_Mobile,
+      Fax1: rec.Cust_Fax1,
+      Fax2: rec.Cust_Fax2,
+      eInvoiceTinNo: rec.Cust_eInvTinNo,
+      Email: rec.Cust_Email,
+      Skype: rec.Cust_Skype,
+      Website: rec.Cust_Website,
+      BusinessNature: rec.Cust_BusinessNature,
+      DateRegister: rec.Cust_DateRegister,
+      CustomerType: rec.Cust_CustomerType,
+      MemberType: String(rec.Cust_MemberTypeID || ''),
+      CustomerCategory: rec.Cust_CustomerCategory,
+      RegionID: rec.Cust_RegionID,
+      ExpiryDate: rec.Cust_ExpiryDate,
+      MainAddress1: rec.Cust_MainAddress1, MainAddress2: rec.Cust_MainAddress2,
+      MainAddress3: rec.Cust_MainAddress3, MainAddress4: rec.Cust_MainAddress4,
+      MainPostcode: rec.Cust_MainPostcode, MainCity: rec.Cust_MainCity,
+      MainState: rec.Cust_MainState, MainCountry: rec.Cust_MainCountry,
+      SameAsBillingAdd: rec.Cust_SameAsBillingAdd,
+      AltAddress1: rec.Cust_AltAddress1, AltAddress2: rec.Cust_AltAddress2,
+      AltAddress3: rec.Cust_AltAddress3, AltAddress4: rec.Cust_AltAddress4,
+      AltPostcode: rec.Cust_AltPostcode, AltCity: rec.Cust_AltCity,
+      AltState: rec.Cust_AltState, AltCountry: rec.Cust_AltCountry,
+      AgingOn: rec.Cust_AgingOn,
+      GSTNo: rec.Cust_GSTNo,
+      TaxIncluded_YN: rec.Cust_TaxIncluded_YN,
+      DiscountOption: rec.Cust_DiscountOption,
+      PriceLevelID: rec.Cust_PriceLevelID,
+      FixedDiscountForAllItem: rec.Cust_FixedDiscountForAllItem,
+      UnitPriceBaseOnLastSales_YN: rec.Cust_UnitPriceBaseOnLastSales_YN,
+      TaxExemptionNo: rec.Cust_TaxExemptionNo,
+      TaxItemized_YN: rec.Cust_TaxItemized_YN,
+      SubmiteInvoice_YN: rec.Cust_SubmiteInvoice_YN,
+      CreditLimit_YN: rec.Cust_CreditLimit_YN,
+      CreditLimit: rec.Cust_CreditLimit,
+      CommittedCreditLimit_YN: rec.Cust_CommittedCreditLimit_YN,
+      CommittedCreditLimit: rec.Cust_CommittedCreditLimit,
+      CreditLimitPermission: rec.Cust_CreditLimitPermission,
+      CreditLimitByModule_DeliveryOrder_YN: rec.Cust_CreditLimitByModule_DeliveryOrder_YN,
+      CreditLimitByModule_SalesInvoice_YN: rec.Cust_CreditLimitByModule_SalesInvoice_YN,
+      CustomerGroup: rec.Cust_CustomerGroup,
+      MSRCardNo: rec.Cust_MSRCardNo, MSRCardStatus: rec.Cust_MSRCardStatus,
+      MSRCardNo2: rec.Cust_MSRCardNo2, MSRCardStatus2: rec.Cust_MSRCardStatus2,
+      MSRCardNo3: rec.Cust_MSRCardNo3, MSRCardStatus3: rec.Cust_MSRCardStatus3,
+      MSRCardNo4: rec.Cust_MSRCardNo4, MSRCardStatus4: rec.Cust_MSRCardStatus4,
+      MSRCardNo5: rec.Cust_MSRCardNo5, MSRCardStatus5: rec.Cust_MSRCardStatus5,
+      Remarks: newRemarks,
+      VendorID: rec.Cust_VendorID,
+      NRIC: rec.Cust_NRIC,
+      DOB: rec.Cust_DOB,
+      Gender: rec.Cust_Gender,
+      Race: rec.Cust_Race,
+      Religion: rec.Cust_Religion,
+      Introducer: rec.Cust_Introducer,
+      CustomerIntroducer: rec.Cust_CustomerIntroducer,
+      Nationality: rec.Cust_Nationality,
+      Salesperson: rec.Cust_Salesperson,
+      UserGeneratedAccNo_YN: rec.Cust_UserGeneratedAccNo_YN,
+      LeadID: rec.Cust_LeadID,
+      COA_Desc: rec.COA_Desc,
+      PaymentTerm_Desc: rec.PaymentTerm_Desc,
+      PaymentMode_Desc: rec.PaymentMode_Desc,
+      Tax_Desc: rec.Tax_Desc,
+      SalesAgent_Desc: rec.SalesAgent_Desc,
+      BizSuiteClientCode: rec.Cust_BizSuiteClientCode,
+      AdditionalInfo1: rec.Cust_AdditionalInfo1, AdditionalInfo2: rec.Cust_AdditionalInfo2,
+      AdditionalInfo3: rec.Cust_AdditionalInfo3, AdditionalInfo4: rec.Cust_AdditionalInfo4,
+      AdditionalInfo5: rec.Cust_AdditionalInfo5, AdditionalInfo6: rec.Cust_AdditionalInfo6,
+      AdditionalInfo7: rec.Cust_AdditionalInfo7, AdditionalInfo8: rec.Cust_AdditionalInfo8,
+      AdditionalInfo9: rec.Cust_AdditionalInfo9, AdditionalInfo10: rec.Cust_AdditionalInfo10,
+    };
+  }
+
   function saveCollectionNote(callback) {
+    if (!apiUrl || !authToken) { alert('Get a token first.'); return false; }
     if (!selectedDebtor) { alert('Select a debtor first.'); return false; }
 
     var pDate = $('#inp-promise-date').val(), pAmt = $('#inp-promise-amount').val();
     var note = $('#inp-collection-note').val().trim();
     if (!pDate && !pAmt && !note) { alert('Enter a collection note, promise date, or promise amount first.'); return false; }
 
+    // Keep local state too - drives the "Promise due today" KPI/tab immediately, independent
+    // of the backend round-trip.
     promises[selectedDebtor.uid] = { date: pDate, amount: pAmt, note: note };
     recomputeKpisAndTabs();
     if (activeFilter === 'promise') renderQueue();
-    addLog('Saved locally (this session only) for ' + selectedDebtor.code);
-    showToast('Saved Successfully (this session only - not synced to any backend yet)');
-    if (callback) callback();
+
+    var parts = [];
+    if (selectedDebtor.invoiceDocNo) parts.push('Invoice ' + selectedDebtor.invoiceDocNo);
+    if (pDate) parts.push('Promise ' + pDate + (pAmt ? ' RM' + pAmt : ''));
+    if (note) parts.push(note);
+    var entry = '[' + new Date().toLocaleString() + '] ' + parts.join(' - ');
+
+    var getEndpoint = apiUrl + 'api/Customer/GetCustomerByAccountCode';
+    addLog('POST ' + getEndpoint);
+    $.ajax({
+      url: getEndpoint, type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken },
+      data: JSON.stringify({ accountCode: selectedDebtor.code, companyID: 548 }),
+      success: function (getResp) {
+        if (!getResp || getResp.success === false || !getResp.data) {
+          addLog('GetCustomerByAccountCode failed: ' + (getResp && getResp.msg));
+          showToast('Saved locally only - could not reach Customer Master');
+          if (callback) callback();
+          return;
+        }
+        var rec = getResp.data;
+        var newRemarks = entry + (rec.Cust_Remarks ? '\n' + rec.Cust_Remarks : '');
+        var payload = buildCustomerPayload(rec, newRemarks);
+        var postEndpoint = apiUrl + 'api/Customer/PostCustomer';
+        addLog('POST ' + postEndpoint);
+        $.ajax({
+          url: postEndpoint, type: 'POST', cache: false, contentType: 'application/json',
+          headers: { 'Authorization': authToken },
+          data: JSON.stringify(payload),
+          success: function (postResp) {
+            if (postResp && postResp.success === false) {
+              addLog('PostCustomer rejected: ' + postResp.msg);
+              showToast('Saved locally only - Customer Master rejected: ' + postResp.msg);
+              if (callback) callback();
+              return;
+            }
+            addLog('Customer Master Notes updated for ' + selectedDebtor.code);
+            showToast('Saved Successfully');
+            if (callback) callback();
+          },
+          error: function (xhr) {
+            var msg;
+            try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
+            catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
+            addLog('PostCustomer failed (' + xhr.status + '): ' + msg);
+            showToast('Saved locally only - Customer Master update failed');
+            if (callback) callback();
+          }
+        });
+      },
+      error: function (xhr) {
+        var msg;
+        try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
+        catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
+        addLog('GetCustomerByAccountCode failed (' + xhr.status + '): ' + msg);
+        showToast('Saved locally only - could not reach Customer Master');
+        if (callback) callback();
+      }
+    });
     return true;
   }
 
