@@ -693,7 +693,7 @@
       var circumference = 2 * Math.PI * 20;
       var offset = circumference * (1 - pct / 100);
       var $miniSvg = $('<svg class="ranking-mini-gauge" viewBox="0 0 60 36">');
-      $miniSvg.append($('<circle>').attr({cx:30,cy:30,r:20,fill:'none',stroke:'#e5e7eb',stroke-width:5}));
+      $miniSvg.append($('<circle>').attr({cx:30,cy:30,r:20,fill:'none',stroke:'#e5e7eb','stroke-width':5}));
       $miniSvg.append($('<circle>').attr({cx:30,cy:30,r:20,fill:'none',stroke:scoreColor(s.score),'stroke-width':5,'stroke-dasharray':circumference+' '+circumference,'stroke-dashoffset':offset,'stroke-linecap':'round',transform:'rotate(-90 30 30)'}));
       $card.append($miniSvg);
       $card.append($('<div class="ranking-score" style="color:'+scoreColor(s.score)+'">').text(s.score));
