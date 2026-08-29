@@ -719,7 +719,7 @@
         var poNum = 'PO-' + (2500 + (h % 100)) + '-' + String(1000 + (h % 9000)).padStart(4, '0');
         var daysLate = 1 + (h % 15);
         $lateList.append($('<div class="late-item">')
-          .append($('<span class="late-po">').text('&#9679; ' + poNum))
+          .append($('<span class="late-po">').text('● ' + poNum))
           .append($('<span class="late-days">').text(daysLate + ' days late')));
       }
     }
