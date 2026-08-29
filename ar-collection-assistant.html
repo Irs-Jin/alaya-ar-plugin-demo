@@ -710,7 +710,7 @@
     $('#inp-promise-date').val(saved.date || '');
     $('#inp-promise-amount').val(saved.amount || '');
     $('#inp-collection-note').val('');
-    $('#inp-phone').val(c.phone.replace(/-/g, ''));
+    $('#inp-phone').val((d.phone || '').replace(/-/g, ''));
     $('#result-section').hide();
     addLog('Selected ' + d.code + ' (' + (d.invoiceDocNo || '-') + ') - drafted reminder');
   }
