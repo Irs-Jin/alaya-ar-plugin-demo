@@ -220,8 +220,10 @@
     <code>module-query-aroverdue.sql</code>) through the real <code>api/Udf/ZZTGetDataTable</code> endpoint - confirmed
     working against live SIT data. Authenticates automatically once loaded inside Alaya. Contact person /
     phone / email are the customer's real record where on file (shown as "Not on file" otherwise).
-    Contact-attempts history shown below is a demo placeholder (not tracked anywhere yet) - everything else
-    (amounts, dates, priority, reminder draft) is computed from the real snapshot rows.
+    "Save note only" writes a timestamped entry to the real Customer Master Notes field (appended, not
+    overwritten) via <code>api/Customer/PostCustomer</code>. Contact-attempts history shown below is a demo
+    placeholder (not tracked anywhere yet) - everything else (amounts, dates, priority, reminder draft) is
+    computed from the real snapshot rows.
   </div>
 
   <div class="kpi-row" id="kpi-row" style="display:none;">
@@ -714,41 +716,154 @@
     window.open(whatsappUrl, '_blank');
   }
 
-  /* ── Save Collection Note - REAL attempt against api/Udf/SetValues ── */
+  /* ── Save Collection Note - appends to the real Customer Master "Notes" field ──
+     Read-modify-write: GetCustomerByAccountCode, append to Cust_Remarks, PostCustomer
+     the full merged record back (this write API expects the full object, not a
+     partial patch). Uses the same lightweight per-session token the plugin already
+     obtained via requestToken() - confirmed this works without a separate
+     username/password login, so no extra credential is embedded here. */
+  var AR_COMPANY_ID = 548; // JIN6 SDN BHD
+
+  function buildCustomerPayload(rec, newRemarks) {
+    return {
+      CompanyID: String(AR_COMPANY_ID),
+      RegistrationBranch: '',
+      AccountCode: rec.Cust_AccountCode,
+      Name: rec.Cust_NAME,
+      RegNo: rec.Cust_RegNo,
+      RegNo2: rec.Cust_RegNo2,
+      Status: rec.Cust_Status,
+      SalutationID: String(rec.Cust_SalutationID || ''),
+      ContactPerson: rec.Cust_ContactPerson,
+      Phone1: rec.Cust_Phone1,
+      Phone2: rec.Cust_Phone2,
+      Mobile: rec.Cust_Mobile,
+      Fax1: rec.Cust_Fax1,
+      Fax2: rec.Cust_Fax2,
+      eInvoiceTinNo: rec.Cust_eInvTinNo,
+      Email: rec.Cust_Email,
+      Skype: rec.Cust_Skype,
+      Website: rec.Cust_Website,
+      BusinessNature: rec.Cust_BusinessNature,
+      DateRegister: rec.Cust_DateRegister,
+      CustomerType: rec.Cust_CustomerType,
+      MemberType: String(rec.Cust_MemberTypeID || ''),
+      CustomerCategory: rec.Cust_CustomerCategory,
+      RegionID: rec.Cust_RegionID,
+      ExpiryDate: rec.Cust_ExpiryDate,
+      MainAddress1: rec.Cust_MainAddress1, MainAddress2: rec.Cust_MainAddress2,
+      MainAddress3: rec.Cust_MainAddress3, MainAddress4: rec.Cust_MainAddress4,
+      MainPostcode: rec.Cust_MainPostcode, MainCity: rec.Cust_MainCity,
+      MainState: rec.Cust_MainState, MainCountry: rec.Cust_MainCountry,
+      SameAsBillingAdd: rec.Cust_SameAsBillingAdd,
+      AltAddress1: rec.Cust_AltAddress1, AltAddress2: rec.Cust_AltAddress2,
+      AltAddress3: rec.Cust_AltAddress3, AltAddress4: rec.Cust_AltAddress4,
+      AltPostcode: rec.Cust_AltPostcode, AltCity: rec.Cust_AltCity,
+      AltState: rec.Cust_AltState, AltCountry: rec.Cust_AltCountry,
+      AgingOn: rec.Cust_AgingOn,
+      GSTNo: rec.Cust_GSTNo,
+      TaxIncluded_YN: rec.Cust_TaxIncluded_YN,
+      DiscountOption: rec.Cust_DiscountOption,
+      PriceLevelID: rec.Cust_PriceLevelID,
+      FixedDiscountForAllItem: rec.Cust_FixedDiscountForAllItem,
+      UnitPriceBaseOnLastSales_YN: rec.Cust_UnitPriceBaseOnLastSales_YN,
+      TaxExemptionNo: rec.Cust_TaxExemptionNo,
+      TaxItemized_YN: rec.Cust_TaxItemized_YN,
+      SubmiteInvoice_YN: rec.Cust_SubmiteInvoice_YN,
+      CreditLimitPreference: rec.Cust_CreditLimitPreference,
+      CreditLimit_YN: rec.Cust_CreditLimit_YN,
+      CreditLimit: rec.Cust_CreditLimit,
+      CommittedCreditLimit_YN: rec.Cust_CommittedCreditLimit_YN,
+      CommittedCreditLimit: rec.Cust_CommittedCreditLimit,
+      CreditLimitPermission: rec.Cust_CreditLimitPermission,
+      CreditLimitByModule_DeliveryOrder_YN: rec.Cust_CreditLimitByModule_DeliveryOrder_YN,
+      CreditLimitByModule_SalesInvoice_YN: rec.Cust_CreditLimitByModule_SalesInvoice_YN,
+      CustomerGroup: rec.Cust_CustomerGroup,
+      MSRCardNo: rec.Cust_MSRCardNo, MSRCardStatus: rec.Cust_MSRCardStatus,
+      MSRCardNo2: rec.Cust_MSRCardNo2, MSRCardStatus2: rec.Cust_MSRCardStatus2,
+      MSRCardNo3: rec.Cust_MSRCardNo3, MSRCardStatus3: rec.Cust_MSRCardStatus3,
+      MSRCardNo4: rec.Cust_MSRCardNo4, MSRCardStatus4: rec.Cust_MSRCardStatus4,
+      MSRCardNo5: rec.Cust_MSRCardNo5, MSRCardStatus5: rec.Cust_MSRCardStatus5,
+      Remarks: newRemarks,
+      VendorID: rec.Cust_VendorID,
+      NRIC: rec.Cust_NRIC,
+      DOB: rec.Cust_DOB,
+      Gender: rec.Cust_Gender,
+      Race: rec.Cust_Race,
+      Religion: rec.Cust_Religion,
+      Introducer: rec.Cust_Introducer,
+      CustomerIntroducer: rec.Cust_CustomerIntroducer,
+      Nationality: rec.Cust_Nationality,
+      Salesperson: rec.Cust_Salesperson,
+      UserGeneratedAccNo_YN: rec.Cust_UserGeneratedAccNo_YN,
+      LeadID: rec.Cust_LeadID,
+      COA_Desc: rec.COA_Desc,
+      PaymentTerm_Desc: rec.PaymentTerm_Desc,
+      PaymentMode_Desc: rec.PaymentMode_Desc,
+      Tax_Desc: rec.Tax_Desc,
+      SalesAgent_Desc: rec.SalesAgent_Desc,
+      BizSuiteClientCode: rec.Cust_BizSuiteClientCode,
+      AdditionalInfo1: rec.Cust_AdditionalInfo1, AdditionalInfo2: rec.Cust_AdditionalInfo2,
+      AdditionalInfo3: rec.Cust_AdditionalInfo3, AdditionalInfo4: rec.Cust_AdditionalInfo4,
+      AdditionalInfo5: rec.Cust_AdditionalInfo5, AdditionalInfo6: rec.Cust_AdditionalInfo6,
+      AdditionalInfo7: rec.Cust_AdditionalInfo7, AdditionalInfo8: rec.Cust_AdditionalInfo8,
+      AdditionalInfo9: rec.Cust_AdditionalInfo9, AdditionalInfo10: rec.Cust_AdditionalInfo10,
+    };
+  }
+
   function saveCollectionNote(callback) {
     if (!apiUrl || !authToken) { alert('Get a token first.'); return false; }
     if (!selectedDebtor) { alert('Select a debtor first.'); return false; }
 
-    var tableCode = 'CollectionNote';
-    var endpoint = apiUrl + 'api/Udf/SetValues';
-    var payload = {
-      tableName: tableCode,
-      values: {
-        DebtorCode: selectedDebtor.code,
-        DebtorName: selectedDebtor.name,
-        ReminderText: $('#reminder-draft').val(),
-        PromiseDate: $('#inp-promise-date').val(),
-        PromiseAmount: $('#inp-promise-amount').val(),
-        Note: $('#inp-collection-note').val(),
-      }
-    };
+    var parts = [];
+    if (selectedDebtor.invoiceDocNo) parts.push('Invoice ' + selectedDebtor.invoiceDocNo);
+    var pDate = $('#inp-promise-date').val(), pAmt = $('#inp-promise-amount').val();
+    if (pDate) parts.push('Promise ' + pDate + (pAmt ? ' RM' + pAmt : ''));
+    var note = $('#inp-collection-note').val().trim();
+    if (note) parts.push(note);
+    if (!parts.length) { alert('Enter a collection note, promise date, or promise amount first.'); return false; }
+    var entry = '[' + new Date().toLocaleString() + '] ' + parts.join(' - ');
 
-    addLog('POST ' + endpoint);
-
+    var getEndpoint = apiUrl + 'api/Customer/GetCustomerByAccountCode';
+    addLog('POST ' + getEndpoint);
     $.ajax({
-      url: endpoint, type: 'POST', cache: false, contentType: 'application/json',
+      url: getEndpoint, type: 'POST', cache: false, contentType: 'application/json',
       headers: { 'Authorization': authToken },
-      data: JSON.stringify(payload),
-      success: function (response) {
-        addLog('SetValues succeeded');
-        if (callback) callback();
+      data: JSON.stringify({ accountCode: selectedDebtor.code, companyID: AR_COMPANY_ID }),
+      success: function (getResp) {
+        if (!getResp || getResp.success === false || !getResp.data) {
+          addLog('GetCustomerByAccountCode failed: ' + (getResp && getResp.msg));
+          alert('Could not load customer record to update: ' + (getResp && getResp.msg));
+          return;
+        }
+        var rec = getResp.data;
+        var newRemarks = entry + (rec.Cust_Remarks ? '\n' + rec.Cust_Remarks : '');
+        var payload = buildCustomerPayload(rec, newRemarks);
+        var postEndpoint = apiUrl + 'api/Customer/PostCustomer';
+        addLog('POST ' + postEndpoint);
+        $.ajax({
+          url: postEndpoint, type: 'POST', cache: false, contentType: 'application/json',
+          headers: { 'Authorization': authToken },
+          data: JSON.stringify(payload),
+          success: function (postResp) {
+            addLog('Customer Notes updated');
+            if (callback) callback();
+          },
+          error: function (xhr) {
+            var msg;
+            try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
+            catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
+            addLog('PostCustomer failed (' + xhr.status + '): ' + msg);
+            alert('Failed to save note to Customer Master: ' + msg);
+          }
+        });
       },
       error: function (xhr) {
         var msg;
         try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
         catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
-        addLog('SetValues failed (' + xhr.status + '): ' + msg);
-        alert('Failed to save collection note: ' + msg);
+        addLog('GetCustomerByAccountCode failed (' + xhr.status + '): ' + msg);
+        alert('Could not load customer record to update: ' + msg);
       }
     });
     return true;
