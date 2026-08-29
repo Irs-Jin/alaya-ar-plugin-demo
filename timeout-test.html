@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alaya Plugin - ALAYA_READY Timeout Test Harness (PBI 21103 TC-080)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f4f6f9;
+      color: #333;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      padding: 28px 32px;
+      max-width: 640px;
+      margin: 0 auto 16px auto;
+    }
+    h1 { font-size: 1.15rem; margin-bottom: 6px; color: #1a1a2e; }
+    .sub { font-size: 0.82rem; color: #777; margin-bottom: 18px; }
+    .mode-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      background: #e2e3e5;
+      color: #333;
+      margin-bottom: 14px;
+    }
+    .status-line { font-size: 0.9rem; margin: 10px 0; }
+    .status-line b { font-family: monospace; }
+    #countdown { font-family: monospace; font-weight: 700; font-size: 1.4rem; color: #4361ee; }
+    #log {
+      list-style: none;
+      margin-top: 16px;
+      border-top: 1px solid #eee;
+      padding-top: 12px;
+      font-size: 0.82rem;
+      color: #555;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    #log li { padding: 3px 0; }
+    #log .ts { color: #aaa; margin-right: 6px; font-family: monospace; }
+    .modes { font-size: 0.8rem; color: #666; margin-top: 18px; line-height: 1.7; }
+    .modes code { background: #f0f2f5; padding: 1px 6px; border-radius: 4px; }
+    .modes a { color: #4361ee; text-decoration: none; }
+    .modes a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h1>ALAYA_READY Timeout Test Harness</h1>
+  <div class="sub">For PBI 21103 / TC-080: "Alaya displays an error if the plugin page does not respond to ALAYA_INIT with ALAYA_READY within 10 seconds"</div>
+
+  <div class="mode-badge" id="mode-badge">mode: -</div>
+
+  <div class="status-line">ALAYA_INIT received at: <b id="received-at">-</b></div>
+  <div class="status-line">This page will reply with ALAYA_READY after: <b id="delay-plan">-</b></div>
+  <div class="status-line">Time until reply: <span id="countdown">--</span></div>
+
+  <ul id="log"></ul>
+
+  <div class="modes">
+    Switch mode by changing the URL's <code>?mode=</code> query param, then re-select this URL as the Plugin's External URL and click <b>Test Load</b> again:
+    <br>&bull; <code>?mode=instant</code> - replies immediately (control case, should succeed - same as the normal sample)
+    <br>&bull; <code>?mode=delay5</code> - replies after 5s (under the 10s limit - should still succeed)
+    <br>&bull; <code>?mode=delay15</code> - replies after 15s (over the 10s limit - should trigger Alaya's timeout error)
+    <br>&bull; <code>?mode=never</code> - never replies at all (should also trigger Alaya's timeout error)
+  </div>
+</div>
+
+<script>
+  function ts() { return new Date().toLocaleTimeString(); }
+
+  var logEl = document.getElementById('log');
+  function addLog(msg) {
+    var li = document.createElement('li');
+    var span = document.createElement('span');
+    span.className = 'ts';
+    span.textContent = ts();
+    li.appendChild(span);
+    li.appendChild(document.createTextNode(msg));
+    logEl.insertBefore(li, logEl.firstChild);
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var mode = params.get('mode') || 'instant';
+  document.getElementById('mode-badge').textContent = 'mode: ' + mode;
+
+  var delayMs, planLabel;
+  switch (mode) {
+    case 'delay5':  delayMs = 5000;  planLabel = '5 seconds (under 10s limit - expect SUCCESS)'; break;
+    case 'delay15': delayMs = 15000; planLabel = '15 seconds (over 10s limit - expect Alaya TIMEOUT ERROR)'; break;
+    case 'never':   delayMs = null;  planLabel = 'never (expect Alaya TIMEOUT ERROR)'; break;
+    default:        delayMs = 0;     planLabel = 'immediately (control case - expect SUCCESS)'; mode = 'instant'; break;
+  }
+  document.getElementById('delay-plan').textContent = planLabel;
+
+  addLog('Page loaded, mode=' + mode + ' - listening for ALAYA_INIT');
+
+  var countdownTimer = null;
+
+  function postReady() {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'ALAYA_READY', data: { status: 'ok', receivedAt: new Date().toISOString(), mode: mode } }, '*');
+      addLog('Sent -> ALAYA_READY (mode=' + mode + ')');
+    } else {
+      addLog('No parent frame - skipped posting ALAYA_READY (open this inside Alaya via Test Load, not standalone)');
+    }
+    document.getElementById('countdown').textContent = 'sent';
+  }
+
+  window.addEventListener('message', function (e) {
+    var msg = e.data;
+    if (!msg || msg.type !== 'ALAYA_INIT') return;
+
+    document.getElementById('received-at').textContent = ts();
+    addLog('Received <- ALAYA_INIT');
+
+    var payload = msg.data !== undefined ? msg.data : msg;
+    addLog('Payload: ' + (typeof payload === 'object' ? JSON.stringify(payload) : String(payload)));
+
+    if (mode === 'never') {
+      addLog('mode=never: intentionally NOT sending ALAYA_READY. Waiting to observe Alaya\'s timeout behaviour.');
+      return;
+    }
+
+    if (delayMs === 0) {
+      postReady();
+      return;
+    }
+
+    var remaining = Math.ceil(delayMs / 1000);
+    var cd = document.getElementById('countdown');
+    cd.textContent = remaining + 's';
+    countdownTimer = setInterval(function () {
+      remaining -= 1;
+      cd.textContent = Math.max(remaining, 0) + 's';
+      if (remaining <= 0) clearInterval(countdownTimer);
+    }, 1000);
+
+    setTimeout(postReady, delayMs);
+  });
+</script>
+
+</body>
+</html>

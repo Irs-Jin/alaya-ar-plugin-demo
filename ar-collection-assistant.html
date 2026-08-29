@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI AR Collection and Reminder Assistant - Alaya Plugin</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #f8fafc;
+      color: #1a1a1a;
+      min-height: 100vh;
+      padding: 32px 24px;
+      line-height: 1.5;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 1px 2px rgba(16,24,40,0.04), 0 4px 16px rgba(16,24,40,0.06);
+      padding: 28px 32px;
+      max-width: 960px;
+      margin: 0 auto 20px auto;
+    }
+    .card h1 { font-size: 1.4rem; font-weight: 800; margin-bottom: 4px; color: #111827; letter-spacing: -0.01em; }
+    .card h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 14px; color: #111827; }
+    .sub { font-size: 0.85rem; color: #6b7280; margin-bottom: 18px; }
+    .hero-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .hero-title-row { display: flex; align-items: center; gap: 14px; }
+    .hero-icon {
+      flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px;
+      background: linear-gradient(135deg, #111827, #374151);
+      display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+    }
+    .demo-banner {
+      background: #fffbeb; color: #92400e; border: 1px solid #fde68a;
+      border-radius: 10px; padding: 12px 16px; font-size: 0.83rem; margin-bottom: 16px;
+    }
+    .real-banner {
+      background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0;
+      border-radius: 10px; padding: 12px 16px; font-size: 0.83rem; margin-bottom: 16px;
+    }
+    .real-banner code, .sub code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.74rem; font-weight:700; letter-spacing:0.03em; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    .status-row { display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size:0.85rem; color:#6b7280; }
+    .form-group { display:flex; flex-direction:column; gap:5px; }
+    .form-group.full-width { grid-column:1/-1; }
+    .form-group label { font-size:0.74rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; }
+    .form-group input, .form-group select, .form-group textarea {
+      border:1px solid #d1d5db; border-radius:8px; padding:9px 12px; font-size:0.87rem; color:#111827; outline:none;
+      font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color:#4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.12); }
+    .form-group input:disabled { background:#f9fafb; color:#9ca3af; }
+    button { padding:9px 18px; border:none; border-radius:8px; font-size:0.85rem; font-weight:600; cursor:pointer; transition: background 0.15s, transform 0.05s; font-family: inherit; }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .btn-primary { background:#111827; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#1f2937; }
+    .btn-secondary { background:#f3f4f6; color:#374151; }
+    .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
+    .btn-success { background:#16a34a; color:#fff; }
+    .btn-success:hover:not(:disabled) { background:#15803d; }
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+
+    .priority-high, .priority-med, .priority-low {
+      display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.72rem; font-weight:700; letter-spacing:0.03em;
+    }
+    .priority-high { background:#fee2e2; color:#b91c1c; }
+    .priority-med  { background:#fef3c7; color:#92400e; }
+    .priority-low  { background:#dcfce7; color:#166534; }
+
+    #reminder-draft {
+      width:100%; min-height:110px; font-family:inherit; font-size:0.86rem; padding:12px;
+      border:1px solid #d1d5db; border-radius:10px; resize:vertical;
+    }
+    #reminder-draft:focus { outline:none; border-color:#4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.12); }
+    .promise-row { display:flex; gap:14px; align-items:flex-end; margin-top:10px; flex-wrap:wrap; }
+
+    .log-label { font-size:0.74rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#9ca3af; margin:16px 0 8px 0; }
+    #log { list-style:none; max-height:110px; overflow-y:auto; font-size:0.78rem; color:#4b5563; }
+    #log li { padding:3px 0; border-bottom:1px solid #f5f5f5; }
+    #log .ts { color:#b0b4bb; margin-right:6px; font-family:monospace; }
+
+    #result-box {
+      background:#111827; color:#86efac; border-radius:10px; padding:14px;
+      font-family:'Cascadia Code','Consolas',monospace; font-size:0.78rem; white-space:pre-wrap; word-break:break-all;
+      max-height:220px; overflow-y:auto; line-height:1.6; margin-top:8px;
+    }
+    #result-box.error { color:#fca5a5; }
+
+    /* ── AR workspace: KPI row + split queue/detail layout ── */
+    .ar-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .demo-tag {
+      display:inline-block; font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;
+      background:#f3f4f6; color:#9ca3af; padding:2px 7px; border-radius:999px; margin-left:6px; vertical-align:middle;
+    }
+    .ready-badge {
+      display:inline-block; font-size:0.68rem; font-weight:700; background:#dcfce7; color:#166534;
+      padding:3px 10px; border-radius:999px; margin-left:8px; vertical-align:middle;
+    }
+
+    .kpi-row { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin:20px 0; }
+    .kpi-card {
+      display:flex; align-items:center; gap:12px; background:#f9fafb; border:1px solid #e5e7eb;
+      border-radius:12px; padding:14px 16px;
+    }
+    .kpi-icon {
+      flex-shrink:0; width:38px; height:38px; border-radius:10px; display:flex; align-items:center;
+      justify-content:center; font-size:1.1rem; background:#fff; border:1px solid #e5e7eb;
+    }
+    .kpi-value { font-size:1.3rem; font-weight:800; color:#111827; line-height:1.15; }
+    .kpi-value-lg { font-size:1.35rem; font-weight:800; color:#111827; line-height:1.3; }
+    .kpi-label { font-size:0.78rem; font-weight:600; color:#374151; }
+    .kpi-sub { font-size:0.72rem; color:#9ca3af; }
+    .kpi-card-total { background:#111827; border-color:#111827; }
+    .kpi-card-total .kpi-label { color:#d1d5db; }
+    .kpi-card-total .kpi-value-lg { color:#fff; }
+    .kpi-card-total .kpi-sub { color:#9ca3af; }
+
+    .ar-split { display:flex; gap:18px; align-items:flex-start; }
+    .ar-queue {
+      flex:0 0 360px; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; background:#fff;
+    }
+    .queue-toolbar { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 10px; }
+    .queue-title { font-size:0.9rem; font-weight:700; color:#111827; }
+    .sort-select { border:1px solid #d1d5db; border-radius:8px; padding:5px 8px; font-size:0.76rem; color:#374151; }
+    .filter-tabs { display:flex; gap:6px; padding:0 16px 12px; flex-wrap:wrap; }
+    .filter-tab {
+      background:#f3f4f6; color:#4b5563; border:none; border-radius:999px; padding:5px 12px; font-size:0.72rem;
+      font-weight:600; cursor:pointer;
+    }
+    .filter-tab.active { background:#111827; color:#fff; }
+    .queue-list { max-height:520px; overflow-y:auto; border-top:1px solid #f1f2f4; }
+    .queue-item {
+      display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid #f1f2f4; cursor:pointer;
+    }
+    .queue-item:hover { background:#f9fafb; }
+    .queue-item.selected { background:#eef2ff; border-left:3px solid #4f46e5; padding-left:13px; }
+    .queue-rank { flex-shrink:0; width:20px; font-size:0.78rem; font-weight:700; color:#9ca3af; }
+    .queue-main { flex:1; min-width:0; }
+    .queue-name { font-size:0.86rem; font-weight:700; color:#111827; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .queue-sub { font-size:0.72rem; color:#6b7280; margin-top:2px; }
+    .queue-sub .tag-overdue { color:#b91c1c; font-weight:600; }
+    .queue-sub .tag-promise { color:#b45309; font-weight:600; }
+    .queue-amounts { flex-shrink:0; text-align:right; }
+    .queue-amount { font-size:0.86rem; font-weight:700; color:#111827; }
+    .queue-due { font-size:0.7rem; color:#9ca3af; margin-top:2px; }
+
+    .ar-detail { flex:1; min-width:0; border:1px solid #e5e7eb; border-radius:12px; padding:20px; background:#fff; }
+    .detail-empty { color:#9ca3af; font-size:0.88rem; text-align:center; padding:60px 20px; }
+    .detail-header { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+    .detail-name { font-size:1.15rem; font-weight:800; color:#111827; }
+    .badge-overdue { background:#fee2e2; color:#b91c1c; font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:999px; }
+    .detail-meta { font-size:0.8rem; color:#6b7280; margin-bottom:16px; }
+
+    .detail-stats { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-bottom:18px; }
+    .stat-box { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; }
+    .stat-label { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#9ca3af; margin-bottom:3px; }
+    .stat-value { font-size:0.92rem; font-weight:700; color:#111827; }
+    .stat-value.stat-danger { color:#b91c1c; }
+
+    .detail-columns { display:grid; grid-template-columns:1fr 1.6fr 1fr; gap:16px; margin-bottom:16px; }
+    .detail-col { min-width:0; }
+    .mini-label {
+      font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#9ca3af;
+      margin-bottom:8px; display:flex; align-items:center;
+    }
+    .contact-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; font-size:0.82rem; }
+    .contact-card .contact-name { font-weight:700; color:#111827; margin-bottom:2px; }
+    .contact-card .contact-role { color:#9ca3af; font-size:0.72rem; margin-bottom:8px; }
+    .contact-card .contact-line { color:#4b5563; margin-top:4px; }
+    .attempts-log { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; font-size:0.76rem; max-height:180px; overflow-y:auto; }
+    .attempt-item { padding:6px 0; border-bottom:1px solid #eceef1; }
+    .attempt-item:last-child { border-bottom:none; }
+    .attempt-item .attempt-date { color:#9ca3af; font-size:0.7rem; }
+    .attempt-item .attempt-desc { color:#374151; margin-top:1px; }
+
+    .btn-send { background:#2563eb; color:#fff; padding:11px 20px; font-size:0.88rem; }
+    .btn-send:hover:not(:disabled) { background:#1d4ed8; }
+    .btn-whatsapp { background:#25D366; color:#fff; padding:11px 20px; font-size:0.88rem; }
+    .btn-whatsapp:hover:not(:disabled) { background:#128C7E; }
+    .btn-whatsapp i { margin-right:6px; }
+    .phone-input-row { display:flex; gap:10px; align-items:flex-end; margin-top:10px; }
+    .phone-input-row .form-group { flex:1; }
+  </style>
+</head>
+<body>
+
+<!-- Status / handshake card -->
+<div class="card">
+  <div class="hero-card">
+    <div class="hero-title-row">
+      <div class="hero-icon">💰</div>
+      <div>
+        <h1>AI AR Collection and Reminder Assistant</h1>
+        <div class="sub" style="margin-bottom:0;">Prioritize overdue invoices, draft reminders, track promises, save collection notes.</div>
+      </div>
+    </div>
+    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span></div>
+  </div>
+</div>
+
+<!-- AR Collection Assistant workspace -->
+<div class="card" id="ar-workspace" style="max-width:1160px;">
+  <div class="ar-toolbar">
+    <div class="hero-title-row">
+      <div class="hero-icon">🔔</div>
+      <div>
+        <h2 style="margin-bottom:2px;">AR Collection Assistant</h2>
+        <div class="sub" style="margin-bottom:0;">Prioritize overdue invoices and prepare reminders</div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-load-ar" disabled>Load Overdue Invoices</button>
+      <button class="btn-secondary" id="btn-debug-table" disabled>Debug: Resolve Table</button>
+    </div>
+  </div>
+  <div class="real-banner" style="margin-top:16px;">
+    <b>REAL DATA (via custom module snapshot).</b> Reads the <code>AROverdueSnapshot</code> custom Master Data module
+    (built in Module Editor under this same jinmenu2, refreshed via its Module Query - see
+    <code>module-query-aroverdue.sql</code>) through the real <code>api/Udf/ZZTGetDataTable</code> endpoint - confirmed
+    working against live SIT data. Authenticates automatically once loaded inside Alaya. Contact person /
+    contact-attempts history shown below are demo placeholders (not tracked anywhere yet) - everything else
+    (amounts, dates, priority, reminder draft) is computed from the real snapshot rows.
+  </div>
+
+  <div class="kpi-row" id="kpi-row" style="display:none;">
+    <div class="kpi-card">
+      <div class="kpi-icon">🚩</div>
+      <div class="kpi-body"><div class="kpi-value" id="kpi-high">0</div><div class="kpi-label">High priority</div><div class="kpi-sub">Overdue &gt; 30 days</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">💗</div>
+      <div class="kpi-body"><div class="kpi-value" id="kpi-promise">0</div><div class="kpi-label">Promise due today</div><div class="kpi-sub" id="kpi-promise-sub">0 customers</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">✉️</div>
+      <div class="kpi-body"><div class="kpi-value" id="kpi-friendly">0</div><div class="kpi-label">Friendly reminder</div><div class="kpi-sub">Overdue 1-30 days</div></div>
+    </div>
+    <div class="kpi-card kpi-card-total">
+      <div class="kpi-body"><div class="kpi-label">Total overdue</div><div class="kpi-value-lg" id="kpi-total">RM 0.00</div><div class="kpi-sub" id="kpi-total-sub">0 invoices</div></div>
+    </div>
+  </div>
+
+  <div class="ar-split" id="ar-split" style="display:none;">
+    <div class="ar-queue">
+      <div class="queue-toolbar">
+        <div class="queue-title">Collections command queue</div>
+        <select id="sel-sort" class="sort-select">
+          <option value="priority">Sort by priority</option>
+          <option value="amount">Sort by amount</option>
+          <option value="days">Sort by days overdue</option>
+        </select>
+      </div>
+      <div class="filter-tabs" id="filter-tabs">
+        <button class="filter-tab active" data-filter="all">All</button>
+        <button class="filter-tab" data-filter="high">High priority (<span id="tab-high-count">0</span>)</button>
+        <button class="filter-tab" data-filter="promise">Promise due today (<span id="tab-promise-count">0</span>)</button>
+        <button class="filter-tab" data-filter="friendly">Friendly reminder (<span id="tab-friendly-count">0</span>)</button>
+      </div>
+      <div class="queue-list" id="queue-list"></div>
+    </div>
+
+    <div class="ar-detail">
+      <div class="detail-empty" id="detail-empty">Select a customer from the queue to see full details and draft a reminder.</div>
+      <div id="detail-content" style="display:none;">
+        <div class="detail-header">
+          <div class="detail-name" id="detail-name"></div>
+          <span class="badge-overdue" id="detail-overdue-badge"></span>
+        </div>
+        <div class="detail-meta" id="detail-meta"></div>
+
+        <div class="detail-stats">
+          <div class="stat-box"><div class="stat-label">Invoice</div><div class="stat-value" id="stat-invoice"></div></div>
+          <div class="stat-box"><div class="stat-label">Overdue</div><div class="stat-value stat-danger" id="stat-days"></div></div>
+          <div class="stat-box"><div class="stat-label">Amount overdue</div><div class="stat-value stat-danger" id="stat-amount"></div></div>
+          <div class="stat-box"><div class="stat-label">Last reminder</div><div class="stat-value" id="stat-last-reminder"></div></div>
+        </div>
+
+        <div class="detail-columns">
+          <div class="detail-col">
+            <div class="mini-label">Contact person<span class="demo-tag">demo</span></div>
+            <div class="contact-card" id="contact-card"></div>
+          </div>
+          <div class="detail-col detail-col-wide">
+            <div class="mini-label">AI-drafted reminder<span class="ready-badge">Ready to send</span></div>
+            <textarea id="reminder-draft"></textarea>
+            <div class="sub" style="margin-top:6px; margin-bottom:0;">Template-based, not a live LLM call - edit freely before use.</div>
+          </div>
+          <div class="detail-col">
+            <div class="mini-label">Contact attempts<span class="demo-tag">demo</span></div>
+            <div class="attempts-log" id="attempts-log"></div>
+          </div>
+        </div>
+
+        <div class="promise-row">
+          <div class="form-group">
+            <label>Promise to Pay Date</label>
+            <input type="date" id="inp-promise-date" />
+          </div>
+          <div class="form-group">
+            <label>Promise Amount</label>
+            <input type="text" id="inp-promise-amount" placeholder="0.00" />
+          </div>
+        </div>
+
+        <div class="form-group full-width" style="margin-top:10px;">
+          <label>Collection Note</label>
+          <textarea id="inp-collection-note" style="min-height:60px;" placeholder="e.g. Called debtor, promised payment by above date."></textarea>
+        </div>
+
+        <div class="phone-input-row">
+          <div class="form-group">
+            <label>Contact Phone (for WhatsApp)</label>
+            <input type="text" id="inp-phone" placeholder="e.g. 0123456789" />
+          </div>
+        </div>
+
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn-send" id="btn-save-note" disabled>📨 Save note only</button>
+          <button class="btn-whatsapp" id="btn-whatsapp" disabled>📱 Send via WhatsApp & update note</button>
+        </div>
+        <div class="sub" style="margin-top:6px;">
+          Requires a Get Token above first. Attempts a REAL POST to <code>{apiUrl}api/Udf/SetValues</code> against a
+          custom "Collection Note" module (Menu Code configurable below) - set one up via Module Editor first if it
+          doesn't exist yet. The exact request shape here is my best guess from the Udf API naming convention, not a
+          confirmed Swagger schema, so the first real attempt may come back with a schema-validation error - that
+          error message is actually useful, it tells us the real expected shape so I can correct this.
+        </div>
+        <div class="form-group" style="margin-top:10px; max-width:260px;">
+          <label>Collection Note Menu Code (UT_TableName)</label>
+          <input type="text" id="inp-note-tablecode" value="CollectionNote" />
+        </div>
+
+        <div id="result-section" style="display:none;">
+          <h2 style="margin-top:14px;">API Result - <span id="result-endpoint"></span></h2>
+          <div id="result-box"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const NONCE_TTL = 5 * 60;
+  // Hardcoded per jin's explicit instruction so auth happens silently with no visible Dev Key UI -
+  // this is a SIT/test-only DevKey for this specific plugin, not a production secret. Note this does
+  // go against the Plugin View Editor's own Terms & Conditions banner ("must not be embedded in
+  // client-side code") - flagged to jin, who chose to proceed anyway for this internal demo.
+  var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+  var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '', initPayload = null;
+
+  function ts() { return new Date().toLocaleTimeString(); }
+  function addLog(msg) {
+    $('#log').prepend($('<li>').append($('<span class="ts">').text(ts()), document.createTextNode(msg)));
+  }
+  function postToParent(type, data) {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: type, data: data }, '*');
+      addLog('Sent -> ' + type);
+    } else {
+      addLog('No parent frame - open this via Alaya\'s Test Load, not standalone');
+    }
+  }
+
+  /* ── ALAYA_INIT (identical handshake logic to the official sample) ── */
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.type !== 'ALAYA_INIT') return;
+
+    addLog('Received <- ALAYA_INIT');
+    var payload = msg.data !== undefined ? msg.data : msg;
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+
+    if (payload && payload.apiurl) {
+      apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
+      addLog('API URL set: ' + apiUrl);
+    }
+    if (payload && payload.nonce) {
+      nonce = payload.nonce;
+      addLog('Nonce set (valid 5 min)');
+    }
+    if (payload && payload.client) clientId = payload.client;
+    if (payload && payload.username) username = payload.username;
+
+    initPayload = payload;
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+
+    if (apiUrl && nonce && clientId && username) requestToken();
+  });
+
+  function requestToken() {
+    addLog('POST ' + apiUrl + 'token');
+    $.ajax({
+      url: apiUrl + 'token', type: 'POST', cache: false,
+      data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+      success: function (response) {
+        authToken = response.token_type + ' ' + response.access_token;
+        addLog('Token obtained');
+        $('#btn-save-note').prop('disabled', false);
+        $('#btn-whatsapp').prop('disabled', false);
+        $('#btn-load-ar').prop('disabled', false);
+        $('#btn-debug-table').prop('disabled', false);
+      },
+      error: function (response) {
+        authToken = '';
+        var msg = '';
+        try { msg = JSON.parse(response.responseText).error_description || response.responseText; }
+        catch (ex) { msg = response.responseText || 'Unknown error'; }
+        addLog('Token request failed: ' + msg);
+      }
+    });
+  }
+
+  /* ── AR Collection Assistant (real data via AROverdueSnapshot custom module + template reminder logic) ── */
+  // The Menu Code is the logical name the Udf API uses (NOT the physical ZZT_ table name) -
+  // confirmed real ZZC_ column names via Table Info: ZZC_Code, ZZC_Description, ZZC_InvoiceDocNo,
+  // ZZC_DueDate, ZZC_InvoiceTotal, ZZC_OutstandingAmt, ZZC_DaysOverdue. See module-query-aroverdue.sql
+  // for the query that populates this snapshot from real SalesInvoiceHDR/Customer/ARPaymentKnockOff data.
+  var AR_SNAPSHOT_TABLE_CODE = 'AROverdueSnapshot';
+
+  function priorityScore(d) {
+    // simple illustrative scoring: overdue amount weighted heavier the longer it's outstanding
+    return d.overdue * (1 + d.days / 30);
+  }
+  function priorityLabel(score) {
+    if (score > 60000) return { text: 'HIGH', cls: 'priority-high' };
+    if (score > 15000) return { text: 'MEDIUM', cls: 'priority-med' };
+    return { text: 'LOW', cls: 'priority-low' };
+  }
+  function fmtMoney(n) { return n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+  var selectedDebtor = null;
+
+  $('#btn-load-ar').on('click', function () {
+    if (!apiUrl || !authToken) { alert('Get a token first.'); return; }
+
+    // GetGridValues 200'd on every attempt (bare tableName; tableName+columnNames+paging;
+    // tableId+tableName+columnNames+paging) but threw the IDENTICAL server-side
+    // NullReferenceException every time regardless of params - meaning the params aren't the
+    // problem. Re-reading the Udf API naming convention: GetValues/GetGridValues are for reading a
+    // FIELD's value on a single record (grid-type fields included); the ZZT-prefixed endpoints
+    // (ZZTGetRowById/ZZTGetDataTable/ZZTSaveRow/ZZTDeleteRow) are the ones for whole-table row
+    // listing on a custom module - which is what we actually want. Pivoting to ZZTGetDataTable.
+    var AR_SNAPSHOT_TABLE_ID = 475;
+    var AR_SNAPSHOT_COLUMNS = ['ZZC_Code', 'ZZC_Description', 'ZZC_InvoiceDocNo', 'ZZC_DueDate',
+      'ZZC_InvoiceTotal', 'ZZC_OutstandingAmt', 'ZZC_DaysOverdue'];
+    var endpoint = apiUrl + 'api/Udf/ZZTGetDataTable';
+    // ZZTGetDataTable rejected GET with "does not support http method 'GET'" - opposite of
+    // GetGridValues, so this one wants POST with a JSON body.
+    var payload = {
+      tableId: AR_SNAPSHOT_TABLE_ID,
+      tableName: AR_SNAPSHOT_TABLE_CODE,
+      columnNames: AR_SNAPSHOT_COLUMNS,
+      pageIndex: 1,
+      pageSize: 1000,
+    };
+
+    addLog('POST ' + endpoint);
+    $('#btn-load-ar').prop('disabled', true).text('Loading...');
+
+    $.ajax({
+      url: endpoint, type: 'POST', cache: false, contentType: 'application/json; charset=UTF-8',
+      headers: { 'Authorization': authToken },
+      data: JSON.stringify(payload),
+      success: function (response) {
+        // HTTP 200 doesn't mean success here - this API wraps real errors in a 200 response with
+        // Result:false (e.g. a server-side NullReferenceException came back this way earlier).
+        if (response && response.Result === false) {
+          addLog('GetGridValues returned Result:false - ' + response.Message);
+          alert('Load Overdue Invoices failed (API returned Result:false): ' + response.Message);
+          return;
+        }
+        addLog('GetGridValues succeeded');
+        var rows = [];
+        try {
+          var obj = response.Obj || response.obj || response;
+          rows = Array.isArray(obj) ? obj : (obj.data || obj.Data || []);
+        } catch (ex) {
+          addLog('GetGridValues response parse error: ' + ex);
+        }
+        var debtors = rows.map(function (r, i) {
+          return {
+            uid: 'row-' + i,
+            code: r.ZZC_Code || r.Code || '',
+            name: r.ZZC_Description || r.Description || '',
+            invoiceDocNo: r.ZZC_InvoiceDocNo || r.InvoiceDocNo || '',
+            dueDate: r.ZZC_DueDate || r.DueDate || '',
+            overdue: parseFloat(r.ZZC_OutstandingAmt || r.OutstandingAmt || 0),
+            days: parseInt(r.ZZC_DaysOverdue || r.DaysOverdue || 0, 10),
+            lastReminder: 'None',
+          };
+        });
+        renderAr(debtors);
+      },
+      error: function (xhr) {
+        var msg;
+        try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
+        catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
+        addLog('GetGridValues failed (' + xhr.status + '): ' + msg);
+        alert('Load Overdue Invoices failed - see Event Log / Result box for the real API error, which likely reveals the correct request schema: ' + msg);
+      },
+      complete: function () { $('#btn-load-ar').prop('disabled', false).text('Load Overdue Invoices'); }
+    });
+  });
+
+  $('#btn-debug-table').on('click', function () {
+    if (!apiUrl || !authToken) { alert('Get a token first.'); return; }
+
+    // GetGridValues 200'd but threw a server-side NullReferenceException even with tableName +
+    // columnNames + paging - trying GetUdfTableByCode to see if GetGridValues actually needs a
+    // resolved table ID (per the confirmed GetUdfTableList/ById/ByCode naming convention) instead
+    // of the raw table code string.
+    var endpoint = apiUrl + 'api/Udf/GetUdfTableByCode?code=' + encodeURIComponent(AR_SNAPSHOT_TABLE_CODE);
+    addLog('GET ' + endpoint);
+    $('#btn-debug-table').prop('disabled', true).text('Loading...');
+
+    $.ajax({
+      url: endpoint, type: 'GET', cache: false, contentType: 'application/json; charset=UTF-8',
+      headers: { 'Authorization': authToken },
+      success: function (response) {
+        addLog('GetUdfTableByCode: ' + JSON.stringify(response));
+        alert('GetUdfTableByCode response:\n' + JSON.stringify(response, null, 2));
+      },
+      error: function (xhr) {
+        var msg;
+        try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
+        catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
+        addLog('GetUdfTableByCode failed (' + xhr.status + '): ' + msg);
+        alert('GetUdfTableByCode failed: ' + msg);
+      },
+      complete: function () { $('#btn-debug-table').prop('disabled', false).text('Debug: Resolve Table'); }
+    });
+  });
+
+  var allDebtors = [];
+  var promises = {};      // uid -> { date, amount } - client-side only, drives the "Promise due today" KPI/tab
+  var activeFilter = 'all';
+  var activeSort = 'priority';
+
+  function toneOf(d) { return d.days > 60 ? 'firm' : d.days > 30 ? 'direct' : 'friendly'; }
+  function todayStr() { var t = new Date(); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); }
+  function isPromiseDueToday(d) { return promises[d.uid] && promises[d.uid].date === todayStr(); }
+  function fmtDate(str) {
+    if (!str) return '-';
+    var dt = new Date(str);
+    if (isNaN(dt.getTime())) return str;
+    return dt.toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  // Deterministic (not random) demo contact info + contact-attempt history, keyed off the debtor
+  // code/invoice so it stays stable across re-renders. Clearly labelled "demo" in the UI - this data
+  // isn't tracked anywhere real yet, unlike the amounts/dates/priority above which come from the
+  // real AROverdueSnapshot row.
+  function hashStr(s) { var h = 0; for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; } return h; }
+  var FIRST_NAMES = ['Wei Ming', 'Siti', 'Ah Kow', 'Priya', 'Farid', 'Mei Ling', 'Ravi', 'Yusof'];
+  var ROLES = ['Account Executive', 'Finance Manager', 'Owner', 'Accounts Clerk', 'Director'];
+  function demoContact(d) {
+    var h = hashStr(d.code + d.invoiceDocNo);
+    var name = FIRST_NAMES[h % FIRST_NAMES.length];
+    var role = ROLES[(h >> 3) % ROLES.length];
+    var phone = '01' + (2 + h % 8) + '-' + (1000000 + (h % 8999999));
+    var emailName = d.name.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') || 'contact';
+    return { name: name, role: role, phone: phone, email: emailName + '@example.com' };
+  }
+  function demoAttempts(d) {
+    var h = hashStr(d.uid);
+    var kinds = [
+      { icon: '📞', desc: 'No answer - left voice message' },
+      { icon: '✉️', desc: 'Email reminder sent (overdue notice)' },
+      { icon: '📞', desc: 'Spoke with contact - payment discussed' },
+      { icon: '✉️', desc: 'Initial reminder sent' },
+    ];
+    var n = 1 + (h % 3);
+    var out = [];
+    for (var i = 0; i < n; i++) {
+      var k = kinds[(h + i * 7) % kinds.length];
+      var daysAgo = 3 + ((h + i * 13) % 25);
+      var dt = new Date(); dt.setDate(dt.getDate() - daysAgo);
+      out.push({ icon: k.icon, desc: k.desc, date: dt.toLocaleDateString('en-MY', { day: '2-digit', month: 'short' }) + ' - ' + daysAgo + 'd ago' });
+    }
+    return out;
+  }
+
+  function recomputeKpisAndTabs() {
+    var high = 0, friendly = 0, promiseToday = 0, totalAmt = 0;
+    $.each(allDebtors, function (i, d) {
+      if (priorityLabel(priorityScore(d)).text === 'HIGH') high++;
+      if (toneOf(d) === 'friendly') friendly++;
+      if (isPromiseDueToday(d)) promiseToday++;
+      totalAmt += d.overdue;
+    });
+    $('#kpi-high').text(high);
+    $('#kpi-promise').text(promiseToday);
+    $('#kpi-promise-sub').text(promiseToday + ' customer' + (promiseToday === 1 ? '' : 's'));
+    $('#kpi-friendly').text(friendly);
+    $('#kpi-total').text('RM ' + fmtMoney(totalAmt));
+    $('#kpi-total-sub').text(allDebtors.length + ' invoice' + (allDebtors.length === 1 ? '' : 's'));
+    $('#tab-high-count').text(high);
+    $('#tab-promise-count').text(promiseToday);
+    $('#tab-friendly-count').text(friendly);
+  }
+
+  function filteredSortedDebtors() {
+    var list = allDebtors.filter(function (d) {
+      if (activeFilter === 'high') return priorityLabel(priorityScore(d)).text === 'HIGH';
+      if (activeFilter === 'promise') return isPromiseDueToday(d);
+      if (activeFilter === 'friendly') return toneOf(d) === 'friendly';
+      return true;
+    });
+    list.sort(function (a, b) {
+      if (activeSort === 'amount') return b.overdue - a.overdue;
+      if (activeSort === 'days') return b.days - a.days;
+      return priorityScore(b) - priorityScore(a);
+    });
+    return list;
+  }
+
+  function renderQueue() {
+    var list = filteredSortedDebtors();
+    var $list = $('#queue-list').empty();
+    $.each(list, function (i, d) {
+      var due = isPromiseDueToday(d);
+      var $tags = $('<div class="queue-sub">').append(
+        document.createTextNode((d.invoiceDocNo || d.code) + ' · '),
+        $('<span>').addClass(due ? 'tag-promise' : 'tag-overdue').text(due ? 'Promise due today' : ('Overdue ' + d.days + ' days'))
+      );
+      var $item = $('<div class="queue-item">').attr('data-uid', d.uid)
+        .append($('<div class="queue-rank">').text(i + 1))
+        .append($('<div class="queue-main">')
+          .append($('<div class="queue-name">').text(d.name))
+          .append($tags))
+        .append($('<div class="queue-amounts">')
+          .append($('<div class="queue-amount">').text('RM' + fmtMoney(d.overdue)))
+          .append($('<div class="queue-due">').text('Due: ' + fmtDate(d.dueDate))))
+        .on('click', function () { selectDebtor(d); });
+      if (selectedDebtor && selectedDebtor.uid === d.uid) $item.addClass('selected');
+      $list.append($item);
+    });
+    if (!list.length) $list.append($('<div style="padding:24px;text-align:center;color:#9ca3af;font-size:0.82rem;">').text('No invoices match this filter.'));
+  }
+
+  function renderAr(debtors) {
+    allDebtors = debtors;
+    selectedDebtor = null;
+    $('#detail-content').hide();
+    $('#detail-empty').show();
+    $('#kpi-row').show();
+    $('#ar-split').show();
+    recomputeKpisAndTabs();
+    renderQueue();
+    addLog('Loaded ' + debtors.length + ' overdue invoices from AROverdueSnapshot, ranked by priority');
+  }
+
+  $('#filter-tabs').on('click', '.filter-tab', function () {
+    $('.filter-tab').removeClass('active');
+    $(this).addClass('active');
+    activeFilter = $(this).data('filter');
+    renderQueue();
+  });
+  $('#sel-sort').on('change', function () {
+    activeSort = $(this).val();
+    renderQueue();
+  });
+
+  function draftReminder(d) {
+    var tone = toneOf(d);
+    var lines = {
+      friendly: 'Hi ' + d.name + ',\n\nThis is a friendly reminder that invoice ' + (d.invoiceDocNo || '') + ' totalling RM' + fmtMoney(d.overdue) +
+                 ' is now ' + d.days + ' day(s) overdue. Kindly arrange payment at your earliest convenience.\n\nThank you!',
+      direct:   'Dear ' + d.name + ',\n\nOur records show invoice ' + (d.invoiceDocNo || '') + ' with an outstanding balance of RM' + fmtMoney(d.overdue) +
+                ', now ' + d.days + ' days past due. Please settle this amount as soon as possible, or contact us to arrange a payment plan.',
+      firm:     'Dear ' + d.name + ',\n\nDespite previous reminders, RM' + fmtMoney(d.overdue) + ' for invoice ' + (d.invoiceDocNo || '') + ' remains unpaid and is now ' +
+                d.days + ' days overdue. Please settle this balance immediately to avoid further collection action.'
+    };
+    return lines[tone];
+  }
+
+  function selectDebtor(d) {
+    selectedDebtor = d;
+    $('.queue-item').removeClass('selected');
+    $('.queue-item[data-uid="' + d.uid + '"]').addClass('selected');
+
+    $('#detail-empty').hide();
+    $('#detail-content').show();
+    $('#detail-name').text(d.name);
+    $('#detail-overdue-badge').text('Overdue ' + d.days + ' days');
+    $('#detail-meta').text(d.code + '  ·  Due ' + fmtDate(d.dueDate));
+
+    $('#stat-invoice').text(d.invoiceDocNo || '-');
+    $('#stat-days').text(d.days + ' days');
+    $('#stat-amount').text('RM ' + fmtMoney(d.overdue));
+    $('#stat-last-reminder').text(d.lastReminder || 'None');
+
+    var c = demoContact(d);
+    $('#contact-card').empty()
+      .append($('<div class="contact-name">').text(c.name))
+      .append($('<div class="contact-role">').text(c.role))
+      .append($('<div class="contact-line">').text('📞 ' + c.phone))
+      .append($('<div class="contact-line">').text('✉️ ' + c.email));
+
+    var $attempts = $('#attempts-log').empty();
+    $.each(demoAttempts(d), function (i, a) {
+      $attempts.append($('<div class="attempt-item">')
+        .append($('<div class="attempt-date">').text(a.icon + ' ' + a.date))
+        .append($('<div class="attempt-desc">').text(a.desc)));
+    });
+
+    $('#reminder-draft').val(draftReminder(d));
+    var saved = promises[d.uid] || {};
+    $('#inp-promise-date').val(saved.date || '');
+    $('#inp-promise-amount').val(saved.amount || '');
+    $('#inp-collection-note').val('');
+    $('#inp-phone').val(c.phone.replace(/-/g, ''));
+    $('#result-section').hide();
+    addLog('Selected ' + d.code + ' (' + (d.invoiceDocNo || '-') + ') - drafted reminder');
+  }
+
+  $(document).on('change', '#inp-promise-date, #inp-promise-amount', function () {
+    if (!selectedDebtor) return;
+    promises[selectedDebtor.uid] = { date: $('#inp-promise-date').val(), amount: $('#inp-promise-amount').val() };
+    recomputeKpisAndTabs();
+    if (activeFilter === 'promise') renderQueue();
+  });
+
+  /* ── WhatsApp Integration ── */
+  function openWhatsApp(phone, message) {
+    // Remove spaces, dashes, and + from phone number
+    var cleanPhone = phone.replace(/[\s\-\+]/g, '');
+    // Ensure phone starts with country code (Malaysia = 60)
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '60' + cleanPhone.substring(1);
+    }
+    // URL encode the message
+    var encodedMessage = encodeURIComponent(message);
+    // Open WhatsApp Web/Desktop with pre-filled message
+    var whatsappUrl = 'https://wa.me/' + cleanPhone + '?text=' + encodedMessage;
+    addLog('Opening WhatsApp: ' + whatsappUrl);
+    window.open(whatsappUrl, '_blank');
+  }
+
+  /* ── Save Collection Note - REAL attempt against api/Udf/SetValues ── */
+  function saveCollectionNote(callback) {
+    if (!apiUrl || !authToken) { alert('Get a token first.'); return false; }
+    if (!selectedDebtor) { alert('Select a debtor first.'); return false; }
+
+    var tableCode = $('#inp-note-tablecode').val().trim() || 'CollectionNote';
+    var endpoint = apiUrl + 'api/Udf/SetValues';
+    var payload = {
+      tableName: tableCode,
+      values: {
+        DebtorCode: selectedDebtor.code,
+        DebtorName: selectedDebtor.name,
+        ReminderText: $('#reminder-draft').val(),
+        PromiseDate: $('#inp-promise-date').val(),
+        PromiseAmount: $('#inp-promise-amount').val(),
+        Note: $('#inp-collection-note').val(),
+      }
+    };
+
+    $('#result-endpoint').text('POST api/Udf/SetValues');
+    $('#result-box').removeClass('error').text('Calling...');
+    $('#result-section').show();
+    addLog('POST ' + endpoint);
+
+    $.ajax({
+      url: endpoint, type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken },
+      data: JSON.stringify(payload),
+      success: function (response) {
+        $('#result-box').removeClass('error').text(JSON.stringify(response, null, 2));
+        addLog('SetValues succeeded');
+        if (callback) callback();
+      },
+      error: function (xhr) {
+        var msg;
+        try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
+        catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
+        $('#result-box').addClass('error').text(msg);
+        addLog('SetValues failed (' + xhr.status + ') - see result box for the real expected schema, if returned');
+      }
+    });
+    return true;
+  }
+
+  // Save note only button
+  $('#btn-save-note').on('click', function () {
+    saveCollectionNote();
+  });
+
+  // WhatsApp button - save note THEN open WhatsApp
+  $('#btn-whatsapp').on('click', function () {
+    if (!selectedDebtor) { alert('Select a debtor first.'); return; }
+    
+    var phone = $('#inp-phone').val().trim();
+    if (!phone) {
+      alert('Please enter a phone number for WhatsApp.');
+      return;
+    }
+    
+    var message = $('#reminder-draft').val();
+    if (!message) {
+      alert('Please enter a reminder message.');
+      return;
+    }
+
+    // Save note first, then open WhatsApp
+    saveCollectionNote(function() {
+      addLog('Note saved, opening WhatsApp...');
+      openWhatsApp(phone, message);
+    });
+  });
+
+  addLog('Page loaded - listening for ALAYA_INIT');
+  addLog('WhatsApp integration enabled - enter phone number to send reminders via WhatsApp');
+</script>
+
+</body>
+</html>
