@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Daily Cash &amp; Cash Flow Forecast</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --ink: #1a1a2e;
+      --muted: #6b7280;
+      --accent: #4361ee;
+      --inflow: #16a34a;
+      --outflow: #dc2626;
+      --line: #9aa5b1;
+      --ring: #e5e7eb;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; }
+    .topbar h1 { font-size: 1.3rem; font-weight: 700; }
+    .sub { color: var(--muted); font-size: 0.82rem; margin-top: 4px; }
+    .badge {
+      display: inline-block; padding: 5px 14px; border-radius: 16px;
+      font-size: 0.78rem; font-weight: 700; color: #fff;
+    }
+    .badge-waiting { background: #9aa5b1; }
+    .badge-ok { background: #16a34a; }
+    .badge-err { background: #dc2626; }
+    .actions { margin: 14px 0 16px; }
+    .btn {
+      border: 0; border-radius: 8px; padding: 10px 18px; font-weight: 600;
+      cursor: pointer; background: var(--accent); color: #fff; font-size: 0.9rem;
+    }
+    .btn:disabled { background: #c3c9d6; cursor: not-allowed; }
+
+    /* Opening balance card */
+    .ob-card {
+      background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+      color: #fff; border-radius: 14px; padding: 20px 24px;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+      margin-bottom: 18px; box-shadow: 0 6px 18px rgba(67,97,238,0.25);
+    }
+    .ob-label { font-size: 0.82rem; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.4px; }
+    .ob-amount { font-size: 2.1rem; font-weight: 800; margin-top: 2px; }
+    .ob-meta { font-size: 0.82rem; opacity: 0.9; text-align: right; }
+    .ob-meta b { display: block; font-size: 1rem; }
+
+    /* Summary chips */
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .chip { background: var(--card); border: 1px solid var(--ring); border-radius: 12px; padding: 14px 16px; }
+    .chip .k { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; }
+    .chip .v { font-size: 1.25rem; font-weight: 700; margin-top: 4px; }
+    .chip .v.green { color: var(--inflow); }
+    .chip .v.red { color: var(--outflow); }
+
+    /* Forecast card */
+    .fc-card { background: var(--card); border: 1px solid var(--ring); border-radius: 14px; padding: 18px 20px; }
+    .fc-card h2 { font-size: 1rem; margin-bottom: 4px; }
+    .fc-sub { font-size: 0.78rem; color: var(--muted); margin-bottom: 16px; }
+
+    .day-axis { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; margin-bottom: 8px; }
+    .day-axis span { text-align: center; font-size: 0.62rem; color: var(--muted); }
+
+    .bars { position: relative; }
+    .bar-row { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; align-items: end; height: 180px; margin-bottom: 6px; }
+    .bar-col { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+    .bar-in { background: var(--inflow); border-radius: 4px 4px 0 0; min-height: 2px; }
+    .bar-out { background: var(--outflow); border-radius: 0 0 4px 4px; min-height: 2px; }
+    .net { font-size: 0.6rem; text-align: center; color: var(--muted); margin-top: 4px; white-space: nowrap; }
+
+    .curve-wrap { position: relative; margin-top: 6px; padding: 8px 0 26px; }
+    .svg-line { width: 100%; display: block; }
+    .legend { display: flex; gap: 18px; font-size: 0.78rem; color: var(--muted); margin-top: 10px; flex-wrap: wrap; }
+    .legend span i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+
+    /* Low point callout */
+    .low-callout {
+      background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
+      border-radius: 12px; padding: 14px 16px; margin-top: 16px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .low-callout .big { font-size: 1.3rem; font-weight: 800; }
+    .low-callout .warn { background: #f97316; color: #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 800; flex: 0 0 28px; }
+
+    /* Detail list */
+    .scan { margin-top: 16px; }
+    .scan h3 { font-size: 0.9rem; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--ring); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; color: #fff; }
+    .tag-ar { background: var(--inflow); }
+    .tag-ap { background: var(--outflow); }
+    .tag-open { background: var(--accent); }
+    .pos { color: var(--inflow); font-weight: 700; }
+    .neg { color: var(--outflow); font-weight: 700; }
+    .log-box { margin-top: 16px; background: #0f172a; color: #cbd5e1; border-radius: 10px; padding: 12px; font-size: 0.72rem; max-height: 160px; overflow-y: auto; font-family: Consolas, monospace; }
+    .log-box div { padding: 1.5px 0; }
+    .no-data { color: var(--muted); padding: 30px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1>AI Daily Cash &amp; Cash Flow Forecast</h1>
+        <div class="sub"><span id="clientline"></span>&nbsp;&nbsp;·&nbsp;&nbsp;14-day cash position with inflows (AR) and outflows (AP/PO)</div>
+      </div>
+      <button id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</button>
+    </div>
+
+    <div class="actions">
+      <button id="btn-load" class="btn" disabled>Refresh Cash Flow Forecast</button>
+    </div>
+
+    <div id="dashboard" style="display:none;">
+      <div class="ob-card">
+        <div>
+          <div class="ob-label">Opening Bank Balance</div>
+          <div class="ob-amount" id="obAmount">—</div>
+        </div>
+        <div class="ob-meta">
+          Forecast window: <b id="obWindow">—</b>
+          <span>Forecast as of <span id="asOf"></span></span>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="chip"><div class="k">Total Cash In (AR)</div><div class="v green" id="sumIn">—</div></div>
+        <div class="chip"><div class="k">Total Cash Out (AP/PO)</div><div class="v red" id="sumOut">—</div></div>
+        <div class="chip"><div class="k">Net 14-Day Position</div><div class="v" id="netPos">—</div></div>
+        <div class="chip"><div class="k">Projected Closing Balance</div><div class="v" id="closing">—</div></div>
+      </div>
+
+      <div class="fc-card">
+        <h2>14-Day Cash Flow Forecast</h2>
+        <p class="fc-sub">Daily projected inflows / outflows and running balance. Bars: green = cash in (AR), red = cash out (AP/PO).</p>
+        <div class="day-axis" id="dayAxis"></div>
+        <div class="bars">
+          <div class="bar-row" id="barRow"></div>
+        </div>
+        <div class="curve-wrap">
+          <svg class="svg-line" id="curveSvg" viewBox="0 0 100 60" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="legend">
+          <span><i style="background:#16a34a"></i>Cash In (AR collections)</span>
+          <span><i style="background:#dc2626"></i>Cash Out (AP / PO payments)</span>
+          <span><i style="background:#4361ee"></i>Running balance</span>
+        </div>
+      </div>
+
+      <div id="lowBox"></div>
+
+      <div class="scan" id="scanBox"></div>
+    </div>
+
+    <div id="noData" class="no-data" style="display:none;">No cash flow data available for this client yet. Click "Refresh Cash Flow Forecast".</div>
+
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script>
+    // SIT/test-only DevKey for this plugin (matches working jinmenu3/jinmenu4 plugins)
+    var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+    var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
+
+    // CashFlowSnapshot Master Data (UdfTable UT_ID 480, MenuType 2)
+    var CF_TABLE_CODE = 'CashFlowSnapshot';
+    var CF_TABLE_ID = 480;
+    var CF_COLUMNS = ['ZZC_Code', 'ZZC_Description', 'ZZC_Type', 'ZZC_CFDueDate',
+      'ZZC_Amount', 'ZZC_CFContactPerson', 'ZZC_CFPhone', 'ZZC_CFEmail', 'ZZC_OpeningBalance'];
+
+    function ts() { return new Date().toLocaleTimeString(); }
+    function addLog(m) { $('#logBox').prepend($('<div>').text(ts() + '  ' + m)); }
+    function fmt(n) { return (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function fmtShort(n) {
+      var s = n < 0 ? '-' : ''; var a = Math.abs(n);
+      if (a >= 1000000) return s + '$' + (a / 1000000).toFixed(2) + 'M';
+      if (a >= 1000) return s + '$' + (a / 1000).toFixed(1) + 'K';
+      return s + '$' + a.toFixed(0);
+    }
+    function dateKey(d) {
+      if (!d) return null;
+      var dt = new Date(d);
+      if (isNaN(dt.getTime())) return null;
+      return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+    }
+    function todayKey() {
+      var d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function addDaysKey(key, n) {
+      var parts = key.split('-');
+      var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+      d.setDate(d.getDate() + n);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function labelOfKey(key) {
+      var parts = key.split('-');
+      var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+      var names = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      return names[d.getDay()] + ' ' + (+parts[2]);
+    }
+
+    function postToParent(type, data) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: type, data: data }, '*');
+        addLog('Sent -> ' + type);
+      }
+    }
+
+    /* ALAYA_INIT handshake (matches working AR plugin) */
+    $(window).on('message', function (e) {
+      var msg = e.originalEvent.data;
+      if (!msg || msg.type !== 'ALAYA_INIT') return;
+      addLog('Received <- ALAYA_INIT');
+      var payload = msg.data !== undefined ? msg.data : msg;
+      $('#badge').removeClass('badge-waiting').addClass('badge-ok').text('ALAYA_INIT received');
+      if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
+      if (payload && payload.nonce) nonce = payload.nonce;
+      if (payload && payload.client) { clientId = payload.client; $('#clientline').text('Client: ' + clientId); }
+      if (payload && payload.username) username = payload.username;
+      postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+      if (apiUrl && nonce && clientId && username) requestToken();
+    });
+
+    function requestToken() {
+      addLog('POST ' + apiUrl + 'token');
+      $.ajax({
+        url: apiUrl + 'token', type: 'POST', cache: false,
+        data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+        success: function (r) {
+          authToken = r.token_type + ' ' + r.access_token;
+          addLog('Token obtained');
+          $('#btn-load').prop('disabled', false);
+          loadForecast();
+        },
+        error: function () { addLog('Token request failed'); $('#badge').removeClass('badge-ok').addClass('badge-err').text('Token failed'); }
+      });
+    }
+
+    function fetchRows() {
+      var deferred = $.Deferred();
+      var endpoint = apiUrl + 'api/Udf/ZZTGetDataTable';
+      var payload = {
+        tableId: CF_TABLE_ID,
+        tableName: CF_TABLE_CODE,
+        columnNames: CF_COLUMNS,
+        pageIndex: 1,
+        pageSize: 5000
+      };
+      addLog('POST ' + endpoint);
+      $.ajax({
+        url: endpoint, type: 'POST', cache: false, contentType: 'application/json; charset=UTF-8',
+        headers: { 'Authorization': authToken },
+        data: JSON.stringify(payload),
+        success: function (response) {
+          if (response && response.Result === false) {
+            addLog('API Result:false - ' + response.Message);
+            deferred.reject(response.Message); return;
+          }
+          var rows = [];
+          try {
+            var obj = response.Obj || response.obj || response;
+            rows = Array.isArray(obj) ? obj : (obj.data || obj.Data || []);
+          } catch (ex) { addLog('parse error: ' + ex); }
+          deferred.resolve(rows);
+        },
+        error: function () { deferred.reject('network error'); }
+      });
+      return deferred.promise();
+    }
+
+    $('#btn-load').on('click', function () {
+      if (!apiUrl || !authToken) { addLog('Not connected yet.'); return; }
+      loadForecast();
+    });
+
+    function loadForecast() {
+      $('#btn-load').prop('disabled', true).text('Loading...');
+      fetchRows().done(function (rows) {
+        addLog('Loaded ' + rows.length + ' cash flow rows');
+        $('#btn-load').prop('disabled', false).text('Refresh Cash Flow Forecast');
+        render(rows);
+      }).fail(function (e) {
+        addLog('Load failed: ' + e);
+        $('#btn-load').prop('disabled', false).text('Refresh Cash Flow Forecast');
+      });
+    }
+
+    function render(rows) {
+      if (!rows || !rows.length) {
+        $('#dashboard').hide(); $('#noData').show(); return;
+      }
+      $('#noData').hide(); $('#dashboard').show();
+      $('#asOf').text(new Date().toLocaleDateString());
+
+      // Opening balance (OPEN row)
+      var opening = 0;
+      rows.forEach(function (r) {
+        if ((r.ZZC_Type || r.Type) === 'OPEN') {
+          var ob = parseFloat(r.ZZC_OpeningBalance != null ? r.ZZC_OpeningBalance : 0);
+          if (!isNaN(ob)) opening = ob;
+        }
+      });
+
+      // Build 14-day window starting today
+      var startKey = todayKey();
+      var days = [];
+      for (var i = 0; i < 14; i++) days.push({ key: addDaysKey(startKey, i), in: 0, out: 0, net: 0, bal: 0, items: [] });
+
+      function rowValue(r, field) {
+        var v = r[field];
+        if (v === null || v === undefined) return 0;
+        if (typeof v === 'object' && '$' in v) v = v['$']; // .NET decimal wrapper
+        var n = parseFloat(v);
+        return isNaN(n) ? 0 : n;
+      }
+
+      rows.forEach(function (r) {
+        var type = (r.ZZC_Type || r.Type || '').toString().toUpperCase();
+        if (type === 'OPEN') return;
+        var key = dateKey(r.ZZC_CFDueDate || r.CFDueDate);
+        var amount = rowValue(r, 'ZZC_Amount');
+        var idx = 0;
+        if (key) {
+          idx = Math.max(0, Math.min(13, dayIndex(startKey, key)));
+        } else {
+          idx = 0; // no date => today
+        }
+        var item = {
+          code: r.ZZC_Code || r.Code || '',
+          desc: r.ZZC_Description || r.Description || '',
+          contact: r.ZZC_CFContactPerson || '',
+          phone: r.ZZC_CFPhone || '',
+          email: r.ZZC_CFEmail || ''
+        };
+        if (type === 'AR') {
+          days[idx].in += amount; days[idx].items.push({ t: 'IN', amt: amount, it: item });
+        } else if (type === 'AP') {
+          days[idx].out += Math.abs(amount); days[idx].items.push({ t: 'OUT', amt: Math.abs(amount), it: item });
+        }
+      });
+
+      var balance = opening;
+      days.forEach(function (d, idx) {
+        d.net = d.in - d.out;
+        balance += d.net;
+        d.bal = balance;
+        // sort items desc by amount
+        d.items.sort(function (a, b) { return b.amt - a.amt; });
+      });
+
+      // Low point (min running balance) via either balance or net-flow day
+      var minBal = Infinity, minDay = 0;
+      days.forEach(function (d, idx) { if (d.bal < minBal) { minBal = d.bal; minDay = idx; } });
+      var lowIsNegative = minBal < 0;
+
+      // Opening balance card
+      $('#obAmount').text(fmt(opening));
+      $('#obWindow').text(labelOfKey(days[0].key) + ' – ' + labelOfKey(days[13].key));
+
+      // Summary
+      var totIn = days.reduce(function (a, d) { return a + d.in; }, 0);
+      var totOut = days.reduce(function (a, d) { return a + d.out; }, 0);
+      $('#sumIn').text(fmt(totIn));
+      $('#sumOut').text(fmt(totOut));
+      $('#netPos').text(fmt(totIn - totOut));
+      $('#closing').text(fmt(balance));
+
+      // Day axis + bars
+      var axis = '', bars = '';
+      var maxFlow = Math.max(1, Math.max.apply(null, days.map(function (d) { return Math.max(d.in, d.out); })));
+      days.forEach(function (d) {
+        axis += '<span>' + labelOfKey(d.key) + '</span>';
+        var inH = Math.round((d.in / maxFlow) * 100);
+        var outH = Math.round((d.out / maxFlow) * 100);
+        var dayHtml = '<div class="bar-col">';
+        dayHtml += '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;" class="bar-in-wrap" data-toggle="off">';
+        dayHtml += '<div class="bar-in" style="height:' + inH + '%;" title="' + fmt(d.in) + ' in"></div>';
+        dayHtml += '</div>';
+        dayHtml += '<div class="bar-out-wrap" style="flex:1;display:flex;flex-direction:column;justify-content:flex-start;">';
+        dayHtml += '<div class="bar-out" style="height:' + outH + '%;" title="' + fmt(d.out) + ' out"></div>';
+        dayHtml += '</div>';
+        dayHtml += '<div class="net" title="Running: ' + fmt(d.bal) + '">' + fmtShort(d.net) + '</div>';
+        dayHtml += '</div>';
+        bars += dayHtml;
+      });
+      $('#dayAxis').html(axis);
+      $('#barRow').html(bars);
+
+      // Curve (running balance line)
+      var minB = Math.min.apply(null, days.map(function (d) { return d.bal; }));
+      var maxB = Math.max.apply(null, days.map(function (d) { return d.bal; }));
+      var span = (maxB - minB) || 1;
+      var P = days.map(function (d, idx) {
+        var x = (idx / 13) * 100;
+        var y = 58 - ((d.bal - minB) / span) * 44 - 4;
+        return { x: x.toFixed(3), y: y.toFixed(3) };
+      });
+      var pts = P.map(function (p) { return p.x + ',' + p.y; }).join(' ');
+      var areaPath = pts + ' 100,60 0,60';
+      $('#curveSvg').html(
+        '<polygon points="' + areaPath + '" fill="rgba(67,97,238,0.12)" />' +
+        '<polyline points="' + pts + '" fill="none" stroke="#4361ee" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round" />'
+      );
+
+      // Low point callout
+      var lowHtml = (lowIsNegative
+        ? '<div class="low-callout"><div class="warn">!</div><div><div class="big">' + fmt(minBal) + '</div><div>Projected cash low point on <b>' + labelOfKey(days[minDay].key) + '</b>. Consider bringing forward AR collections or deferring PO payments before this date.</div></div></div>'
+        : '<div class="low-callout" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534;"><div class="warn" style="background:#16a34a;">&#10003;</div><div><div class="big">' + fmt(minBal) + '</div><div>Lowest projected balance of the window (<b>' + labelOfKey(days[minDay].key) + '</b>). Position remains positive throughout.</div></div></div>');
+      $('#lowBox').html(lowHtml);
+
+      // Scan / detail list: show AR & AP items bucketed by day
+      var scan = '<h3>Cash Flow Detail (next 14 days)</h3>';
+      if (days.every(function (d) { return d.items.length === 0; })) {
+        scan += '<p class="no-data">No scheduled AR/AP items in the next 14 days.</p>';
+      } else {
+        scan += '<table><thead><tr><th>Date</th><th>Type</th><th>Doc / Party</th><th>Detail</th><th>Contact</th><th>Amount</th></tr></thead><tbody>';
+        days.forEach(function (d) {
+          d.items.forEach(function (it) {
+            var dt = labelOfKey(d.key);
+            var tag = it.t === 'IN' ? '<span class="tag tag-ar">IN</span>' : '<span class="tag tag-ap">OUT</span>';
+            var amtCls = it.t === 'IN' ? 'pos' : 'neg';
+            var contact = [it.it.contact, it.it.phone].filter(Boolean).join(' · ');
+            scan += '<tr><td>' + dt + '</td><td>' + tag + '</td><td>' + (it.t === 'IN' ? it.it.code : it.it.code) + '</td><td>' + it.it.desc + '</td><td>' + contact + '</td><td class="' + amtCls + '">' + (it.t === 'IN' ? '+' : '-') + fmt(it.amt) + '</td></tr>';
+          });
+        });
+        scan += '</tbody></table>';
+      }
+      $('#scanBox').html(scan);
+
+      addLog('Forecast rendered with opening balance ' + fmt(opening));
+    }
+
+    function dayIndex(startKey, key) {
+      var a = startKey.split('-'), b = key.split('-');
+      var d1 = new Date(+a[0], +a[1] - 1, +a[2]);
+      var d2 = new Date(+b[0], +b[1] - 1, +b[2]);
+      return Math.round((d2 - d1) / 86400000);
+    }
+
+    addLog('Page loaded - listening for ALAYA_INIT');
+  </script>
+</body>
+</html>
