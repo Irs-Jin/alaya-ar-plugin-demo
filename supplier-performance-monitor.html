@@ -707,6 +707,7 @@
 
   function selectSupplier(s) {
     selectedSupplier = s;
+    $('#gauge-section').show();
     $('.ranking-card').removeClass('selected');
     $('.ranking-card[data-uid="'+s.uid+'"]').addClass('selected');
 
