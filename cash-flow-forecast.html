@@ -121,6 +121,13 @@
       <button id="btn-load" class="btn" disabled>Refresh Cash Flow Forecast</button>
     </div>
 
+    <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:10px;padding:10px 14px;font-size:0.78rem;margin-bottom:16px;">
+      <b>REAL DATA (via custom module snapshot).</b> AR and AP amounts below are real, due within the
+      next 14 days, refreshed via jinmenu2's Module Query (re-run it manually to pull in new
+      transactions - this page doesn't auto-recompute on its own). Opening Bank Balance is a manual
+      placeholder value, not yet linked to a real Bank module.
+    </div>
+
     <div id="dashboard" style="display:none;">
       <div class="ob-card">
         <div>
@@ -304,20 +311,6 @@
       $('#noData').hide(); $('#dashboard').show();
       $('#asOf').text(new Date().toLocaleDateString());
 
-      // Opening balance (OPEN row)
-      var opening = 0;
-      rows.forEach(function (r) {
-        if ((r.ZZC_Type || r.Type) === 'OPEN') {
-          var ob = parseFloat(r.ZZC_OpeningBalance != null ? r.ZZC_OpeningBalance : 0);
-          if (!isNaN(ob)) opening = ob;
-        }
-      });
-
-      // Build 14-day window starting today
-      var startKey = todayKey();
-      var days = [];
-      for (var i = 0; i < 14; i++) days.push({ key: addDaysKey(startKey, i), in: 0, out: 0, net: 0, bal: 0, items: [] });
-
       function rowValue(r, field) {
         var v = r[field];
         if (v === null || v === undefined) return 0;
@@ -325,6 +318,19 @@
         var n = parseFloat(v);
         return isNaN(n) ? 0 : n;
       }
+
+      // Opening balance (OPEN row)
+      var opening = 0;
+      rows.forEach(function (r) {
+        if ((r.ZZC_Type || r.Type) === 'OPEN') {
+          opening = rowValue(r, 'ZZC_OpeningBalance');
+        }
+      });
+
+      // Build 14-day window starting today
+      var startKey = todayKey();
+      var days = [];
+      for (var i = 0; i < 14; i++) days.push({ key: addDaysKey(startKey, i), in: 0, out: 0, net: 0, bal: 0, items: [] });
 
       rows.forEach(function (r) {
         var type = (r.ZZC_Type || r.Type || '').toString().toUpperCase();
