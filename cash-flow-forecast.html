@@ -181,12 +181,12 @@
 
     function ts() { return new Date().toLocaleTimeString(); }
     function addLog(m) { $('#logBox').prepend($('<div>').text(ts() + '  ' + m)); }
-    function fmt(n) { return (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function fmt(n) { return (n < 0 ? '-' : '') + 'RM ' + Math.abs(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function fmtShort(n) {
       var s = n < 0 ? '-' : ''; var a = Math.abs(n);
-      if (a >= 1000000) return s + '$' + (a / 1000000).toFixed(2) + 'M';
-      if (a >= 1000) return s + '$' + (a / 1000).toFixed(1) + 'K';
-      return s + '$' + a.toFixed(0);
+      if (a >= 1000000) return s + 'RM ' + (a / 1000000).toFixed(2) + 'M';
+      if (a >= 1000) return s + 'RM ' + (a / 1000).toFixed(1) + 'K';
+      return s + 'RM ' + a.toFixed(0);
     }
     function dateKey(d) {
       if (!d) return null;
