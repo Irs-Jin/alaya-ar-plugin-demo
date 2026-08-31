@@ -630,8 +630,16 @@
         users = rows.map(function (r) {
           var meta = {};
           try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
-          return { code: meta.code || r.ZZC_Code || '', name: meta.name || '', email: meta.email || '', active: meta.active || 'Y' };
-        }).filter(function (u) { return u.code; });
+          // ZZC_Code is the stable row id (U00n). meta holds the Staff>Users fields:
+          // code = login username, name = display name, email, active.
+          return {
+            id: r.ZZC_Code || '',
+            code: meta.code || r.ZZC_Code || '',
+            name: meta.name || '',
+            email: meta.email || '',
+            active: meta.active || 'Y'
+          };
+        }).filter(function (u) { return u.id; });
         addLog('Loaded ' + users.length + ' users from DB table ' + USER_TABLE_CODE);
         renderAssigneeOptions();
       },
@@ -648,8 +656,9 @@
     var prev = $sel.val() || '';
     $sel.empty().append($('<option>').val('').text('-- Select --'));
     users.forEach(function (u) {
-      var label = u.name ? u.code + ' - ' + u.name : u.code;
-      $sel.append($('<option>').val(u.code).text(label));
+      // Value = stable ZZC_Code (U00n). Label = "login - Display Name".
+      var label = u.name ? (u.code ? u.code + ' - ' + u.name : u.name) : u.id;
+      $sel.append($('<option>').val(u.id).text(label));
     });
     // If no users loaded yet, add the current username as a fallback option.
     if (!users.length && username) {
@@ -947,13 +956,20 @@
     var list = users;
     if (filter) {
       list = users.filter(function (u) {
-        return (u.code || '').toLowerCase().indexOf(filter) >= 0 || (u.name || '').toLowerCase().indexOf(filter) >= 0 || (u.email || '').toLowerCase().indexOf(filter) >= 0;
+        return (u.id || '').toLowerCase().indexOf(filter) >= 0
+          || (u.code || '').toLowerCase().indexOf(filter) >= 0
+          || (u.name || '').toLowerCase().indexOf(filter) >= 0
+          || (u.email || '').toLowerCase().indexOf(filter) >= 0;
       });
     }
     if (!list.length) { $list.append('<div class="empty-state" style="padding:20px;">No users found.</div>'); return; }
     list.forEach(function (u) {
+      var line = '<strong>' + escapeHtml(u.id) + '</strong>'
+        + ' &mdash; ' + escapeHtml(u.code || '')
+        + ' / ' + escapeHtml(u.name || '')
+        + ' <span style="color:#9ca3af;">' + escapeHtml(u.email || '') + '</span>';
       $list.append($('<div class="report-stat">')
-        .append($('<span class="label">').html('<strong>' + escapeHtml(u.code) + '</strong> &mdash; ' + escapeHtml(u.name) + ' <span style="color:#9ca3af;">' + escapeHtml(u.email) + '</span>'))
+        .append($('<span class="label">').html(line))
         .append($('<span class="value">').text(u.active === 'Y' ? 'Active' : 'Inactive')));
     });
     $list.prepend($('<div class="report-stat" style="font-weight:700;">').append($('<span class="label">').text(list.length + ' users')).append($('<span class="value">').text('Total')));
