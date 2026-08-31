@@ -572,10 +572,12 @@
           var meta = {};
           try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           var st = (meta.status || 'pending').toLowerCase();
-          // Normalise seed values: "done" -> "completed", "overdue" -> "pending"
-          // (overdue is a COMPUTED property via isOverdue(), not a stored status).
+          // Normalise seed values: "done" -> "completed", "overdue" -> "inprogress"
+          // (overdue is a COMPUTED property via isOverdue(), not a stored base status.
+          // Using inprogress as the base keeps KPI Pending count correct: an overdue
+          // task is NOT counted as pending, only as overdue via isOverdue()).
           if (st === 'done') st = 'completed';
-          if (st === 'overdue') st = 'pending';
+          if (st === 'overdue') st = 'inprogress';
           return {
             id: r.ZZC_Code || uid(),
             code: r.ZZC_Code || '',
