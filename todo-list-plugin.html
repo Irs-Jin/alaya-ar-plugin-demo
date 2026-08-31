@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>To-Do List Plugin - Alaya</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+      padding: 24px 20px;
+      line-height: 1.5;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      padding: 24px 28px;
+      max-width: 1200px;
+      margin: 0 auto 16px auto;
+    }
+    h1 { font-size: 1.3rem; font-weight: 800; color: #111827; }
+    h2 { font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 12px; }
+    .sub { font-size: 0.82rem; color: #6b7280; margin-bottom: 14px; }
+    .sub code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#6b7280; }
+    .hero-card { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .hero-title-row { display:flex; align-items:center; gap:12px; }
+    .hero-icon {
+      flex-shrink:0; width:42px; height:42px; border-radius:11px;
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:#fff;
+    }
+    .real-banner {
+      background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0;
+      border-radius: 10px; padding: 12px 16px; font-size: 0.8rem; margin-bottom: 16px;
+    }
+    .real-banner code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .btn-primary { background:#2563eb; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#1d4ed8; }
+    .btn-secondary { background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
+    .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
+    .btn-danger { background:#dc2626; color:#fff; }
+    .btn-danger:hover:not(:disabled) { background:#b91c1c; }
+    .btn-success { background:#16a34a; color:#fff; }
+    .btn-success:hover:not(:disabled) { background:#15803d; }
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
+
+    /* ── KPI Row ── */
+    .kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:16px 0; }
+    .kpi-card {
+      display:flex; align-items:center; gap:10px; background:#f9fafb; border:1px solid #e5e7eb;
+      border-radius:12px; padding:14px 16px;
+    }
+    .kpi-icon {
+      flex-shrink:0; width:36px; height:36px; border-radius:10px; display:flex; align-items:center;
+      justify-content:center; font-size:1rem; background:#fff; border:1px solid #e5e7eb;
+    }
+    .kpi-value { font-size:1.2rem; font-weight:800; color:#111827; }
+    .kpi-label { font-size:0.72rem; font-weight:600; color:#374151; }
+    .kpi-sub { font-size:0.68rem; color:#9ca3af; }
+
+    /* ── Toolbar ── */
+    .todo-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+    .view-tabs { display:flex; gap:6px; }
+    .view-tab {
+      background:#f3f4f6; color:#4b5563; border:none; border-radius:999px; padding:6px 14px;
+      font-size:0.78rem; font-weight:600; cursor:pointer; font-family:inherit;
+    }
+    .view-tab.active { background:#2563eb; color:#fff; }
+    .filter-row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px; }
+    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-group label { font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
+    .form-group input, .form-group select, .form-group textarea {
+      border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.82rem; color:#111827; outline:none;
+      font-family:inherit; transition:border-color 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,0.1); }
+    .form-group select { min-width:140px; }
+
+    /* ── Task Table (List View) ── */
+    .task-table { width:100%; border-collapse:collapse; font-size:0.84rem; }
+    .task-table thead th {
+      text-align:left; padding:10px 12px; background:#f9fafb; border-bottom:2px solid #e5e7eb;
+      font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#6b7280;
+    }
+    .task-table tbody td { padding:10px 12px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
+    .task-table tbody tr:hover { background:#f9fafb; }
+    .task-table tbody tr.row-high { background:#fef2f2; }
+    .task-table tbody tr.row-high:hover { background:#fee2e2; }
+    .task-table tbody tr.row-medium { background:#fffbeb; }
+    .task-table tbody tr.row-medium:hover { background:#fef3c7; }
+    .task-table tbody tr.row-low { background:#f0fdf4; }
+    .task-table tbody tr.row-low:hover { background:#dcfce7; }
+    .task-table tbody tr.row-completed { opacity:0.55; text-decoration:line-through; }
+    .task-checkbox { width:18px; height:18px; cursor:pointer; }
+    .priority-badge {
+      display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.7rem; font-weight:700;
+    }
+    .priority-high { background:#fee2e2; color:#b91c1c; }
+    .priority-medium { background:#fef3c7; color:#92400e; }
+    .priority-low { background:#dcfce7; color:#166534; }
+    .status-badge {
+      display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.7rem; font-weight:700;
+    }
+    .status-pending { background:#e0e7ff; color:#3730a3; }
+    .status-inprogress { background:#dbeafe; color:#1e40af; }
+    .status-completed { background:#dcfce7; color:#166534; }
+    .status-overdue { background:#fee2e2; color:#b91c1c; }
+    .task-actions { display:flex; gap:6px; }
+    .task-action-btn {
+      padding:4px 8px; font-size:0.72rem; border-radius:6px; border:1px solid #d1d5db; background:#fff; cursor:pointer;
+    }
+    .task-action-btn:hover { background:#f3f4f6; }
+    .task-action-btn.danger:hover { background:#fee2e2; border-color:#fecaca; }
+
+    /* ── Calendar View ── */
+    .calendar-wrap { background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:16px; }
+    .calendar-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .calendar-title { font-size:0.95rem; font-weight:700; color:#111827; }
+    .calendar-nav { display:flex; gap:8px; }
+    .calendar-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+    .calendar-day-header {
+      text-align:center; font-size:0.72rem; font-weight:700; color:#6b7280; padding:6px 0;
+      text-transform:uppercase; letter-spacing:0.04em;
+    }
+    .calendar-day {
+      min-height:72px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:4px 6px;
+      font-size:0.76rem; position:relative; overflow:hidden;
+    }
+    .calendar-day.empty { background:transparent; border:none; }
+    .calendar-day.today { border-color:#2563eb; border-width:2px; }
+    .calendar-day.other-month { opacity:0.35; }
+    .calendar-day-num { font-weight:700; color:#374151; margin-bottom:2px; }
+    .calendar-task {
+      display:block; padding:2px 6px; border-radius:4px; font-size:0.66rem; margin-bottom:2px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
+    }
+    .calendar-task.high { background:#fee2e2; color:#b91c1c; }
+    .calendar-task.medium { background:#fef3c7; color:#92400e; }
+    .calendar-task.low { background:#dcfce7; color:#166534; }
+    .calendar-task.done { opacity:0.5; text-decoration:line-through; }
+
+    /* ── Calendar Legend ── */
+    .calendar-legend { display:flex; gap:14px; margin-top:12px; flex-wrap:wrap; }
+    .legend-item { display:flex; align-items:center; gap:6px; font-size:0.74rem; color:#4b5563; }
+    .legend-dot { width:10px; height:10px; border-radius:3px; }
+
+    /* ── Task Groups ── */
+    .groups-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+    .group-chip {
+      display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px;
+      font-size:0.76rem; font-weight:600; background:#f3f4f6; color:#4b5563; cursor:pointer; border:1px solid #e5e7eb;
+    }
+    .group-chip.active { background:#2563eb; color:#fff; border-color:#2563eb; }
+    .group-chip .count { font-size:0.68rem; opacity:0.8; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4);
+      z-index:100; align-items:center; justify-content:center; padding:20px;
+    }
+    .modal-overlay.show { display:flex; }
+    .modal {
+      background:#fff; border-radius:16px; padding:24px 28px; max-width:520px; width:100%;
+      max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.15);
+    }
+    .modal h2 { margin-bottom:16px; }
+    .modal-form { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .modal-form .full { grid-column:1/-1; }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+
+    /* ── Log ── */
+    .log-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#9ca3af; margin:14px 0 6px 0; }
+    #log { list-style:none; max-height:90px; overflow-y:auto; font-size:0.72rem; color:#4b5563; }
+    #log li { padding:2px 0; border-bottom:1px solid #f5f5f5; }
+    #log .ts { color:#b0b4bb; margin-right:5px; font-family:monospace; }
+
+    /* ── Empty state ── */
+    .empty-state { text-align:center; padding:40px 20px; color:#9ca3af; font-size:0.88rem; }
+    .empty-state .big-icon { font-size:2.5rem; margin-bottom:8px; }
+
+    /* ── Report section ── */
+    .report-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:14px; }
+    .report-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:16px; }
+    .report-title { font-size:0.82rem; font-weight:700; color:#111827; margin-bottom:10px; }
+    .report-stat { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:0.78rem; }
+    .report-stat:last-child { border-bottom:none; }
+    .report-stat .label { color:#6b7280; }
+    .report-stat .value { font-weight:700; color:#111827; }
+
+    @media (max-width:900px) {
+      .kpi-row { grid-template-columns:repeat(2,1fr); }
+      .modal-form { grid-template-columns:1fr; }
+      .report-grid { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Status / handshake card -->
+<div class="card">
+  <div class="hero-card">
+    <div class="hero-title-row">
+      <div class="hero-icon">&#9745;</div>
+      <div>
+        <h1>To-Do List Plugin</h1>
+        <div class="sub" style="margin-bottom:0;">Create, assign and track business tasks & follow-ups directly inside AutoCount.</div>
+      </div>
+    </div>
+    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span></div>
+  </div>
+</div>
+
+<!-- Main workspace -->
+<div class="card" id="workspace" style="max-width:1200px;">
+  <div class="todo-toolbar">
+    <div class="hero-title-row">
+      <div style="font-size:1.1rem;">&#128203;</div>
+      <div>
+        <h2 style="margin-bottom:2px;">Task Management Dashboard</h2>
+        <div class="sub" style="margin-bottom:0;">Prioritize, assign, and monitor daily tasks and follow-ups</div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-new-task">+ New Task</button>
+      <button class="btn-secondary" id="btn-load" disabled>Load Tasks</button>
+      <button class="btn-secondary" id="btn-report">&#128202; Report</button>
+    </div>
+  </div>
+
+  <div class="real-banner" style="margin-top:10px;">
+    <b>To-Do List Plugin.</b> Tasks are stored locally in your browser by default. Click <code>Load Tasks</code> to
+    connect to the <code>ToDoList</code> custom UDF module (if set up via Module Editor) to read/write tasks to the
+    AutoCount database. Task groups, priorities, assignments, due dates, and completion status are all managed here.
+  </div>
+
+  <!-- KPI Row -->
+  <div class="kpi-row" id="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-icon">&#128230;</div>
+      <div><div class="kpi-value" id="kpi-total">0</div><div class="kpi-label">Total tasks</div><div class="kpi-sub">All groups</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">&#9201;</div>
+      <div><div class="kpi-value" id="kpi-pending" style="color:#3730a3;">0</div><div class="kpi-label">Pending</div><div class="kpi-sub">Not started</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">&#9888;</div>
+      <div><div class="kpi-value" id="kpi-overdue" style="color:#dc2626;">0</div><div class="kpi-label">Overdue</div><div class="kpi-sub">Past due date</div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon">&#9989;</div>
+      <div><div class="kpi-value" id="kpi-done" style="color:#16a34a;">0</div><div class="kpi-label">Completed</div><div class="kpi-sub">This period</div></div>
+    </div>
+  </div>
+
+  <!-- View Tabs + Groups -->
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+    <div class="view-tabs">
+      <button class="view-tab active" data-view="list">List View</button>
+      <button class="view-tab" data-view="calendar">Calendar View</button>
+      <button class="view-tab" data-view="report">Report View</button>
+    </div>
+    <div class="filter-row" style="margin-bottom:0;">
+      <div class="form-group">
+        <label>Filter by Group</label>
+        <select id="sel-group-filter">
+          <option value="all">All Groups</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Filter by Assignee</label>
+        <select id="sel-assignee-filter">
+          <option value="all">Everyone</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Filter by Status</label>
+        <select id="sel-status-filter">
+          <option value="all">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="inprogress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="overdue">Overdue</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <button class="btn-secondary" id="btn-show-completed">Show Completed</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Groups chips -->
+  <div class="groups-row" id="groups-row"></div>
+
+  <!-- List View -->
+  <div id="view-list">
+    <table class="task-table" id="task-table">
+      <thead>
+        <tr>
+          <th style="width:32px;"></th>
+          <th>Task</th>
+          <th>Group</th>
+          <th>Assignee</th>
+          <th>Priority</th>
+          <th>Due Date</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="task-tbody"></tbody>
+    </table>
+    <div class="empty-state" id="empty-state" style="display:none;">
+      <div class="big-icon">&#128203;</div>
+      <div>No tasks yet. Click <b>+ New Task</b> to create one.</div>
+    </div>
+  </div>
+
+  <!-- Calendar View -->
+  <div id="view-calendar" style="display:none;">
+    <div class="calendar-wrap">
+      <div class="calendar-header">
+        <div class="btn-row">
+          <button class="btn-secondary" id="cal-prev">&larr; Prev</button>
+          <button class="btn-secondary" id="cal-today">Today</button>
+          <button class="btn-secondary" id="cal-next">Next &rarr;</button>
+        </div>
+        <div class="calendar-title" id="cal-title">Calendar</div>
+      </div>
+      <div class="calendar-grid" id="cal-grid"></div>
+      <div class="calendar-legend">
+        <div class="legend-item"><span class="legend-dot" style="background:#fee2e2;"></span> High priority</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#fef3c7;"></span> Medium priority</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#dcfce7;"></span> Low priority</div>
+        <div class="legend-item"><span class="legend-dot" style="background:#2563eb;border:2px solid #2563eb;"></span> Today</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report View -->
+  <div id="view-report" style="display:none;">
+    <div class="report-grid">
+      <div class="report-card">
+        <div class="report-title">By Priority</div>
+        <div id="report-priority"></div>
+      </div>
+      <div class="report-card">
+        <div class="report-title">By Assignee</div>
+        <div id="report-assignee"></div>
+      </div>
+      <div class="report-card">
+        <div class="report-title">By Group</div>
+        <div id="report-group"></div>
+      </div>
+      <div class="report-card">
+        <div class="report-title">By Status</div>
+        <div id="report-status"></div>
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn-secondary" id="btn-export">&#128190; Export CSV</button>
+      <button class="btn-secondary" id="btn-print">&#128424; Print</button>
+    </div>
+  </div>
+</div>
+
+<!-- Task Modal -->
+<div class="modal-overlay" id="task-modal">
+  <div class="modal">
+    <h2 id="modal-title">New Task</h2>
+    <div class="modal-form">
+      <div class="form-group full">
+        <label>Task Title</label>
+        <input type="text" id="inp-title" placeholder="e.g. Follow up on overdue invoice" />
+      </div>
+      <div class="form-group full">
+        <label>Description</label>
+        <textarea id="inp-desc" placeholder="Task details..." style="min-height:60px;"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Task Group</label>
+        <select id="inp-group"><option value="">-- Select --</option></select>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="inp-priority">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Assignee</label>
+        <input type="text" id="inp-assignee" placeholder="e.g. jin1" />
+      </div>
+      <div class="form-group">
+        <label>Due Date</label>
+        <input type="date" id="inp-due" />
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="inp-status">
+          <option value="pending" selected>Pending</option>
+          <option value="inprogress">In Progress</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Estimated Duration (hrs)</label>
+        <input type="number" id="inp-duration" min="0" step="0.5" value="1" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-modal-cancel">Cancel</button>
+      <button class="btn-primary" id="btn-modal-save">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Group Manager Modal -->
+<div class="modal-overlay" id="group-modal">
+  <div class="modal">
+    <h2>Task Group Maintenance</h2>
+    <div class="form-group" style="margin-bottom:14px;">
+      <label>Add New Group</label>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="inp-new-group" placeholder="e.g. Month-End Closing" />
+        <button class="btn-primary" id="btn-add-group">Add</button>
+      </div>
+    </div>
+    <div id="group-list" style="max-height:200px; overflow-y:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-group-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log -->
+<div class="card" style="max-width:1200px;">
+  <div class="log-label">Event Log</div>
+  <ul id="log"></ul>
+</div>
+
+<script>
+  var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+  var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
+  var TODO_TABLE_CODE = 'ToDoList';
+
+  var tasks = [];
+  var groups = [{ id: 'g1', name: 'General' }, { id: 'g2', name: 'Month-End Closing' }, { id: 'g3', name: 'Follow-Ups' }];
+  var editingTaskId = null;
+  var currentView = 'list';
+  var showCompleted = true;
+  var calMonth = new Date();
+
+  function ts() { return new Date().toLocaleTimeString(); }
+  function addLog(msg) {
+    $('#log').prepend($('<li>').append($('<span class="ts">').text(ts()), document.createTextNode(msg)));
+  }
+  function postToParent(type, data) {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: type, data: data }, '*');
+      addLog('Sent -> ' + type);
+    }
+  }
+  function uid() { return 't' + Date.now() + Math.floor(Math.random() * 1000); }
+  function todayStr() { var t = new Date(); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); }
+  function fmtDate(s) { if (!s) return '-'; var d = new Date(s); if (isNaN(d.getTime())) return s; return d.toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  function isOverdue(t) { if (!t.dueDate || t.status === 'completed') return false; return new Date(t.dueDate) < new Date(todayStr()); }
+  function isToday(s) { return s === todayStr(); }
+
+  /* ── ALAYA_INIT ── */
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.type !== 'ALAYA_INIT') return;
+    addLog('Received <- ALAYA_INIT');
+    var payload = msg.data !== undefined ? msg.data : msg;
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
+    if (payload && payload.nonce) nonce = payload.nonce;
+    if (payload && payload.client) clientId = payload.client;
+    if (payload && payload.username) username = payload.username;
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+    if (apiUrl && nonce && clientId && username) requestToken();
+    if (username) $('#inp-assignee').val(username);
+  });
+
+  function requestToken() {
+    addLog('POST ' + apiUrl + 'token');
+    $.ajax({
+      url: apiUrl + 'token', type: 'POST', cache: false,
+      data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+      success: function (r) {
+        authToken = r.token_type + ' ' + r.access_token;
+        addLog('Token obtained');
+        $('#btn-load').prop('disabled', false);
+      },
+      error: function (r) {
+        var msg = '';
+        try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch (e) { msg = r.responseText || 'Unknown'; }
+        addLog('Token failed: ' + msg);
+      }
+    });
+  }
+
+  /* ── Load Tasks from UDF (optional) ── */
+  $('#btn-load').on('click', function () {
+    if (!apiUrl || !authToken) { alert('Get a token first.'); return; }
+    var endpoint = apiUrl + 'api/Udf/ZZTGetDataTable';
+    var payload = {
+      tableName: TODO_TABLE_CODE,
+      columnNames: ['ZZC_Title', 'ZZC_Description', 'ZZC_Group', 'ZZC_Priority', 'ZZC_Assignee', 'ZZC_DueDate', 'ZZC_Status', 'ZZC_Duration'],
+      pageIndex: 1, pageSize: 1000,
+    };
+    addLog('POST ' + endpoint);
+    $('#btn-load').prop('disabled', true).text('Loading...');
+    $.ajax({
+      url: endpoint, type: 'POST', cache: false, contentType: 'application/json; charset=UTF-8',
+      headers: { 'Authorization': authToken }, data: JSON.stringify(payload),
+      success: function (response) {
+        if (response && response.Result === false) {
+          addLog('API Error: ' + response.Message + ' - using local tasks');
+          renderAll(); return;
+        }
+        var rows = [];
+        try { var obj = response.Obj || response.obj || response; rows = Array.isArray(obj) ? obj : (obj.data || obj.Data || []); } catch (e) {}
+        if (!rows.length) { addLog('No rows from API - using local tasks'); renderAll(); return; }
+        tasks = rows.map(function (r) {
+          return {
+            id: uid(), title: r.ZZC_Title || '', desc: r.ZZC_Description || '',
+            group: r.ZZC_Group || 'General', priority: r.ZZC_Priority || 'medium',
+            assignee: r.ZZC_Assignee || '', dueDate: r.ZZC_DueDate || '',
+            status: r.ZZC_Status || 'pending', duration: parseFloat(r.ZZC_Duration || 1),
+          };
+        });
+        addLog('Loaded ' + tasks.length + ' tasks from ' + TODO_TABLE_CODE);
+        renderAll();
+      },
+      error: function (xhr) {
+        addLog('Load failed (' + xhr.status + ') - using local tasks');
+        renderAll();
+      },
+      complete: function () { $('#btn-load').prop('disabled', false).text('Load Tasks'); }
+    });
+  });
+
+  /* ── Seed demo tasks ── */
+  function seedDemoTasks() {
+    tasks = [
+      { id: uid(), title: 'Bank reconciliation - August', desc: 'Reconcile all bank accounts for August 2026', group: 'Month-End Closing', priority: 'high', assignee: username || 'jin1', dueDate: todayStr(), status: 'inprogress', duration: 2 },
+      { id: uid(), title: 'Follow up customer IV-00000237', desc: 'Call customer about overdue invoice', group: 'Follow-Ups', priority: 'high', assignee: username || 'jin1', dueDate: todayStr(), status: 'pending', duration: 0.5 },
+      { id: uid(), title: 'Tax filing deadline', desc: 'Prepare and submit SST return', group: 'Month-End Closing', priority: 'medium', assignee: 'qa3', dueDate: new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10), status: 'pending', duration: 4 },
+      { id: uid(), title: 'Stock take schedule', desc: 'Coordinate warehouse stock count', group: 'General', priority: 'low', assignee: 'jin1', dueDate: new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 10), status: 'pending', duration: 3 },
+      { id: uid(), title: 'Audit preparation checklist', desc: 'Gather documents for external auditor', group: 'Month-End Closing', priority: 'medium', assignee: 'qa3', dueDate: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10), status: 'completed', duration: 5 },
+      { id: uid(), title: 'Supplier payment review', desc: 'Review and approve outstanding AP', group: 'General', priority: 'medium', assignee: 'jin1', dueDate: new Date(Date.now() - 86400000 * 1).toISOString().slice(0, 10), status: 'pending', duration: 1.5 },
+    ];
+  }
+
+  /* ── Filters ── */
+  function filteredTasks() {
+    var fg = $('#sel-group-filter').val();
+    var fa = $('#sel-assignee-filter').val();
+    var fs = $('#sel-status-filter').val();
+    return tasks.filter(function (t) {
+      if (!showCompleted && t.status === 'completed') return false;
+      if (fg !== 'all' && t.group !== fg) return false;
+      if (fa !== 'all' && t.assignee !== fa) return false;
+      var effStatus = isOverdue(t) ? 'overdue' : t.status;
+      if (fs !== 'all' && effStatus !== fs) return false;
+      return true;
+    });
+  }
+
+  /* ── Render KPIs ── */
+  function renderKpis() {
+    var total = tasks.length;
+    var pending = tasks.filter(function (t) { return t.status === 'pending'; }).length;
+    var overdue = tasks.filter(function (t) { return isOverdue(t); }).length;
+    var done = tasks.filter(function (t) { return t.status === 'completed'; }).length;
+    $('#kpi-total').text(total);
+    $('#kpi-pending').text(pending);
+    $('#kpi-overdue').text(overdue);
+    $('#kpi-done').text(done);
+  }
+
+  /* ── Render filters ── */
+  function renderFilters() {
+    var groupSet = {}; tasks.forEach(function (t) { groupSet[t.group] = true; });
+    var $g = $('#sel-group-filter').empty().append($('<option>').val('all').text('All Groups'));
+    Object.keys(groupSet).sort().forEach(function (g) { $g.append($('<option>').val(g).text(g)); });
+
+    var assigneeSet = {}; tasks.forEach(function (t) { if (t.assignee) assigneeSet[t.assignee] = true; });
+    var $a = $('#sel-assignee-filter').empty().append($('<option>').val('all').text('Everyone'));
+    Object.keys(assigneeSet).sort().forEach(function (a) { $a.append($('<option>').val(a).text(a)); });
+  }
+
+  /* ── Render groups chips ── */
+  function renderGroups() {
+    var $row = $('#groups-row').empty();
+    var groupCounts = {};
+    tasks.forEach(function (t) { groupCounts[t.group] = (groupCounts[t.group] || 0) + 1; });
+    var $all = $('<div class="group-chip active">').attr('data-group', 'all').text('All Tasks ').append($('<span class="count">').text('(' + tasks.length + ')'));
+    $row.append($all);
+    Object.keys(groupCounts).sort().forEach(function (g) {
+      $row.append($('<div class="group-chip">').attr('data-group', g).text(g + ' ').append($('<span class="count">').text('(' + groupCounts[g] + ')')));
+    });
+    $row.append($('<div class="group-chip" id="btn-manage-groups" style="background:#fff;border-style:dashed;">').html('&#9881; Manage Groups'));
+  }
+
+  /* ── Render List View ── */
+  function renderList() {
+    var list = filteredTasks();
+    var $tb = $('#task-tbody').empty();
+    $('#empty-state').hide();
+    if (!list.length) { $('#empty-state').show(); return; }
+    list.sort(function (a, b) {
+      var pri = { high: 0, medium: 1, low: 2 };
+      if (pri[a.priority] !== pri[b.priority]) return pri[a.priority] - pri[b.priority];
+      return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+    });
+    list.forEach(function (t) {
+      var overdue = isOverdue(t);
+      var rowClass = t.priority === 'high' ? 'row-high' : t.priority === 'medium' ? 'row-medium' : 'row-low';
+      if (t.status === 'completed') rowClass = 'row-completed';
+      var statusBadge = overdue ? '<span class="status-badge status-overdue">Overdue</span>' :
+        t.status === 'completed' ? '<span class="status-badge status-completed">Completed</span>' :
+        t.status === 'inprogress' ? '<span class="status-badge status-inprogress">In Progress</span>' :
+        '<span class="status-badge status-pending">Pending</span>';
+      var priBadge = '<span class="priority-badge priority-' + t.priority + '">' + t.priority.charAt(0).toUpperCase() + t.priority.slice(1) + '</span>';
+      var $tr = $('<tr>').addClass(rowClass);
+      $tr.append($('<td>').append($('<input type="checkbox" class="task-checkbox">').prop('checked', t.status === 'completed').on('change', function () {
+        t.status = this.checked ? 'completed' : 'pending';
+        renderAll();
+        addLog('Task ' + (this.checked ? 'completed' : 'reopened') + ': ' + t.title);
+      })));
+      $tr.append($('<td>').html('<strong>' + escapeHtml(t.title) + '</strong>' + (t.desc ? '<div style="font-size:0.74rem;color:#6b7280;">' + escapeHtml(t.desc) + '</div>' : '')));
+      $tr.append($('<td>').text(t.group));
+      $tr.append($('<td>').text(t.assignee || '-'));
+      $tr.append($('<td>').html(priBadge));
+      $tr.append($('<td>').text(fmtDate(t.dueDate)));
+      $tr.append($('<td>').html(statusBadge));
+      $tr.append($('<td>').append($('<div class="task-actions">')
+        .append($('<button class="task-action-btn">').text('Edit').on('click', function () { openTaskModal(t); }))
+        .append($('<button class="task-action-btn danger">').text('Delete').on('click', function () { deleteTask(t.id); }))));
+      $tb.append($tr);
+    });
+  }
+
+  /* ── Calendar View ── */
+  function renderCalendar() {
+    var year = calMonth.getFullYear();
+    var month = calMonth.getMonth();
+    $('#cal-title').text(new Date(year, month, 1).toLocaleDateString('en-MY', { month: 'long', year: 'numeric' }));
+    var firstDay = new Date(year, month, 1).getDay();
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var prevMonthDays = new Date(year, month, 0).getDate();
+    var $grid = $('#cal-grid').empty();
+    var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    dayNames.forEach(function (d) { $grid.append($('<div class="calendar-day-header">').text(d)); });
+    for (var i = 0; i < firstDay; i++) {
+      var d = prevMonthDays - firstDay + i + 1;
+      $grid.append($('<div class="calendar-day other-month">').append($('<div class="calendar-day-num">').text(d)));
+    }
+    for (var day = 1; day <= daysInMonth; day++) {
+      var dateStr = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+      var dayTasks = tasks.filter(function (t) { return t.dueDate === dateStr; });
+      var isToday = dateStr === todayStr();
+      var $day = $('<div class="calendar-day">').toggleClass('today', isToday);
+      $day.append($('<div class="calendar-day-num">').text(day));
+      dayTasks.forEach(function (t) {
+        $day.append($('<span class="calendar-task">').addClass(t.priority).toggleClass('done', t.status === 'completed').text(t.title).on('click', function () { openTaskModal(t); }));
+      });
+      $grid.append($day);
+    }
+    var totalCells = firstDay + daysInMonth;
+    var remaining = (7 - (totalCells % 7)) % 7;
+    for (var j = 1; j <= remaining; j++) {
+      $grid.append($('<div class="calendar-day other-month">').append($('<div class="calendar-day-num">').text(j)));
+    }
+  }
+
+  /* ── Report View ── */
+  function renderReport() {
+    function countBy(field) {
+      var counts = {};
+      tasks.forEach(function (t) { var k = t[field] || 'N/A'; counts[k] = (counts[k] || 0) + 1; });
+      return counts;
+    }
+    function renderStats($el, counts) {
+      $el.empty();
+      Object.keys(counts).sort().forEach(function (k) {
+        $el.append($('<div class="report-stat">').append($('<span class="label">').text(k)).append($('<span class="value">').text(counts[k])));
+      });
+    }
+    renderStats($('#report-priority'), countBy('priority'));
+    renderStats($('#report-assignee'), countBy('assignee'));
+    renderStats($('#report-group'), countBy('group'));
+    var statusCounts = {};
+    tasks.forEach(function (t) { var s = isOverdue(t) ? 'overdue' : t.status; statusCounts[s] = (statusCounts[s] || 0) + 1; });
+    renderStats($('#report-status'), statusCounts);
+  }
+
+  /* ── Render All ── */
+  function renderAll() {
+    renderKpis();
+    renderFilters();
+    renderGroups();
+    if (currentView === 'list') renderList();
+    else if (currentView === 'calendar') renderCalendar();
+    else if (currentView === 'report') renderReport();
+  }
+
+  /* ── Task Modal ── */
+  function openTaskModal(t) {
+    editingTaskId = t ? t.id : null;
+    $('#modal-title').text(t ? 'Edit Task' : 'New Task');
+    $('#inp-title').val(t ? t.title : '');
+    $('#inp-desc').val(t ? t.desc : '');
+    var $grp = $('#inp-group').empty();
+    groups.forEach(function (g) { $grp.append($('<option>').val(g.name).text(g.name)); });
+    // Add any task groups not in default list
+    var extraGroups = {};
+    tasks.forEach(function (tk) { if (tk.group && !groups.find(function (g) { return g.name === tk.group; })) extraGroups[tk.group] = true; });
+    Object.keys(extraGroups).forEach(function (g) { $grp.append($('<option>').val(g).text(g)); });
+    $('#inp-group').val(t ? t.group : 'General');
+    $('#inp-priority').val(t ? t.priority : 'medium');
+    $('#inp-assignee').val(t ? t.assignee : (username || ''));
+    $('#inp-due').val(t ? t.dueDate : todayStr());
+    $('#inp-status').val(t ? t.status : 'pending');
+    $('#inp-duration').val(t ? t.duration : 1);
+    $('#task-modal').addClass('show');
+  }
+
+  $('#btn-modal-cancel').on('click', function () { $('#task-modal').removeClass('show'); });
+  $('#btn-modal-save').on('click', function () {
+    var title = $('#inp-title').val().trim();
+    if (!title) { alert('Task title is required.'); return; }
+    var data = {
+      title: title, desc: $('#inp-desc').val().trim(), group: $('#inp-group').val(),
+      priority: $('#inp-priority').val(), assignee: $('#inp-assignee').val().trim(),
+      dueDate: $('#inp-due').val(), status: $('#inp-status').val(),
+      duration: parseFloat($('#inp-duration').val()) || 1,
+    };
+    if (editingTaskId) {
+      var idx = tasks.findIndex(function (t) { return t.id === editingTaskId; });
+      if (idx >= 0) Object.assign(tasks[idx], data);
+      addLog('Task updated: ' + title);
+    } else {
+      data.id = uid();
+      tasks.push(data);
+      addLog('Task created: ' + title);
+    }
+    $('#task-modal').removeClass('show');
+    renderAll();
+  });
+
+  function deleteTask(id) {
+    if (!confirm('Delete this task permanently?')) return;
+    tasks = tasks.filter(function (t) { return t.id !== id; });
+    addLog('Task deleted');
+    renderAll();
+  }
+
+  /* ── New Task ── */
+  $('#btn-new-task').on('click', function () { openTaskModal(null); });
+
+  /* ── View Tabs ── */
+  $('.view-tab').on('click', function () {
+    $('.view-tab').removeClass('active');
+    $(this).addClass('active');
+    currentView = $(this).data('view');
+    $('#view-list, #view-calendar, #view-report').hide();
+    if (currentView === 'list') $('#view-list').show();
+    else if (currentView === 'calendar') { $('#view-calendar').show(); renderCalendar(); }
+    else if (currentView === 'report') { $('#view-report').show(); renderReport(); }
+  });
+
+  /* ── Calendar nav ── */
+  $('#cal-prev').on('click', function () { calMonth.setMonth(calMonth.getMonth() - 1); renderCalendar(); });
+  $('#cal-next').on('click', function () { calMonth.setMonth(calMonth.getMonth() + 1); renderCalendar(); });
+  $('#cal-today').on('click', function () { calMonth = new Date(); renderCalendar(); });
+
+  /* ── Filter change ── */
+  $('#sel-group-filter, #sel-assignee-filter, #sel-status-filter').on('change', function () { renderList(); });
+  $('#btn-show-completed').on('click', function () {
+    showCompleted = !showCompleted;
+    $('#btn-show-completed').text(showCompleted ? 'Hide Completed' : 'Show Completed');
+    renderList();
+  });
+
+  /* ── Group chips ── */
+  $(document).on('click', '.group-chip', function () {
+    if ($(this).attr('id') === 'btn-manage-groups') { $('#group-modal').addClass('show'); renderGroupList(); return; }
+    $('.group-chip').removeClass('active');
+    $(this).addClass('active');
+    var g = $(this).data('group');
+    $('#sel-group-filter').val(g === 'all' ? 'all' : g);
+    renderList();
+  });
+
+  /* ── Group Management ── */
+  function renderGroupList() {
+    var $list = $('#group-list').empty();
+    groups.forEach(function (g) {
+      var count = tasks.filter(function (t) { return t.group === g.name; }).length;
+      $list.append($('<div class="report-stat">')
+        .append($('<span class="label">').text(g.name + ' (' + count + ' tasks)'))
+        .append($('<button class="task-action-btn danger">').text('Delete').on('click', function () {
+          if (count > 0) { alert('Cannot delete group with tasks. Reassign tasks first.'); return; }
+          groups = groups.filter(function (x) { return x.id !== g.id; });
+          renderGroupList();
+        })));
+    });
+  }
+  $('#btn-add-group').on('click', function () {
+    var name = $('#inp-new-group').val().trim();
+    if (!name) return;
+    if (groups.find(function (g) { return g.name === name; })) { alert('Group already exists.'); return; }
+    groups.push({ id: 'g' + Date.now(), name: name });
+    $('#inp-new-group').val('');
+    renderGroupList();
+    addLog('Group added: ' + name);
+  });
+  $('#btn-group-close').on('click', function () { $('#group-modal').removeClass('show'); renderAll(); });
+
+  /* ── Export CSV ── */
+  $('#btn-export').on('click', function () {
+    var csv = 'Title,Description,Group,Priority,Assignee,DueDate,Status,Duration\n';
+    tasks.forEach(function (t) {
+      csv += '"' + t.title + '","' + (t.desc || '') + '","' + t.group + '","' + t.priority + '","' + (t.assignee || '') + '","' + (t.dueDate || '') + '","' + t.status + '","' + t.duration + '"\n';
+    });
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'todo-list-' + todayStr() + '.csv';
+    a.click();
+    addLog('Exported ' + tasks.length + ' tasks to CSV');
+  });
+
+  /* ── Print ── */
+  $('#btn-print').on('click', function () { window.print(); });
+
+  /* ── Utility ── */
+  function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  /* ── Init ── */
+  seedDemoTasks();
+  renderAll();
+  addLog('Page loaded - listening for ALAYA_INIT');
+  addLog('To-Do List Plugin ready - ' + tasks.length + ' demo tasks seeded');
+</script>
+
+</body>
+</html>
