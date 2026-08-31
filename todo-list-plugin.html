@@ -572,6 +572,10 @@
           var meta = {};
           try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           var st = (meta.status || 'pending').toLowerCase();
+          // Normalise seed values: "done" -> "completed", "overdue" -> "pending"
+          // (overdue is a COMPUTED property via isOverdue(), not a stored status).
+          if (st === 'done') st = 'completed';
+          if (st === 'overdue') st = 'pending';
           return {
             id: r.ZZC_Code || uid(),
             code: r.ZZC_Code || '',
