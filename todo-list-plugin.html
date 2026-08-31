@@ -598,11 +598,14 @@
     }
   });
 
-  // Expose save entry points so host eval bridge or toolbar hook can call them directly
-  window.pluginSave = function () { return saveTasksToDb(); };
-  window.AlayaSave = window.pluginSave;
-  window.onSave = window.pluginSave;
-  window.saveTasksToDb = function () { return saveTasksToDb(); };
+// Expose save entry points so host eval bridge or toolbar hook can call them directly.
+// NOTE: the real implementation lives in doSaveTasksToDb(); these are plain aliases
+// (no self-referencing wrapper — that caused infinite recursion / stack overflow).
+window.doSaveTasksToDb = doSaveTasksToDb;
+window.pluginSave = doSaveTasksToDb;
+window.AlayaSave = doSaveTasksToDb;
+window.onSave = doSaveTasksToDb;
+window.saveTasksToDb = doSaveTasksToDb;
 
   function requestToken() {
     addLog('POST ' + apiUrl + 'token');
@@ -722,8 +725,8 @@
     $b.attr('class', 'badge ' + (cls || '')).css('display', 'inline-block').text(text);
   }
 
-  function saveTasksToDb() {
-    window.__trace && window.__trace.push('saveTasksToDb called, dirty=' + hasUnsavedChanges + ' host=' + hostOrigin);
+  function doSaveTasksToDb() {
+    window.__trace && window.__trace.push('doSaveTasksToDb called, dirty=' + hasUnsavedChanges + ' host=' + hostOrigin);
     if (isSaving) { addLog('Save already in progress — please wait'); return Promise.resolve(false); }
     if (!hostOrigin) { addLog('Save skipped — no host origin yet (ALAYA_INIT pending)'); showToast('Save failed — not connected to host', true); return Promise.resolve(false); }
     // If nothing to save, still give feedback
@@ -883,7 +886,7 @@
       if (t === 'ALAYA_SAVE_SUCCESS' || t === 'ALAYA_SAVE_FAILED' || t === 'ALAYA_SAVE_COMPLETED') { return; }
       window.__trace && window.__trace.push('SAVE-HANDLED ' + t + ' dirty=' + hasUnsavedChanges + ' host=' + hostOrigin);
       addLog('Received <- ' + (t || 'unknown') + ' ' + JSON.stringify(msg).slice(0, 250));
-      saveTasksToDb();
+      doSaveTasksToDb();
       return;
     }
     // Debug: log unknown host messages for one-time discovery
@@ -895,7 +898,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       addLog('Ctrl+S → save');
-      saveTasksToDb();
+      doSaveTasksToDb();
     }
   });
 
