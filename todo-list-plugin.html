@@ -542,8 +542,11 @@
         var rows = [];
         for (var i = 0; i < obj.length; i++) {
           if (obj[i] === null || typeof obj[i] !== 'object') continue;
-          if (obj[i].RowCount !== undefined) continue;          // skip RowCount summary element
+          // Every Obj element is a data row (rowNum >= 1). RowCount is embedded
+          // metadata on each row (only the first row carries the real total; the
+          // rest carry 0) - it is NOT a separate summary element.
           if (obj[i].rowNum !== undefined && obj[i].rowNum > 0) rows.push(obj[i]);
+          else if (obj[i].ZZC_Code) rows.push(obj[i]);
         }
         if (!rows.length) { addLog('No data rows in DB table ' + TODO_TABLE_CODE + ' - keeping local demo tasks'); renderAll(); return; }
         tasks = rows.map(function (r) {
