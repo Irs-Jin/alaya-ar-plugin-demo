@@ -1300,16 +1300,18 @@ window.saveTasksToDb = doSaveTasksToDb;
      Format matches seed_jm6data.js: DELETE + one INSERT per task, with the
      whole task serialised as JSON in ZZC_Description and a stable T### code
      in ZZC_Code. Single quotes inside JSON values are doubled for SQL safety.
-     Audit columns are stamped here too: ZZC_DateCreated/ZZC_CreatedBy come
-     from the task's stored createdAt/createdBy (preserved across saves), and
-     ZZC_DateModified/ZZC_ModifiedBy are set to the current save time/user. */
+     Audit columns: ZZC_DateCreated/ZZC_DateModified are datetime and are set
+     to the task's stored createdAt (preserved) / current save time. The
+     ZZC_CreatedBy/ZZC_ModifiedBy columns are of INT type in AutoCount and
+     reference internal security user IDs, NOT the login name, so we cannot
+     write the username string into them (would cause a conversion error);
+     we leave them to AutoCount's own write path. */
   function fmtAuditDate(d) {
     function p(n) { return (n < 10 ? '0' : '') + n; }
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
   function buildExportSql() {
     var now = fmtAuditDate(new Date());
-    var by = username || 'system';
     var lines = ['DELETE FROM ZZT_' + TODO_TABLE_CODE + ';'];
     tasks.forEach(function (t, i) {
       var code = 'T' + String(i + 1).padStart(3, '0');
@@ -1327,12 +1329,10 @@ window.saveTasksToDb = doSaveTasksToDb;
       var json = JSON.stringify(payload);
       var sqlSafe = json.replace(/'/g, "''");
       var codeSafe = code.replace(/'/g, "''");
-      var createdBySafe = String(t.createdBy || by).replace(/'/g, "''");
-      var modifiedBySafe = by.replace(/'/g, "''");
       var dateCreated = (t.createdAt || now);
       lines.push("INSERT INTO ZZT_" + TODO_TABLE_CODE
-        + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_CreatedBy, ZZC_DateModified, ZZC_ModifiedBy)"
-        + " VALUES ('" + codeSafe + "', '" + sqlSafe + "', '" + dateCreated + "', '" + createdBySafe + "', '" + now + "', '" + modifiedBySafe + "');");
+        + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified)"
+        + " VALUES ('" + codeSafe + "', '" + sqlSafe + "', '" + dateCreated + "', '" + now + "');");
     });
     return lines.join('\n');
   }
