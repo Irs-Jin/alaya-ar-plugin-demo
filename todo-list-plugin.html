@@ -34,6 +34,7 @@
     .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; }
     .badge-waiting { background:#fef3c7; color:#92400e; }
     .badge-received { background:#dcfce7; color:#166534; }
+    .badge-fail { background:#fee2e2; color:#991b1b; }
     .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#6b7280; }
     .hero-card { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
     .hero-title-row { display:flex; align-items:center; gap:12px; }
@@ -221,7 +222,7 @@
         <div class="sub" style="margin-bottom:0;">Create, assign and track business tasks & follow-ups directly inside AutoCount.</div>
       </div>
     </div>
-    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span></div>
+    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span> <span id="save-status" class="badge" style="display:none;"></span></div>
   </div>
 </div>
 
@@ -248,7 +249,8 @@
     <b>To-Do List Plugin.</b> On load, this plugin reads tasks directly from the AutoCount database via the
     <code>ZZTGetDataTable</code> API against the Master Data table <code>ZZT_jm6data</code> (seeded through Module Query
     on <code>jinmenu6</code>). Tasks are packed as JSON in <code>ZZC_Description</code> with the task code in
-    <code>ZZC_Code</code>. Use <code>Reload Tasks</code> to re-fetch from the database.
+    <code>ZZC_Code</code>. Creating, editing or deleting a task <b>auto-persists to the database</b> via the SIT host
+    eval bridge (<code>WebForm_DoCallback</code>) — no manual export required. Use <code>Reload Tasks</code> to re-fetch.
   </div>
 
   <!-- KPI Row -->
@@ -495,8 +497,10 @@
 <script>
   var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
   var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
+  var hostOrigin = '';
   var TODO_TABLE_CODE = 'jm6data';
   var USER_TABLE_CODE = 'jm6usr';
+  var pendingDcbCallbacks = {};
 
   var tasks = [];
   var users = [];
@@ -527,6 +531,7 @@
     var msg = e.originalEvent.data;
     if (!msg || msg.type !== 'ALAYA_INIT') return;
     addLog('Received <- ALAYA_INIT');
+    hostOrigin = e.originalEvent.origin || '';
     var payload = msg.data !== undefined ? msg.data : msg;
     $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
     if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
@@ -555,6 +560,106 @@
         try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch (e) { msg = r.responseText || 'Unknown'; }
         addLog('Token failed: ' + msg);
       }
+    });
+  }
+
+  /* ── Auto-persist to DB via host eval bridge → WebForm_DoCallback ──
+     The SIT host exposes a postMessage eval bridge (verified):
+       window.top.postMessage({ target:<hostOrigin>, eval:'<js>' }, '*')
+     The host eval()'s the script in the TOP window, where it has access to the
+     Module Editor frame (m_UserDefinedFieldModuleEditor.aspx). That frame owns a
+     `memoQuery` controller + `WebForm_DoCallback`. The Execute flow is pure JS
+     (no trusted click, no popup): build arg 'RunQuery|'+JSON({Rowcount,Timeout,
+     Query,UpdatableTable}) and call WebForm_DoCallback(<cbTarget>, arg, endCb,
+     null, errCb, false). The endCb broadcasts the JSON result back to every
+     child frame (including this cross-origin plugin iframe). Result shape:
+       {success:true, results:[{success,recordsAffected,rows,...}]}
+     This is the ONLY viable write path — no REST write API exists in SIT. */
+  var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
+
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.source !== 'alaya-dcb-result' || !msg.requestId) return;
+    var cb = pendingDcbCallbacks[msg.requestId];
+    if (!cb) return;
+    delete pendingDcbCallbacks[msg.requestId];
+    clearTimeout(cb.timer);
+    cb.resolve(msg);
+  });
+
+  function executeSqlViaHost(sql) {
+    return new Promise(function (resolve, reject) {
+      if (!hostOrigin) { reject(new Error('Host origin unknown — ALAYA_INIT not received yet')); return; }
+      var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      var timer = setTimeout(function () {
+        delete pendingDcbCallbacks[requestId];
+        reject(new Error('Database callback timed out after 30s'));
+      }, 30000);
+      pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+      /* The eval'd script runs in the host top window's message-handler scope,
+         where `result` (= event.data) is in scope, so it can read result.sql and
+         result.requestId directly — no fragile string-escaping of the SQL. */
+      var evalScript =
+        '(function(){' +
+        'try{' +
+          'var sql=result.sql, reqId=result.requestId;' +
+          'function findMemoFrame(win){' +
+            'try{ if(typeof win.memoQuery==="object" && typeof win.WebForm_DoCallback==="function") return win; }catch(e){}' +
+            'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){}' +
+            'return null;' +
+          '}' +
+          'var mf=findMemoFrame(window);' +
+          'function bcast(m){ try{ for(var i=0;i<window.frames.length;i++){ try{ window.frames[i].postMessage(m,"*"); }catch(e){} } }catch(e){} try{ window.postMessage(m,"*"); }catch(e){} }' +
+          'if(!mf){ bcast({source:"alaya-dcb-result",requestId:reqId,error:"No frame with memoQuery+WebForm_DoCallback found"}); return; }' +
+          'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+          'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+          'var arg="RunQuery|"+JSON.stringify(hdr);' +
+          'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+          'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+          'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+        '}catch(e){ bcast({source:"alaya-dcb-result",requestId:result.requestId,error:e.message}); }' +
+        '})();';
+      window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
+      addLog('POST eval-bridge RunQuery (sql ' + sql.length + ' chars, id ' + requestId + ')');
+    });
+  }
+
+  function setSaveStatus(text, cls) {
+    var $b = $('#save-status');
+    if (!$b.length) return;
+    $b.attr('class', 'badge ' + (cls || '')).css('display', 'inline-block').text(text);
+  }
+
+  function saveTasksToDb() {
+    if (!hostOrigin) { addLog('Auto-save skipped — no host origin yet (ALAYA_INIT pending)'); return; }
+    var sql = buildExportSql();
+    setSaveStatus('Saving…', 'badge-waiting');
+    addLog('Auto-saving ' + tasks.length + ' tasks to DB via host eval bridge…');
+    executeSqlViaHost(sql).then(function (msg) {
+      if (msg.error) {
+        setSaveStatus('Save failed', 'badge-fail');
+        addLog('DB save ERROR: ' + msg.error);
+        return;
+      }
+      var parsed = null;
+      try { parsed = JSON.parse(msg.result); } catch (e) { parsed = null; }
+      var ok = parsed && parsed.success;
+      if (ok && parsed.results) {
+        for (var i = 0; i < parsed.results.length; i++) { if (parsed.results[i].success === false) { ok = false; break; } }
+      }
+      if (ok) {
+        var affected = 0;
+        if (parsed.results) parsed.results.forEach(function (r) { affected += (r.recordsAffected > 0 ? r.recordsAffected : 0); });
+        setSaveStatus('Saved to DB', 'badge-received');
+        addLog('DB save OK — ' + tasks.length + ' tasks persisted (' + affected + ' rows affected). Reloading from DB…');
+        loadTasksFromDb();
+      } else {
+        setSaveStatus('Save failed', 'badge-fail');
+        addLog('DB save FAILED — server reported success=false. Result: ' + (msg.result || '').slice(0, 300));
+      }
+    }).catch(function (err) {
+      setSaveStatus('Save failed', 'badge-fail');
+      addLog('DB save ERROR: ' + (err && err.message ? err.message : err));
     });
   }
 
@@ -902,6 +1007,7 @@
     }
     $('#task-modal').removeClass('show');
     renderAll();
+    saveTasksToDb();
   });
 
   function deleteTask(id) {
@@ -909,6 +1015,7 @@
     tasks = tasks.filter(function (t) { return t.id !== id; });
     addLog('Task deleted');
     renderAll();
+    saveTasksToDb();
   }
 
   /* ── New Task ── */
