@@ -239,6 +239,7 @@
       <button class="btn-primary" id="btn-new-task">+ New Task</button>
       <button class="btn-secondary" id="btn-load" disabled>Load Tasks</button>
       <button class="btn-secondary" id="btn-manage-users">&#128100; Manage Users</button>
+      <button class="btn-secondary" id="btn-export-sql">&#128190; Export SQL</button>
       <button class="btn-secondary" id="btn-report">&#128202; Report</button>
     </div>
   </div>
@@ -463,6 +464,24 @@
     <div id="user-list" style="max-height:300px; overflow-y:auto;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="btn-user-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export SQL Modal -->
+<div class="modal-overlay" id="export-sql-modal">
+  <div class="modal" style="max-width:760px;">
+    <h2>Export SQL (Module Query Execute)</h2>
+    <div class="sub" style="margin-bottom:12px;">
+      Copy this SQL into <code>jinmenu6</code> &gt; <strong>Edit Query</strong> &gt; <strong>Execute</strong>
+      to persist the current <span id="export-sql-count">0</span> tasks back to <code>ZZT_<span id="export-sql-table">jm6data</span></code>.
+      Reload on any computer afterwards and the saved tasks will appear.
+      <div style="margin-top:6px;color:#dc2626;font-size:0.78rem;">⚠ This will DELETE all existing rows in the table and re-insert the current set.</div>
+    </div>
+    <textarea id="export-sql-textarea" readonly style="width:100%; min-height:280px; font-family:'Courier New',monospace; font-size:0.78rem; border:1px solid #d1d5db; border-radius:8px; padding:10px; background:#f9fafb; color:#111827; resize:vertical;" wrap="off"></textarea>
+    <div class="modal-actions">
+      <button class="btn-primary" id="btn-export-sql-copy">Copy to Clipboard</button>
+      <button class="btn-secondary" id="btn-export-sql-close">Close</button>
     </div>
   </div>
 </div>
@@ -984,6 +1003,62 @@
 
   $('#inp-user-search').on('input', function () { renderUserList($(this).val()); });
   $('#btn-user-close').on('click', function () { $('#user-modal').removeClass('show'); });
+
+  /* ── Export SQL (Module Query Execute) ──
+     No REST write API exists in SIT; only ZZTGetDataTable is callable from
+     a cross-origin plugin iframe. To persist tasks to ZZT_<TODO_TABLE_CODE>,
+     the user copies this SQL into jinmenu6's Query Editor and clicks Execute.
+     Format matches seed_jm6data.js: DELETE + one INSERT per task, with the
+     whole task serialised as JSON in ZZC_Description and a stable T### code
+     in ZZC_Code. Single quotes inside JSON values are doubled for SQL safety. */
+  function buildExportSql() {
+    var lines = ['DELETE FROM ZZT_' + TODO_TABLE_CODE + ';'];
+    tasks.forEach(function (t, i) {
+      var code = 'T' + String(i + 1).padStart(3, '0');
+      var payload = {
+        title: t.title || '',
+        desc: t.desc || '',
+        group: t.group || 'General',
+        priority: (t.priority || 'medium').toLowerCase(),
+        status: t.status || 'pending',
+        assignee: t.assignee || '',
+        dueDate: t.dueDate || '',
+        duration: typeof t.duration === 'number' ? t.duration : parseFloat(t.duration) || 1
+      };
+      var json = JSON.stringify(payload);
+      var sqlSafe = json.replace(/'/g, "''");
+      lines.push("INSERT INTO ZZT_" + TODO_TABLE_CODE + " (ZZC_Code, ZZC_Description) VALUES ('" + code + "', '" + sqlSafe + "');");
+    });
+    return lines.join('\n');
+  }
+
+  $('#btn-export-sql').on('click', function () {
+    var sql = buildExportSql();
+    $('#export-sql-count').text(tasks.length);
+    $('#export-sql-table').text(TODO_TABLE_CODE);
+    $('#export-sql-textarea').val(sql);
+    $('#export-sql-modal').addClass('show');
+    addLog('Exported ' + tasks.length + ' tasks as SQL (' + sql.length + ' chars)');
+  });
+
+  $('#btn-export-sql-copy').on('click', async function () {
+    var txt = $('#export-sql-textarea').val();
+    try {
+      await navigator.clipboard.writeText(txt);
+      addLog('SQL copied to clipboard (' + txt.length + ' chars)');
+      var $btn = $(this);
+      var prev = $btn.text();
+      $btn.text('Copied!').prop('disabled', true);
+      setTimeout(function () { $btn.text(prev).prop('disabled', false); }, 1500);
+    } catch (e) {
+      // Fallback: select the textarea so the user can Ctrl+C manually.
+      var ta = document.getElementById('export-sql-textarea');
+      ta.focus(); ta.select();
+      addLog('Clipboard API failed (' + e.message + ') — textarea selected, press Ctrl+C');
+    }
+  });
+
+  $('#btn-export-sql-close').on('click', function () { $('#export-sql-modal').removeClass('show'); });
 
   /* ── Export CSV ── */
   $('#btn-export').on('click', function () {
