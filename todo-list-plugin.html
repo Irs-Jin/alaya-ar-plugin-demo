@@ -541,6 +541,24 @@
     postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
     if (apiUrl && nonce && clientId && username) requestToken();
     if (username) $('#inp-assignee').val(username);
+    /* Pre-load a hidden iframe with m_UserDefinedFieldModuleEditor.aspx in the
+       host window. This page has memoQuery + WebForm_DoCallback, which we need
+       for auto-saving tasks to the DB. In Test Load context, memoQuery already
+       exists in an existing frame; in menu context, this hidden iframe provides
+       it. Pre-loading means the first save is instant. */
+    if (hostOrigin) {
+      window.top.postMessage({ target: hostOrigin, eval:
+        '(function(){' +
+        'if(document.getElementById("hidden-memo-frame"))return;' +
+        'var f=document.createElement("iframe");' +
+        'f.id="hidden-memo-frame";' +
+        'f.style.display="none";' +
+        'f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+        'document.body.appendChild(f);' +
+        '})();'
+      }, '*');
+      addLog('Pre-loading hidden memoQuery iframe in host window');
+    }
   });
 
   function requestToken() {
@@ -598,7 +616,11 @@
       pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
       /* The eval'd script runs in the host top window's message-handler scope,
          where `result` (= event.data) is in scope, so it can read result.sql and
-         result.requestId directly — no fragile string-escaping of the SQL. */
+         result.requestId directly — no fragile string-escaping of the SQL.
+         Strategy: 1) search existing frames for memoQuery (Test Load context);
+         2) if not found, use/create a hidden iframe loading
+         m_UserDefinedFieldModuleEditor.aspx (menu context) which also has
+         memoQuery + WebForm_DoCallback. This makes auto-save work EVERYWHERE. */
       var evalScript =
         '(function(){' +
         'try{' +
@@ -608,7 +630,6 @@
             'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){}' +
             'return null;' +
           '}' +
-          'var mf=findMemoFrame(window);' +
           'function bcast(m){' +
             'function postAll(win){' +
               'try{ win.postMessage(m,"*"); }catch(e){}' +
@@ -616,13 +637,35 @@
             '}' +
             'postAll(window);' +
           '}' +
-          'if(!mf){ bcast({source:"alaya-dcb-result",requestId:reqId,error:"No frame with memoQuery+WebForm_DoCallback found"}); return; }' +
-          'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
-          'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
-          'var arg="RunQuery|"+JSON.stringify(hdr);' +
-          'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
-          'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
-          'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+          'function runOnMemo(mf){' +
+            'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+            'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+            'var arg="RunQuery|"+JSON.stringify(hdr);' +
+            'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+            'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+            'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+          '}' +
+          'var mf=findMemoFrame(window);' +
+          'if(mf){ runOnMemo(mf); return; }' +
+          'var hidden=document.getElementById("hidden-memo-frame");' +
+          'if(hidden && hidden.contentWindow){' +
+            'try{ if(typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+          '}' +
+          'if(!hidden){' +
+            'hidden=document.createElement("iframe");' +
+            'hidden.id="hidden-memo-frame";' +
+            'hidden.style.display="none";' +
+            'hidden.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+            'document.body.appendChild(hidden);' +
+          '}' +
+          'var attempts=0;' +
+          'function poll(){' +
+            'attempts++;' +
+            'try{ if(hidden.contentWindow && typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+            'if(attempts<40){ setTimeout(poll,500); }' +
+            'else { bcast({source:"alaya-dcb-result",requestId:reqId,error:"memoQuery not available after 20s (hidden iframe load failed)"}); }' +
+          '}' +
+          'poll();' +
         '}catch(e){ bcast({source:"alaya-dcb-result",requestId:result.requestId,error:e.message}); }' +
         '})();';
       window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
