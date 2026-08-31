@@ -784,8 +784,9 @@
   }
 
   // Hook the host system toolbar Save button so its click actually saves plugin data.
-  // The plugin is an external URL iframe; the host toolbar lives in the top window.
-  // We use the eval bridge to attach a click listener that notifies this iframe.
+  // Frame hierarchy: Default.aspx (top) → iframe → u_UdfDisplayList.aspx (parent) → iframe → plugin
+  // The toolbar Save button lives in the INTERMEDIATE frame, not the top page.
+  // We use the eval bridge to recursively search nested frames for the Save button.
   function hookHostToolbarSave() {
     if (!hostOrigin) return;
     var evalScript =
@@ -793,59 +794,65 @@
       'try{' +
         'if(window.__todoSaveHookInstalled) return;' +
         'window.__todoSaveHookInstalled = true;' +
-        'function findPluginFrame(){' +
-          'var iframes=document.querySelectorAll("iframe");' +
+
+        // Recursive: find plugin iframe across nested frames
+        'function findPluginFrameInDoc(doc, depth){' +
+          'if(!doc || depth>3) return null;' +
+          'var iframes=doc.querySelectorAll("iframe");' +
           'for(var i=0;i<iframes.length;i++){' +
             'var s=iframes[i].src||"";' +
             'if(s.indexOf("todo-list-plugin.html")>=0) return iframes[i];' +
+            'try{ var c=findPluginFrameInDoc(iframes[i].contentDocument, depth+1); if(c) return c; }catch(e){}' +
           '}' +
           'return null;' +
         '}' +
-        'function findSaveBtn(){' +
-          // Toolbar Save button variants observed: <a>, <button>, <li>, <div> with text Save
-          'var els=document.querySelectorAll("a,button,li,span,div");' +
+
+        // Recursive: find Save button across nested frames
+        'function findSaveBtnInDoc(doc, depth){' +
+          'if(!doc || depth>3) return null;' +
+          // Try known DevExpress ID first (most reliable)
+          'var byId=doc.getElementById("ctl00_mToolBars_DXI1_");' +
+          'if(byId) return byId;' +
+          // Search by text
+          'var els=doc.querySelectorAll("a,button,li,span,div");' +
           'for(var i=0;i<els.length;i++){' +
             'var t=(els[i].innerText||els[i].textContent||"").trim();' +
             'if(t==="Save"){' +
-              // Heuristic: in toolbar area (top 150px or near top bar)
               'var r=els[i].getBoundingClientRect();' +
-              'if(r.top<160 || els[i].closest("#toolbar, .toolbar, .system-toolbar, .alaya-toolbar, header, [class*=toolbar]")) return els[i];' +
+              'if(r.width>0) return els[i];' +
             '}' +
           '}' +
-          // fallback: any element with title Save near toolbar
-          'var byTitle=document.querySelector("[title=Save]");' +
-          'if(byTitle) return byTitle;' +
+          // Search child iframes recursively
+          'var iframes=doc.querySelectorAll("iframe");' +
+          'for(var i=0;i<iframes.length;i++){' +
+            'try{ var c=findSaveBtnInDoc(iframes[i].contentDocument, depth+1); if(c) return c; }catch(e){}' +
+          '}' +
           'return null;' +
         '}' +
+
         'function notifyPlugin(){' +
-          'var pf=findPluginFrame();' +
+          'var pf=findPluginFrameInDoc(document,0);' +
           'if(pf && pf.contentWindow){' +
             'try{ pf.contentWindow.postMessage({type:"ALAYA_SAVE", source:"host-toolbar", triggeredBy:"system-toolbar"}, "*"); }catch(e){}' +
             'try{ pf.contentWindow.postMessage({type:"SAVE", source:"host-toolbar"}, "*"); }catch(e){}' +
-            // also try direct function call if same-origin fallback (usually cross-origin so postMessage is needed)
-            'try{ if(typeof pf.contentWindow.saveTasksToDb==="function") pf.contentWindow.saveTasksToDb(); }catch(e){}' +
           '}' +
-          // broadcast to all frames as fallback (host postMessage will be caught by plugin)
-          'try{ window.postMessage({type:"ALAYA_SAVE", source:"host-toolbar"}, "*"); }catch(e){}' +
         '}' +
+
         'function attach(){' +
-          'var btn=findSaveBtn();' +
+          'var btn=findSaveBtnInDoc(document,0);' +
           'if(btn && !btn.__todoHooked){' +
             'btn.__todoHooked=true;' +
             'btn.addEventListener("click", function(e){' +
-              // Delay slightly so plugin change badge is already set; then trigger notify
               'setTimeout(notifyPlugin, 80);' +
             '}, true);' +
-            '/* also observe for SPA re-render */' +
           '}' +
           'return !!btn;' +
         '}' +
+
         'if(!attach()){' +
-          // Poll for 20s while toolbar renders asynchronously
           'var attempts=0;' +
           'var iv=setInterval(function(){ attempts++; if(attach() || attempts>40) clearInterval(iv); }, 500);' +
         '}' +
-        // MutationObserver for SPA navigation re-creating toolbar
         'try{' +
           'var mo=new MutationObserver(function(){ attach(); });' +
           'mo.observe(document.body, {childList:true, subtree:true});' +
