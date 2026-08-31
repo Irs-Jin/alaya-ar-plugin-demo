@@ -664,7 +664,14 @@
     if (!users.length && username) {
       $sel.append($('<option>').val(username).text(username));
     }
-    if (prev) $sel.val(prev);
+    // Restore prev if it's a valid option, otherwise default to "" (-- Select --).
+    // jQuery .val() returns null when selectedIndex === -1, causing .trim() to
+    // throw downstream. Always ensure an option is selected.
+    if (prev && $sel.find('option[value="' + prev + '"]').length) {
+      $sel.val(prev);
+    } else {
+      $sel.prop('selectedIndex', 0);
+    }
   }
 
   /* ── Seed demo tasks ── */
@@ -860,8 +867,8 @@
     var title = $('#inp-title').val().trim();
     if (!title) { alert('Task title is required.'); return; }
     var data = {
-      title: title, desc: $('#inp-desc').val().trim(), group: $('#inp-group').val(),
-      priority: $('#inp-priority').val(), assignee: $('#inp-assignee').val().trim(),
+      title: title, desc: ($('#inp-desc').val() || '').trim(), group: $('#inp-group').val(),
+      priority: $('#inp-priority').val(), assignee: ($('#inp-assignee').val() || '').trim(),
       dueDate: $('#inp-due').val(), status: $('#inp-status').val(),
       duration: parseFloat($('#inp-duration').val()) || 1,
     };
