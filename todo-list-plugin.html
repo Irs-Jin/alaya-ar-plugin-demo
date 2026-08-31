@@ -243,9 +243,10 @@
   </div>
 
   <div class="real-banner" style="margin-top:10px;">
-    <b>To-Do List Plugin.</b> Tasks are stored locally in your browser by default. Click <code>Load Tasks</code> to
-    connect to the <code>ToDoList</code> custom UDF module (if set up via Module Editor) to read/write tasks to the
-    AutoCount database. Task groups, priorities, assignments, due dates, and completion status are all managed here.
+    <b>To-Do List Plugin.</b> On load, this plugin reads tasks directly from the AutoCount database via the
+    <code>ZZTGetDataTable</code> API against the Master Data table <code>ZZT_jm6data</code> (seeded through Module Query
+    on <code>jinmenu6</code>). Tasks are packed as JSON in <code>ZZC_Description</code> with the task code in
+    <code>ZZC_Code</code>. Use <code>Reload Tasks</code> to re-fetch from the database.
   </div>
 
   <!-- KPI Row -->
@@ -459,7 +460,7 @@
 <script>
   var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
   var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
-  var TODO_TABLE_CODE = 'ToDoList';
+  var TODO_TABLE_CODE = 'jm6data';
 
   var tasks = [];
   var groups = [{ id: 'g1', name: 'General' }, { id: 'g2', name: 'Month-End Closing' }, { id: 'g3', name: 'Follow-Ups' }];
@@ -509,6 +510,7 @@
         authToken = r.token_type + ' ' + r.access_token;
         addLog('Token obtained');
         $('#btn-load').prop('disabled', false);
+        loadTasksFromDb();
       },
       error: function (r) {
         var msg = '';
@@ -518,46 +520,61 @@
     });
   }
 
-  /* ── Load Tasks from UDF (optional) ── */
-  $('#btn-load').on('click', function () {
-    if (!apiUrl || !authToken) { alert('Get a token first.'); return; }
+  /* ── Load Tasks from DB (ZZTGetDataTable) ──
+     API: POST {apiUrl}api/Udf/ZZTGetDataTable  body: { tableName: '<code>' }
+     Response: { Result:true, Message:null, Obj:[ {RowCount:N}, {rowNum:1, ZZC_Code, ZZC_Description, ...}, ... ] }
+     First Obj element holds RowCount; subsequent elements are data rows.
+     Task metadata is JSON-packed in ZZC_Description; task code in ZZC_Code. */
+  function loadTasksFromDb() {
+    if (!apiUrl || !authToken) { addLog('No token yet - cannot load from DB'); return; }
     var endpoint = apiUrl + 'api/Udf/ZZTGetDataTable';
-    var payload = {
-      tableName: TODO_TABLE_CODE,
-      columnNames: ['ZZC_Title', 'ZZC_Description', 'ZZC_Group', 'ZZC_Priority', 'ZZC_Assignee', 'ZZC_DueDate', 'ZZC_Status', 'ZZC_Duration'],
-      pageIndex: 1, pageSize: 1000,
-    };
-    addLog('POST ' + endpoint);
+    addLog('POST ' + endpoint + ' { tableName: "' + TODO_TABLE_CODE + '" }');
     $('#btn-load').prop('disabled', true).text('Loading...');
     $.ajax({
       url: endpoint, type: 'POST', cache: false, contentType: 'application/json; charset=UTF-8',
-      headers: { 'Authorization': authToken }, data: JSON.stringify(payload),
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ tableName: TODO_TABLE_CODE }),
       success: function (response) {
-        if (response && response.Result === false) {
-          addLog('API Error: ' + response.Message + ' - using local tasks');
+        if (!response || response.Result === false) {
+          addLog('API Error: ' + (response && response.Message) + ' - keeping local demo tasks');
           renderAll(); return;
         }
+        var obj = response.Obj || [];
         var rows = [];
-        try { var obj = response.Obj || response.obj || response; rows = Array.isArray(obj) ? obj : (obj.data || obj.Data || []); } catch (e) {}
-        if (!rows.length) { addLog('No rows from API - using local tasks'); renderAll(); return; }
+        for (var i = 0; i < obj.length; i++) {
+          if (obj[i] === null || typeof obj[i] !== 'object') continue;
+          if (obj[i].RowCount !== undefined) continue;          // skip RowCount summary element
+          if (obj[i].rowNum !== undefined && obj[i].rowNum > 0) rows.push(obj[i]);
+        }
+        if (!rows.length) { addLog('No data rows in DB table ' + TODO_TABLE_CODE + ' - keeping local demo tasks'); renderAll(); return; }
         tasks = rows.map(function (r) {
+          var meta = {};
+          try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
+          var st = (meta.status || 'pending').toLowerCase();
           return {
-            id: uid(), title: r.ZZC_Title || '', desc: r.ZZC_Description || '',
-            group: r.ZZC_Group || 'General', priority: r.ZZC_Priority || 'medium',
-            assignee: r.ZZC_Assignee || '', dueDate: r.ZZC_DueDate || '',
-            status: r.ZZC_Status || 'pending', duration: parseFloat(r.ZZC_Duration || 1),
+            id: r.ZZC_Code || uid(),
+            code: r.ZZC_Code || '',
+            title: meta.title || r.ZZC_Code || 'Untitled',
+            desc: meta.desc || '',
+            group: meta.group || 'General',
+            priority: (meta.priority || 'medium').toLowerCase(),
+            assignee: meta.assignee || '',
+            dueDate: meta.dueDate || '',
+            status: st,
+            duration: parseFloat(meta.duration || 1),
           };
         });
-        addLog('Loaded ' + tasks.length + ' tasks from ' + TODO_TABLE_CODE);
+        addLog('Loaded ' + tasks.length + ' tasks from DB table ' + TODO_TABLE_CODE);
         renderAll();
       },
       error: function (xhr) {
-        addLog('Load failed (' + xhr.status + ') - using local tasks');
+        addLog('DB load failed (' + xhr.status + ') - keeping local demo tasks');
         renderAll();
       },
-      complete: function () { $('#btn-load').prop('disabled', false).text('Load Tasks'); }
+      complete: function () { $('#btn-load').prop('disabled', false).text('Reload Tasks'); }
     });
-  });
+  }
+
+  $('#btn-load').on('click', function () { loadTasksFromDb(); });
 
   /* ── Seed demo tasks ── */
   function seedDemoTasks() {
