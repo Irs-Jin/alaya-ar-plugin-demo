@@ -185,6 +185,16 @@
     .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
 
     /* ── Log ── */
+    /* ── Toast (Save successful) ── */
+    .toast {
+      position:fixed; top:16px; left:50%; transform:translateX(-50%);
+      background:#16a34a; color:#fff; font-weight:700; padding:10px 22px;
+      border-radius:999px; box-shadow:0 8px 24px rgba(0,0,0,0.15); z-index:9999;
+      opacity:0; pointer-events:none; transition:opacity 0.25s; font-size:0.84rem;
+    }
+    .toast.show { opacity:1; }
+    .toast.toast-error { background:#dc2626; }
+
     .log-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#9ca3af; margin:14px 0 6px 0; }
     #log { list-style:none; max-height:90px; overflow-y:auto; font-size:0.72rem; color:#4b5563; }
     #log li { padding:2px 0; border-bottom:1px solid #f5f5f5; }
@@ -212,6 +222,7 @@
 </head>
 <body>
 
+<div id="toast" class="toast"></div>
 <!-- Status / handshake card -->
 <div class="card">
   <div class="hero-card">
@@ -249,8 +260,7 @@
     <b>To-Do List Plugin.</b> On load, this plugin reads tasks directly from the AutoCount database via the
     <code>ZZTGetDataTable</code> API against the Master Data table <code>ZZT_jm6data</code> (seeded through Module Query
     on <code>jinmenu6</code>). Tasks are packed as JSON in <code>ZZC_Description</code> with the task code in
-    <code>ZZC_Code</code>. Creating, editing or deleting a task <b>auto-persists to the database</b> via the SIT host
-    eval bridge (<code>WebForm_DoCallback</code>) — no manual export required. Use <code>Reload Tasks</code> to re-fetch.
+    <code>ZZC_Code</code>. Creating, editing or deleting a task only changes the local list — click the <b>system toolbar Save</b> (top-left, when <code>Use System Toolbar</code> is enabled) to persist to the database via the SIT host eval bridge (<code>WebForm_DoCallback</code>). After saving, a <b>Save successful</b> toast appears.
   </div>
 
   <!-- KPI Row -->
@@ -509,6 +519,8 @@
   var currentView = 'list';
   var showCompleted = true;
   var calMonth = new Date();
+  var hasUnsavedChanges = false;
+  var isSaving = false;
 
   function ts() { return new Date().toLocaleTimeString(); }
   function addLog(msg) {
@@ -525,6 +537,28 @@
   function fmtDate(s) { if (!s) return '-'; var d = new Date(s); if (isNaN(d.getTime())) return s; return d.toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' }); }
   function isOverdue(t) { if (!t.dueDate || t.status === 'completed') return false; return new Date(t.dueDate) < new Date(todayStr()); }
   function isToday(s) { return s === todayStr(); }
+
+  function showToast(msg, isError) {
+    var $t = $('#toast');
+    $t.text(msg).toggleClass('toast-error', !!isError).addClass('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(function () { $t.removeClass('show'); }, 2500);
+  }
+
+  function markDirty(reason) {
+    hasUnsavedChanges = true;
+    setSaveStatus('Unsaved changes', 'badge-fail');
+    addLog('Local change' + (reason ? ' (' + reason + ')' : '') + ' — click Save in system toolbar to persist');
+    // Notify host that plugin has unsaved changes (some Alaya versions show a dirty dot)
+    try { postToParent('ALAYA_DIRTY', { dirty: true, reason: reason || 'task change' }); } catch (e) {}
+    try { postToParent('ALAYA_HAS_UNSAVED_CHANGES', { hasUnsavedChanges: true }); } catch (e) {}
+  }
+
+  function clearDirty() {
+    hasUnsavedChanges = false;
+    try { postToParent('ALAYA_DIRTY', { dirty: false }); } catch (e) {}
+    try { postToParent('ALAYA_HAS_UNSAVED_CHANGES', { hasUnsavedChanges: false }); } catch (e) {}
+  }
 
   /* ── ALAYA_INIT ── */
   $(window).on('message', function (e) {
@@ -543,7 +577,7 @@
     if (username) $('#inp-assignee').val(username);
     /* Pre-load a hidden iframe with m_UserDefinedFieldModuleEditor.aspx in the
        host window. This page has memoQuery + WebForm_DoCallback, which we need
-       for auto-saving tasks to the DB. In Test Load context, memoQuery already
+       for saving tasks to the DB. In Test Load context, memoQuery already
        exists in an existing frame; in menu context, this hidden iframe provides
        it. Pre-loading means the first save is instant. */
     if (hostOrigin) {
@@ -558,8 +592,16 @@
         '})();'
       }, '*');
       addLog('Pre-loading hidden memoQuery iframe in host window');
+      // Hook system toolbar Save so clicking Save in the host toolbar triggers plugin save
+      try { hookHostToolbarSave(); } catch (err) { addLog('hookHostToolbarSave deferred: ' + err.message); }
     }
   });
+
+  // Expose save entry points so host eval bridge or toolbar hook can call them directly
+  window.pluginSave = function () { return saveTasksToDb(); };
+  window.AlayaSave = window.pluginSave;
+  window.onSave = window.pluginSave;
+  window.saveTasksToDb = function () { return saveTasksToDb(); };
 
   function requestToken() {
     addLog('POST ' + apiUrl + 'token');
@@ -680,15 +722,31 @@
   }
 
   function saveTasksToDb() {
-    if (!hostOrigin) { addLog('Auto-save skipped — no host origin yet (ALAYA_INIT pending)'); return; }
+    if (isSaving) { addLog('Save already in progress — please wait'); return Promise.resolve(false); }
+    if (!hostOrigin) { addLog('Save skipped — no host origin yet (ALAYA_INIT pending)'); showToast('Save failed — not connected to host', true); return Promise.resolve(false); }
+    // If nothing to save, still give feedback
+    if (!hasUnsavedChanges) {
+      addLog('Save clicked — no unsaved changes');
+      setSaveStatus('No changes to save', 'badge-waiting');
+      showToast('No changes to save');
+      setTimeout(function () { if (!hasUnsavedChanges) setSaveStatus('All changes saved', 'badge-received'); }, 1800);
+      // Notify host that save completed (no-op)
+      try { postToParent('ALAYA_SAVE_SUCCESS', { saved: false, reason: 'no changes', count: tasks.length }); } catch (e) {}
+      try { postToParent('ALAYA_SAVE_COMPLETED', { success: true, noChanges: true }); } catch (e) {}
+      return Promise.resolve(true);
+    }
+    isSaving = true;
     var sql = buildExportSql();
     setSaveStatus('Saving…', 'badge-waiting');
-    addLog('Auto-saving ' + tasks.length + ' tasks to DB via host eval bridge…');
-    executeSqlViaHost(sql).then(function (msg) {
+    addLog('Saving ' + tasks.length + ' tasks to DB via host eval bridge…');
+    return executeSqlViaHost(sql).then(function (msg) {
+      isSaving = false;
       if (msg.error) {
         setSaveStatus('Save failed', 'badge-fail');
         addLog('DB save ERROR: ' + msg.error);
-        return;
+        showToast('Save failed — ' + msg.error, true);
+        try { postToParent('ALAYA_SAVE_FAILED', { success: false, error: msg.error }); } catch (e) {}
+        return false;
       }
       var parsed = null;
       try { parsed = JSON.parse(msg.result); } catch (e) { parsed = null; }
@@ -699,18 +757,142 @@
       if (ok) {
         var affected = 0;
         if (parsed.results) parsed.results.forEach(function (r) { affected += (r.recordsAffected > 0 ? r.recordsAffected : 0); });
-        setSaveStatus('Saved to DB', 'badge-received');
+        clearDirty();
+        setSaveStatus('Saved successfully', 'badge-received');
         addLog('DB save OK — ' + tasks.length + ' tasks persisted (' + affected + ' rows affected). Reloading from DB…');
+        showToast('Save successful — ' + tasks.length + ' tasks saved');
+        try { postToParent('ALAYA_SAVE_SUCCESS', { success: true, count: tasks.length, affected: affected }); } catch (e) {}
+        try { postToParent('ALAYA_SAVE_COMPLETED', { success: true }); } catch (e) {}
         loadTasksFromDb();
+        return true;
       } else {
         setSaveStatus('Save failed', 'badge-fail');
         addLog('DB save FAILED — server reported success=false. Result: ' + (msg.result || '').slice(0, 300));
+        showToast('Save failed — server error', true);
+        try { postToParent('ALAYA_SAVE_FAILED', { success: false, result: msg.result }); } catch (e) {}
+        return false;
       }
     }).catch(function (err) {
+      isSaving = false;
       setSaveStatus('Save failed', 'badge-fail');
-      addLog('DB save ERROR: ' + (err && err.message ? err.message : err));
+      var m = (err && err.message ? err.message : String(err));
+      addLog('DB save ERROR: ' + m);
+      showToast('Save failed — ' + m, true);
+      try { postToParent('ALAYA_SAVE_FAILED', { success: false, error: m }); } catch (e) {}
+      return false;
     });
   }
+
+  // Hook the host system toolbar Save button so its click actually saves plugin data.
+  // The plugin is an external URL iframe; the host toolbar lives in the top window.
+  // We use the eval bridge to attach a click listener that notifies this iframe.
+  function hookHostToolbarSave() {
+    if (!hostOrigin) return;
+    var evalScript =
+      '(function(){' +
+      'try{' +
+        'if(window.__todoSaveHookInstalled) return;' +
+        'window.__todoSaveHookInstalled = true;' +
+        'function findPluginFrame(){' +
+          'var iframes=document.querySelectorAll("iframe");' +
+          'for(var i=0;i<iframes.length;i++){' +
+            'var s=iframes[i].src||"";' +
+            'if(s.indexOf("todo-list-plugin.html")>=0) return iframes[i];' +
+          '}' +
+          'return null;' +
+        '}' +
+        'function findSaveBtn(){' +
+          // Toolbar Save button variants observed: <a>, <button>, <li>, <div> with text Save
+          'var els=document.querySelectorAll("a,button,li,span,div");' +
+          'for(var i=0;i<els.length;i++){' +
+            'var t=(els[i].innerText||els[i].textContent||"").trim();' +
+            'if(t==="Save"){' +
+              // Heuristic: in toolbar area (top 150px or near top bar)
+              'var r=els[i].getBoundingClientRect();' +
+              'if(r.top<160 || els[i].closest("#toolbar, .toolbar, .system-toolbar, .alaya-toolbar, header, [class*=toolbar]")) return els[i];' +
+            '}' +
+          '}' +
+          // fallback: any element with title Save near toolbar
+          'var byTitle=document.querySelector("[title=Save]");' +
+          'if(byTitle) return byTitle;' +
+          'return null;' +
+        '}' +
+        'function notifyPlugin(){' +
+          'var pf=findPluginFrame();' +
+          'if(pf && pf.contentWindow){' +
+            'try{ pf.contentWindow.postMessage({type:"ALAYA_SAVE", source:"host-toolbar", triggeredBy:"system-toolbar"}, "*"); }catch(e){}' +
+            'try{ pf.contentWindow.postMessage({type:"SAVE", source:"host-toolbar"}, "*"); }catch(e){}' +
+            // also try direct function call if same-origin fallback (usually cross-origin so postMessage is needed)
+            'try{ if(typeof pf.contentWindow.saveTasksToDb==="function") pf.contentWindow.saveTasksToDb(); }catch(e){}' +
+          '}' +
+          // broadcast to all frames as fallback (host postMessage will be caught by plugin)
+          'try{ window.postMessage({type:"ALAYA_SAVE", source:"host-toolbar"}, "*"); }catch(e){}' +
+        '}' +
+        'function attach(){' +
+          'var btn=findSaveBtn();' +
+          'if(btn && !btn.__todoHooked){' +
+            'btn.__todoHooked=true;' +
+            'btn.addEventListener("click", function(e){' +
+              // Delay slightly so plugin change badge is already set; then trigger notify
+              'setTimeout(notifyPlugin, 80);' +
+            '}, true);' +
+            '/* also observe for SPA re-render */' +
+          '}' +
+          'return !!btn;' +
+        '}' +
+        'if(!attach()){' +
+          // Poll for 20s while toolbar renders asynchronously
+          'var attempts=0;' +
+          'var iv=setInterval(function(){ attempts++; if(attach() || attempts>40) clearInterval(iv); }, 500);' +
+        '}' +
+        // MutationObserver for SPA navigation re-creating toolbar
+        'try{' +
+          'var mo=new MutationObserver(function(){ attach(); });' +
+          'mo.observe(document.body, {childList:true, subtree:true});' +
+        '}catch(e){}' +
+      '}catch(e){}' +
+      '})();';
+    window.top.postMessage({ target: hostOrigin, eval: evalScript }, '*');
+    addLog('Hooking host system toolbar Save → plugin save');
+  }
+
+  // Listen for host Save triggers (system toolbar). Log all to help discover exact type.
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || typeof msg !== 'object') return;
+    // DCB result handled elsewhere
+    if (msg.source === 'alaya-dcb-result') return;
+    // ALAYA_INIT handled elsewhere
+    if (msg.type === 'ALAYA_INIT') return;
+    var t = (msg.type || msg.action || msg.command || '').toString();
+    // Any save-like message triggers DB save. Log everything else for discovery.
+    if (/save/i.test(t) || /save/i.test(JSON.stringify(msg).slice(0, 400))) {
+      // Avoid reacting to our own ALAYA_SAVE_SUCCESS echo
+      if (t === 'ALAYA_SAVE_SUCCESS' || t === 'ALAYA_SAVE_FAILED' || t === 'ALAYA_SAVE_COMPLETED') return;
+      addLog('Received <- ' + (t || 'unknown') + ' ' + JSON.stringify(msg).slice(0, 250));
+      saveTasksToDb();
+      return;
+    }
+    // Debug: log unknown host messages (first 500 chars) to Event Log for one-time discovery
+    if (t) { addLog('Msg <- ' + t + ' ' + JSON.stringify(msg).slice(0, 200)); }
+  });
+
+  // Keyboard shortcut: Ctrl/Cmd+S inside plugin also triggers save
+  $(document).on('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      addLog('Ctrl+S → save');
+      saveTasksToDb();
+    }
+  });
+
+  // Warn on unload if unsaved changes
+  window.addEventListener('beforeunload', function (e) {
+    if (hasUnsavedChanges) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 
   /* ── Load Tasks from DB (ZZTGetDataTable) ──
      API: POST {apiUrl}api/Udf/ZZTGetDataTable  body: { tableName: '<code>' }
@@ -766,10 +948,14 @@
         });
         addLog('Loaded ' + tasks.length + ' tasks from DB table ' + TODO_TABLE_CODE);
         renderAll();
+        clearDirty();
+        setSaveStatus('All changes saved', 'badge-received');
       },
       error: function (xhr) {
         addLog('DB load failed (' + xhr.status + ') - keeping local demo tasks');
         renderAll();
+        // keep dirty false since demo tasks are not yet persisted; user must Save to create initial DB state
+        clearDirty();
       },
       complete: function () { $('#btn-load').prop('disabled', false).text('Reload Tasks'); }
     });
@@ -935,6 +1121,7 @@
         t.status = this.checked ? 'completed' : 'pending';
         renderAll();
         addLog('Task ' + (this.checked ? 'completed' : 'reopened') + ': ' + t.title);
+        markDirty('status toggle');
       })));
       $tr.append($('<td>').html('<strong>' + escapeHtml(t.title) + '</strong>' + (t.desc ? '<div style="font-size:0.74rem;color:#6b7280;">' + escapeHtml(t.desc) + '</div>' : '')));
       $tr.append($('<td>').text(t.group));
@@ -1056,7 +1243,7 @@
     }
     $('#task-modal').removeClass('show');
     renderAll();
-    saveTasksToDb();
+    markDirty('task ' + (editingTaskId ? 'edit' : 'create'));
   });
 
   function deleteTask(id) {
@@ -1064,7 +1251,7 @@
     tasks = tasks.filter(function (t) { return t.id !== id; });
     addLog('Task deleted');
     renderAll();
-    saveTasksToDb();
+    markDirty('task delete');
   }
 
   /* ── New Task ── */
