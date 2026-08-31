@@ -593,8 +593,8 @@
       var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       var timer = setTimeout(function () {
         delete pendingDcbCallbacks[requestId];
-        reject(new Error('Database callback timed out after 30s'));
-      }, 30000);
+        reject(new Error('Database callback timed out after 60s'));
+      }, 60000);
       pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
       /* The eval'd script runs in the host top window's message-handler scope,
          where `result` (= event.data) is in scope, so it can read result.sql and
@@ -609,7 +609,13 @@
             'return null;' +
           '}' +
           'var mf=findMemoFrame(window);' +
-          'function bcast(m){ try{ for(var i=0;i<window.frames.length;i++){ try{ window.frames[i].postMessage(m,"*"); }catch(e){} } }catch(e){} try{ window.postMessage(m,"*"); }catch(e){} }' +
+          'function bcast(m){' +
+            'function postAll(win){' +
+              'try{ win.postMessage(m,"*"); }catch(e){}' +
+              'try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}' +
+            '}' +
+            'postAll(window);' +
+          '}' +
           'if(!mf){ bcast({source:"alaya-dcb-result",requestId:reqId,error:"No frame with memoQuery+WebForm_DoCallback found"}); return; }' +
           'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
           'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
