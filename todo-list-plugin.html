@@ -204,10 +204,7 @@
     .empty-state { text-align:center; padding:40px 20px; color:#9ca3af; font-size:0.88rem; }
     .empty-state .big-icon { font-size:2.5rem; margin-bottom:8px; }
 
-    /* ── Report section ── */
-    .report-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:14px; }
-    .report-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:12px; padding:16px; }
-    .report-title { font-size:0.82rem; font-weight:700; color:#111827; margin-bottom:10px; }
+    /* Shared list rows (group management / user directory) */
     .report-stat { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:0.78rem; }
     .report-stat:last-child { border-bottom:none; }
     .report-stat .label { color:#6b7280; }
@@ -216,7 +213,6 @@
     @media (max-width:900px) {
       .kpi-row { grid-template-columns:repeat(2,1fr); }
       .modal-form { grid-template-columns:1fr; }
-      .report-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -251,8 +247,6 @@
       <button class="btn-primary" id="btn-new-task">+ New Task</button>
       <button class="btn-secondary" id="btn-load" disabled>Load Tasks</button>
       <button class="btn-secondary" id="btn-manage-users">&#128100; Manage Users</button>
-      <button class="btn-secondary" id="btn-export-sql">&#128190; Export SQL</button>
-      <button class="btn-secondary" id="btn-report">&#128202; Report</button>
     </div>
   </div>
 
@@ -288,7 +282,6 @@
     <div class="view-tabs">
       <button class="view-tab active" data-view="list">List View</button>
       <button class="view-tab" data-view="calendar">Calendar View</button>
-      <button class="view-tab" data-view="report">Report View</button>
     </div>
     <div class="filter-row" style="margin-bottom:0;">
       <div class="form-group">
@@ -364,32 +357,6 @@
         <div class="legend-item"><span class="legend-dot" style="background:#dcfce7;"></span> Low priority</div>
         <div class="legend-item"><span class="legend-dot" style="background:#2563eb;border:2px solid #2563eb;"></span> Today</div>
       </div>
-    </div>
-  </div>
-
-  <!-- Report View -->
-  <div id="view-report" style="display:none;">
-    <div class="report-grid">
-      <div class="report-card">
-        <div class="report-title">By Priority</div>
-        <div id="report-priority"></div>
-      </div>
-      <div class="report-card">
-        <div class="report-title">By Assignee</div>
-        <div id="report-assignee"></div>
-      </div>
-      <div class="report-card">
-        <div class="report-title">By Group</div>
-        <div id="report-group"></div>
-      </div>
-      <div class="report-card">
-        <div class="report-title">By Status</div>
-        <div id="report-status"></div>
-      </div>
-    </div>
-    <div style="margin-top:14px;">
-      <button class="btn-secondary" id="btn-export">&#128190; Export CSV</button>
-      <button class="btn-secondary" id="btn-print">&#128424; Print</button>
     </div>
   </div>
 </div>
@@ -476,24 +443,6 @@
     <div id="user-list" style="max-height:300px; overflow-y:auto;"></div>
     <div class="modal-actions">
       <button class="btn-secondary" id="btn-user-close">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- Export SQL Modal -->
-<div class="modal-overlay" id="export-sql-modal">
-  <div class="modal" style="max-width:760px;">
-    <h2>Export SQL (Module Query Execute)</h2>
-    <div class="sub" style="margin-bottom:12px;">
-      Copy this SQL into <code>jinmenu6</code> &gt; <strong>Edit Query</strong> &gt; <strong>Execute</strong>
-      to persist the current <span id="export-sql-count">0</span> tasks back to <code>ZZT_<span id="export-sql-table">jm6data</span></code>.
-      Reload on any computer afterwards and the saved tasks will appear.
-      <div style="margin-top:6px;color:#dc2626;font-size:0.78rem;">⚠ This will DELETE all existing rows in the table and re-insert the current set.</div>
-    </div>
-    <textarea id="export-sql-textarea" readonly style="width:100%; min-height:280px; font-family:'Courier New',monospace; font-size:0.78rem; border:1px solid #d1d5db; border-radius:8px; padding:10px; background:#f9fafb; color:#111827; resize:vertical;" wrap="off"></textarea>
-    <div class="modal-actions">
-      <button class="btn-primary" id="btn-export-sql-copy">Copy to Clipboard</button>
-      <button class="btn-secondary" id="btn-export-sql-close">Close</button>
     </div>
   </div>
 </div>
@@ -1185,27 +1134,6 @@ window.saveTasksToDb = doSaveTasksToDb;
     }
   }
 
-  /* ── Report View ── */
-  function renderReport() {
-    function countBy(field) {
-      var counts = {};
-      tasks.forEach(function (t) { var k = t[field] || 'N/A'; counts[k] = (counts[k] || 0) + 1; });
-      return counts;
-    }
-    function renderStats($el, counts) {
-      $el.empty();
-      Object.keys(counts).sort().forEach(function (k) {
-        $el.append($('<div class="report-stat">').append($('<span class="label">').text(k)).append($('<span class="value">').text(counts[k])));
-      });
-    }
-    renderStats($('#report-priority'), countBy('priority'));
-    renderStats($('#report-assignee'), countBy('assignee'));
-    renderStats($('#report-group'), countBy('group'));
-    var statusCounts = {};
-    tasks.forEach(function (t) { var s = isOverdue(t) ? 'overdue' : t.status; statusCounts[s] = (statusCounts[s] || 0) + 1; });
-    renderStats($('#report-status'), statusCounts);
-  }
-
   /* ── Render All ── */
   function renderAll() {
     renderKpis();
@@ -1213,7 +1141,6 @@ window.saveTasksToDb = doSaveTasksToDb;
     renderGroups();
     if (currentView === 'list') renderList();
     else if (currentView === 'calendar') renderCalendar();
-    else if (currentView === 'report') renderReport();
   }
 
   /* ── Task Modal ── */
@@ -1278,10 +1205,9 @@ window.saveTasksToDb = doSaveTasksToDb;
     $('.view-tab').removeClass('active');
     $(this).addClass('active');
     currentView = $(this).data('view');
-    $('#view-list, #view-calendar, #view-report').hide();
+    $('#view-list, #view-calendar').hide();
     if (currentView === 'list') $('#view-list').show();
     else if (currentView === 'calendar') { $('#view-calendar').show(); renderCalendar(); }
-    else if (currentView === 'report') { $('#view-report').show(); renderReport(); }
   });
 
   /* ── Calendar nav ── */
@@ -1363,10 +1289,11 @@ window.saveTasksToDb = doSaveTasksToDb;
   $('#inp-user-search').on('input', function () { renderUserList($(this).val()); });
   $('#btn-user-close').on('click', function () { $('#user-modal').removeClass('show'); });
 
-  /* ── Export SQL (Module Query Execute) ──
+  /* ── Persist SQL (Module Query execute path) ──
      No REST write API exists in SIT; only ZZTGetDataTable is callable from
      a cross-origin plugin iframe. To persist tasks to ZZT_<TODO_TABLE_CODE>,
-     the user copies this SQL into jinmenu6's Query Editor and clicks Execute.
+     we build SQL and execute it in the host's memoQuery via WebForm_DoCallback
+     when the user clicks the system toolbar Save button.
      Format matches seed_jm6data.js: DELETE + one INSERT per task, with the
      whole task serialised as JSON in ZZC_Description and a stable T### code
      in ZZC_Code. Single quotes inside JSON values are doubled for SQL safety. */
@@ -1390,51 +1317,6 @@ window.saveTasksToDb = doSaveTasksToDb;
     });
     return lines.join('\n');
   }
-
-  $('#btn-export-sql').on('click', function () {
-    var sql = buildExportSql();
-    $('#export-sql-count').text(tasks.length);
-    $('#export-sql-table').text(TODO_TABLE_CODE);
-    $('#export-sql-textarea').val(sql);
-    $('#export-sql-modal').addClass('show');
-    addLog('Exported ' + tasks.length + ' tasks as SQL (' + sql.length + ' chars)');
-  });
-
-  $('#btn-export-sql-copy').on('click', async function () {
-    var txt = $('#export-sql-textarea').val();
-    try {
-      await navigator.clipboard.writeText(txt);
-      addLog('SQL copied to clipboard (' + txt.length + ' chars)');
-      var $btn = $(this);
-      var prev = $btn.text();
-      $btn.text('Copied!').prop('disabled', true);
-      setTimeout(function () { $btn.text(prev).prop('disabled', false); }, 1500);
-    } catch (e) {
-      // Fallback: select the textarea so the user can Ctrl+C manually.
-      var ta = document.getElementById('export-sql-textarea');
-      ta.focus(); ta.select();
-      addLog('Clipboard API failed (' + e.message + ') — textarea selected, press Ctrl+C');
-    }
-  });
-
-  $('#btn-export-sql-close').on('click', function () { $('#export-sql-modal').removeClass('show'); });
-
-  /* ── Export CSV ── */
-  $('#btn-export').on('click', function () {
-    var csv = 'Title,Description,Group,Priority,Assignee,DueDate,Status,Duration\n';
-    tasks.forEach(function (t) {
-      csv += '"' + t.title + '","' + (t.desc || '') + '","' + t.group + '","' + t.priority + '","' + (t.assignee || '') + '","' + (t.dueDate || '') + '","' + t.status + '","' + t.duration + '"\n';
-    });
-    var blob = new Blob([csv], { type: 'text/csv' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'todo-list-' + todayStr() + '.csv';
-    a.click();
-    addLog('Exported ' + tasks.length + ' tasks to CSV');
-  });
-
-  /* ── Print ── */
-  $('#btn-print').on('click', function () { window.print(); });
 
   /* ── Utility ── */
   function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
