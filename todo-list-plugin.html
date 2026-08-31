@@ -521,6 +521,7 @@
   var calMonth = new Date();
   var hasUnsavedChanges = false;
   var isSaving = false;
+  window.__trace = [];
 
   function ts() { return new Date().toLocaleTimeString(); }
   function addLog(msg) {
@@ -722,6 +723,7 @@
   }
 
   function saveTasksToDb() {
+    window.__trace && window.__trace.push('saveTasksToDb called, dirty=' + hasUnsavedChanges + ' host=' + hostOrigin);
     if (isSaving) { addLog('Save already in progress — please wait'); return Promise.resolve(false); }
     if (!hostOrigin) { addLog('Save skipped — no host origin yet (ALAYA_INIT pending)'); showToast('Save failed — not connected to host', true); return Promise.resolve(false); }
     // If nothing to save, still give feedback
@@ -863,24 +865,28 @@
     addLog('Hooking host system toolbar Save → plugin save');
   }
 
-  // Listen for host Save triggers (system toolbar). Log all to help discover exact type.
-  $(window).on('message', function (e) {
-    var msg = e.originalEvent.data;
-    if (!msg || typeof msg !== 'object') return;
+  // Listen for host Save triggers (system toolbar). Use NATIVE addEventListener
+  // (more reliable than $(window).on for cross-origin postMessage events).
+  // Handles both Alaya's own ALAYA_TOOLBAR {name:"Save"} and our injected
+  // ALAYA_SAVE / SAVE messages, plus any other save-like message.
+  window.addEventListener('message', function (e) {
+    var msg = e.data;
+    if (!msg || typeof msg !== 'object') { window.__trace && window.__trace.push('msg non-object'); return; }
     // DCB result handled elsewhere
-    if (msg.source === 'alaya-dcb-result') return;
+    if (msg.source === 'alaya-dcb-result') { window.__trace && window.__trace.push('dcb skip'); return; }
     // ALAYA_INIT handled elsewhere
-    if (msg.type === 'ALAYA_INIT') return;
-    var t = (msg.type || msg.action || msg.command || '').toString();
-    // Any save-like message triggers DB save. Log everything else for discovery.
-    if (/save/i.test(t) || /save/i.test(JSON.stringify(msg).slice(0, 400))) {
+    if (msg.type === 'ALAYA_INIT') { return; }
+    var t = (msg.type || msg.action || msg.command || msg.event || '').toString();
+    // Any save-like message triggers DB save.
+    if (/save/i.test(t) || (msg.data && typeof msg.data === 'object' && /save/i.test((msg.data.name || '') + (msg.data.action || '')))) {
       // Avoid reacting to our own ALAYA_SAVE_SUCCESS echo
-      if (t === 'ALAYA_SAVE_SUCCESS' || t === 'ALAYA_SAVE_FAILED' || t === 'ALAYA_SAVE_COMPLETED') return;
+      if (t === 'ALAYA_SAVE_SUCCESS' || t === 'ALAYA_SAVE_FAILED' || t === 'ALAYA_SAVE_COMPLETED') { return; }
+      window.__trace && window.__trace.push('SAVE-HANDLED ' + t + ' dirty=' + hasUnsavedChanges + ' host=' + hostOrigin);
       addLog('Received <- ' + (t || 'unknown') + ' ' + JSON.stringify(msg).slice(0, 250));
       saveTasksToDb();
       return;
     }
-    // Debug: log unknown host messages (first 500 chars) to Event Log for one-time discovery
+    // Debug: log unknown host messages for one-time discovery
     if (t) { addLog('Msg <- ' + t + ' ' + JSON.stringify(msg).slice(0, 200)); }
   });
 
