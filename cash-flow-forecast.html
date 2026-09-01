@@ -58,6 +58,12 @@
     }
     .ob-label { font-size: 0.8rem; color: var(--muted); }
     .ob-amount { font-size: 1.9rem; font-weight: 800; color: var(--ink); margin-top: 2px; }
+    .ob-edit { display: flex; gap: 8px; align-items: center; margin-left: 12px; }
+    .ob-edit input {
+      width: 150px; padding: 8px 10px; border: 1px solid var(--ring); border-radius: 8px;
+      font-size: 0.95rem; color: var(--ink); background: #f9fafb; text-align: right;
+    }
+    .ob-edit .btn { white-space: nowrap; }
 
     .hero-stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; flex: 1 1 auto; }
     .hero-stat {
@@ -174,9 +180,13 @@
       <div class="hero-grid">
         <div class="ob-card">
           <div class="ob-icon">&#127974;</div>
-          <div>
+          <div style="flex:1;">
             <div class="ob-label">Opening bank balance</div>
             <div class="ob-amount" id="obAmount">—</div>
+          </div>
+          <div class="ob-edit">
+            <input type="number" id="inpOpening" step="0.01" placeholder="0.00" title="Enter opening bank balance" />
+            <button class="btn" id="btnSaveOpening">Save</button>
           </div>
         </div>
         <div class="hero-stats">
@@ -295,11 +305,101 @@
       }
     }
 
+    /* ── Save via host memoQuery (WebForm_DoCallback) ──
+       No REST write API exists; we execute SQL in the host's Module Editor
+       memoQuery through the eval bridge (same pattern as the todo plugin). */
+    var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
+    var hostOrigin = '';
+    var pendingExec = {};
+    var execIdSeq = 1;
+
+    function findHostOrigin() {
+      // Set from ALAYA_INIT origin (falls back to parent origin if empty).
+      return hostOrigin || (window.parent !== window ? (window.parent.location && window.parent.location.origin) : '');
+    }
+
+    function executeSqlViaHost(sql) {
+      var reqId = 'cf' + (execIdSeq++);
+      var target = findHostOrigin();
+      if (!target) {
+        addLog('Save skipped — no host origin yet (ALAYA_INIT pending)');
+        return $.Deferred().reject('no host origin').promise();
+      }
+      var evalScript =
+        '(function(){' +
+        'try{' +
+          'var sql=' + JSON.stringify(sql) + ';' +
+          'var reqId=' + JSON.stringify(reqId) + ';' +
+          'function findMemoFrame(win){' +
+            'try{ if(typeof win.memoQuery==="object" && typeof win.WebForm_DoCallback==="function") return win; }catch(e){}' +
+            'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){}' +
+            'return null;' +
+          '}' +
+          'function bcast(m){' +
+            'function postAll(win){ try{ win.postMessage(m,"*"); }catch(e){} try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){} }' +
+            'postAll(window);' +
+          '}' +
+          'function runOnMemo(mf){' +
+            'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+            'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+            'var arg="RunQuery|"+JSON.stringify(hdr);' +
+            'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+            'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+            'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+          '}' +
+          'var mf=findMemoFrame(window);' +
+          'if(mf){ runOnMemo(mf); return; }' +
+          'var hidden=document.getElementById("hidden-memo-frame");' +
+          'if(hidden && hidden.contentWindow){' +
+            'try{ if(typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+          '}' +
+          'if(!hidden){' +
+            'hidden=document.createElement("iframe");' +
+            'hidden.id="hidden-memo-frame";' +
+            'hidden.style.display="none";' +
+            'hidden.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+            'document.body.appendChild(hidden);' +
+          '}' +
+          'var attempts=0;' +
+          'function poll(){' +
+            'attempts++;' +
+            'try{ if(hidden.contentWindow && typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+            'if(attempts<40){ setTimeout(poll,500); }' +
+            'else { bcast({source:"alaya-dcb-result",requestId:reqId,error:"memoQuery not available after 20s"}); }' +
+          '}' +
+          'poll();' +
+        '}catch(e){ bcast({source:"alaya-dcb-result",requestId:reqId,error:e.message}); }' +
+        '})();';
+      // Post to host top window (same pattern as todo plugin) via the parent chain.
+      window.top.postMessage({ target: target, eval: evalScript, sql: sql, requestId: reqId }, '*');
+      addLog('Sending UPDATE via host eval bridge (sql ' + sql.length + ' chars, id ' + reqId + ')');
+      var deferred = $.Deferred();
+      pendingExec[reqId] = deferred;
+      var timer = setTimeout(function () {
+        if (pendingExec[reqId]) { delete pendingExec[reqId]; deferred.reject('timeout after 20s'); }
+      }, 20000);
+      deferred.always(function () { clearTimeout(timer); });
+      return deferred.promise();
+    }
+
+    // Route DCB result messages back to the matching deferred.
+    $(window).on('message', function (e) {
+      var msg = e.originalEvent.data;
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.source !== 'alaya-dcb-result') return;
+      var d = pendingExec[msg.requestId];
+      if (!d) return;
+      delete pendingExec[msg.requestId];
+      if (msg.error) d.reject(msg.error);
+      else d.resolve(msg.result);
+    });
+
     /* ALAYA_INIT handshake (matches working AR plugin) */
     $(window).on('message', function (e) {
       var msg = e.originalEvent.data;
       if (!msg || msg.type !== 'ALAYA_INIT') return;
       addLog('Received <- ALAYA_INIT');
+      if (e.originalEvent && e.originalEvent.origin) hostOrigin = e.originalEvent.origin;
       var payload = msg.data !== undefined ? msg.data : msg;
       $('#badge').removeClass('badge-waiting').addClass('badge-ok').text('ALAYA_INIT received');
       if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
@@ -374,6 +474,24 @@
       });
     }
 
+    function saveOpeningBalance() {
+      var val = parseFloat($('#inpOpening').val());
+      if (isNaN(val)) { addLog('Opening balance not saved — enter a valid number'); return; }
+      var $btn = $('#btnSaveOpening').prop('disabled', true).text('Saving...');
+      // Update the OPEN row's ZZC_OpeningBalance for this client.
+      var sql = 'UPDATE ZZT_CashFlowSnapshot SET ZZC_OpeningBalance = ' + val +
+        ' WHERE ZZC_Type = \'OPEN\';';
+      executeSqlViaHost(sql).then(function () {
+        addLog('Opening balance saved: ' + fmt(val));
+        $('#obAmount').text(fmt(val));
+        $btn.prop('disabled', false).text('Save');
+        loadForecast();
+      }).fail(function (e) {
+        addLog('Save failed: ' + e);
+        $btn.prop('disabled', false).text('Save');
+      });
+    }
+
     function rowValue(r, field) {
       var v = r[field];
       if (v === null || v === undefined) return 0;
@@ -416,6 +534,7 @@
           opening = rowValue(r, 'ZZC_OpeningBalance');
         }
       });
+      $('#inpOpening').val(opening > 0 ? String(opening) : '');
 
       // Build 14-day window starting today
       var startKey = todayKey();
@@ -547,6 +666,9 @@
 
       addLog('Forecast rendered with opening balance ' + fmt(opening));
     }
+
+    $('#btnSaveOpening').on('click', saveOpeningBalance);
+    $('#inpOpening').on('keydown', function (e) { if (e.which === 13) saveOpeningBalance(); });
 
     addLog('Page loaded - listening for ALAYA_INIT');
   </script>
