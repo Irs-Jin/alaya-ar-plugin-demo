@@ -53,18 +53,23 @@
     /* ── Alaya-style document toolbar (mirrors the New/Post/Preview Report row
        on native screens like Cash Sales/Quotation) ── */
     .doc-toolbar {
-      display:flex; align-items:center; gap:4px; flex-wrap:wrap;
-      background:#fff; border-bottom:1px solid #e5e7eb; padding:8px 4px; margin:-24px -28px 20px -28px;
+      display:flex; align-items:center; gap:2px; flex-wrap:wrap;
+      background:#fff; border-bottom:1px solid #e5e7eb; padding:6px 4px; margin:-24px -28px 20px -28px;
     }
     .doc-toolbar-btn {
       display:flex; align-items:center; gap:6px; background:transparent; border:none; border-radius:4px;
-      padding:8px 14px; font-size:0.83rem; font-weight:600; color:#374151; cursor:pointer; font-family:inherit;
+      padding:8px 12px; font-size:0.83rem; font-weight:600; color:#374151; cursor:pointer; font-family:inherit;
     }
     .doc-toolbar-btn:hover:not(:disabled) { background:#f3f4f6; }
-    .doc-toolbar-btn .icon { font-size:0.95rem; }
-    .doc-toolbar-btn.primary { color:#1565c0; }
+    .doc-toolbar-btn .icon { font-size:0.9rem; width:16px; text-align:center; }
+    .doc-toolbar-btn.primary { background:#fff3e0; color:#111827; }
+    .doc-toolbar-btn.primary .icon { color:#f57c00; }
+    .doc-toolbar-btn.primary:hover:not(:disabled) { background:#ffe0b2; }
+    .doc-toolbar-btn.blue .icon { color:#1565c0; }
+    .doc-toolbar-btn.green .icon { color:#2e7d32; }
+    .doc-toolbar-btn.gray .icon { color:#616161; }
     .doc-toolbar-btn.danger { color:#dc2626; }
-    .doc-toolbar-sep { width:1px; align-self:stretch; background:#e5e7eb; margin:4px 4px; }
+    .doc-toolbar-btn.danger .icon { color:#dc2626; }
 
     /* ── Panel header bar (mirrors "Sales Header" on Cash Sales/Quotation) ── */
     .doc-panel { border:1px solid #e5e7eb; border-radius:6px; margin-bottom:18px; overflow:hidden; }
@@ -137,7 +142,50 @@
       width:100%; border:1px solid #e5e7eb; border-radius:6px; padding:6px 8px; font-size:0.82rem; font-family:inherit;
     }
     .sub-grid-empty { text-align:center; padding:16px; color:#9ca3af; font-size:0.8rem; }
-    .customer-row { display:flex; gap:8px; align-items:flex-end; }
+    .customer-row { position:relative; flex:1; }
+
+    /* Inline search-icon inputs, matching native "Customer:* [_____ 🔍]" fields -
+       a magnifying-glass button sits inside the input's right edge instead of a
+       separate "Lookup" button beside it. */
+    .search-input-wrap { position:relative; }
+    .search-input-wrap input { padding-right:34px !important; width:100%; }
+    .search-icon-btn {
+      position:absolute; right:1px; top:1px; bottom:1px; width:32px; border:none; background:transparent;
+      color:#6b7280; cursor:pointer; font-size:0.95rem; display:flex; align-items:center; justify-content:center;
+    }
+    .search-icon-btn:hover { color:#1565c0; }
+    .sub-grid-table .search-input-wrap input { padding-right:26px !important; }
+    .sub-grid-table .search-icon-btn { width:24px; font-size:0.82rem; }
+
+    /* ── Picker modal (real searchable popup, mirrors Alaya's native Customer/Item
+       Search dialog: search box + paginated-looking results table, click a row to
+       select) ── */
+    .modal-overlay {
+      display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4);
+      z-index:500; align-items:center; justify-content:center; padding:20px;
+    }
+    .modal-overlay.show { display:flex; }
+    .modal {
+      background:#fff; border-radius:10px; padding:20px 24px; max-width:640px; width:100%;
+      max-height:80vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2);
+    }
+    .modal h2 { font-size:1rem; font-weight:700; margin-bottom:12px; color:#111827; }
+    .picker-search {
+      width:100%; border:1px solid #d1d5db; border-radius:8px; padding:9px 12px; font-size:0.85rem;
+      margin-bottom:10px; font-family:inherit;
+    }
+    .picker-search:focus { outline:none; border-color:#1565c0; box-shadow:0 0 0 3px rgba(21,101,192,0.1); }
+    .picker-table-wrap { overflow-y:auto; flex:1; border:1px solid #e5e7eb; border-radius:8px; min-height:200px; }
+    .picker-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+    .picker-table thead th {
+      position:sticky; top:0; text-align:left; padding:8px 12px; background:#f9fafb; border-bottom:1px solid #e5e7eb;
+      font-size:0.7rem; font-weight:700; text-transform:uppercase; color:#6b7280;
+    }
+    .picker-table tbody td { padding:8px 12px; border-bottom:1px solid #f3f4f6; }
+    .picker-table tbody tr { cursor:pointer; }
+    .picker-table tbody tr:hover { background:#eef2ff; }
+    .picker-empty { text-align:center; padding:24px; color:#9ca3af; font-size:0.85rem; }
+    .picker-count { font-size:0.74rem; color:#9ca3af; margin-top:8px; }
 
     /* ── Toast ── */
     .toast {
@@ -253,14 +301,12 @@
 <div class="card" id="view-detail" style="max-width:1280px; display:none;">
   <!-- Mirrors the native toolbar row on Cash Sales/Quotation (Back / New / Save / Delete) -->
   <div class="doc-toolbar">
-    <button class="doc-toolbar-btn" id="btn-back-to-list"><span class="icon">&#8592;</span>Back</button>
-    <div class="doc-toolbar-sep"></div>
-    <button class="doc-toolbar-btn primary" id="btn-save-detail-top"><span class="icon">&#128190;</span>Save</button>
-    <button class="doc-toolbar-btn" id="btn-new-report-top"><span class="icon">&#10133;</span>New</button>
-    <button class="doc-toolbar-btn danger" id="btn-delete-report" style="display:none;"><span class="icon">&#128465;</span>Delete</button>
-    <div class="doc-toolbar-sep"></div>
-    <button class="doc-toolbar-btn" id="btn-print-report"><span class="icon">&#128424;</span>Print</button>
-    <button class="doc-toolbar-btn" id="btn-copy-to-sales"><span class="icon">&#128179;</span>Copy To Sales</button>
+    <button class="doc-toolbar-btn gray" id="btn-back-to-list"><span class="icon">&#8592;</span>Back</button>
+    <button class="doc-toolbar-btn primary" id="btn-save-detail-top"><span class="icon">&#9733;</span>Save</button>
+    <button class="doc-toolbar-btn blue" id="btn-new-report-top"><span class="icon">&#10010;</span>New</button>
+    <button class="doc-toolbar-btn danger" id="btn-delete-report" style="display:none;"><span class="icon">&#10005;</span>Delete</button>
+    <button class="doc-toolbar-btn gray" id="btn-print-report"><span class="icon">&#9636;</span>Print</button>
+    <button class="doc-toolbar-btn green" id="btn-copy-to-sales"><span class="icon">&#10148;</span>Copy To Sales</button>
   </div>
 
   <div class="hero-title-row" style="margin-bottom:16px;">
@@ -285,9 +331,11 @@
       <div class="form-group full">
         <label>Account (Customer Code)<span class="required-mark">*</span></label>
         <div class="customer-row">
-          <input type="text" id="d-cust-code" list="customer-datalist" placeholder="e.g. 000000462" />
-          <datalist id="customer-datalist"></datalist>
-          <button class="btn-secondary btn-sm" id="btn-lookup-customer" type="button">F11 Lookup</button>
+          <div class="search-input-wrap">
+            <input type="text" id="d-cust-code" list="customer-datalist" placeholder="Select Customer" />
+            <datalist id="customer-datalist"></datalist>
+            <button class="search-icon-btn" id="btn-lookup-customer" type="button" title="Search Customer (F11)">&#128269;</button>
+          </div>
         </div>
         <span id="cust-lookup-status" class="sub" style="margin-bottom:0;"></span>
       </div>
@@ -352,6 +400,26 @@
 
 <!-- Print view - populated just before window.print(), hidden otherwise (see @media print) -->
 <div id="print-view"></div>
+
+<!-- Picker modal - shared by Customer and Item search, mirrors Alaya's native
+     "Search" popup (search box + results table, click a row to select). -->
+<div class="modal-overlay" id="picker-modal">
+  <div class="modal">
+    <h2 id="picker-title">Search</h2>
+    <input type="text" id="picker-search" class="picker-search" placeholder="Type to search..." />
+    <div class="picker-table-wrap">
+      <table class="picker-table">
+        <thead id="picker-thead"></thead>
+        <tbody id="picker-tbody"></tbody>
+      </table>
+      <div class="picker-empty" id="picker-empty" style="display:none;">No matches.</div>
+    </div>
+    <div class="picker-count" id="picker-count"></div>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button class="btn-secondary" id="btn-picker-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
 
 <script>
   /* Matches the DevKey now registered on the JinMenu7 module (Module Editor > Edit
@@ -629,7 +697,69 @@
       }
     });
   }
-  $('#btn-lookup-customer').on('click', lookupCustomer);
+  /* ── Picker modal (shared: Customer search icon, each Action Taken row's Item
+     search icon) - mirrors Alaya's native "Search" popup: type to filter a live
+     table, click a row to select. Searches the already-loaded company-scoped
+     customers/items cache, so results only ever show the CURRENT company's own
+     data - no extra network round-trip needed once loadScopedListsForCurrentCompany
+     has run. */
+  var pickerOnSelect = null;
+  function openPicker(kind, onSelect) {
+    pickerOnSelect = onSelect;
+    if (kind === 'customer') {
+      $('#picker-title').text('Search Customer');
+      $('#picker-thead').html('<tr><th>Account No.</th><th>Name</th><th>Phone</th></tr>');
+      $('#picker-search').attr('placeholder', 'Search by account code or name...');
+    } else {
+      $('#picker-title').text('Search Item');
+      $('#picker-thead').html('<tr><th>Item Code</th><th>Description</th><th>UOM</th></tr>');
+      $('#picker-search').attr('placeholder', 'Search by item code or description...');
+    }
+    $('#picker-modal').data('kind', kind).addClass('show');
+    $('#picker-search').val('').trigger('input');
+    setTimeout(function () { $('#picker-search').focus(); }, 50);
+  }
+  function renderPickerResults() {
+    var kind = $('#picker-modal').data('kind');
+    var q = ($('#picker-search').val() || '').toLowerCase();
+    var source = kind === 'customer' ? customers : items;
+    var filtered = !q ? source : source.filter(function (r) {
+      return (r.code + ' ' + (r.name || r.desc || '')).toLowerCase().indexOf(q) >= 0;
+    });
+    var $tb = $('#picker-tbody').empty();
+    filtered.slice(0, 200).forEach(function (r) {
+      var $tr = $('<tr>');
+      if (kind === 'customer') {
+        $tr.append($('<td>').text(r.code)).append($('<td>').text(r.name)).append($('<td>').text(r.phone || ''));
+      } else {
+        $tr.append($('<td>').text(r.code)).append($('<td>').text(r.desc)).append($('<td>').text(r.uom || ''));
+      }
+      $tr.on('click', function () {
+        $('#picker-modal').removeClass('show');
+        if (pickerOnSelect) pickerOnSelect(r);
+      });
+      $tb.append($tr);
+    });
+    $('#picker-empty').toggle(filtered.length === 0);
+    $('#picker-count').text(filtered.length + ' result' + (filtered.length === 1 ? '' : 's') + (filtered.length > 200 ? ' (showing first 200 - keep typing to narrow)' : ''));
+  }
+  $('#picker-search').on('input', renderPickerResults);
+  $('#btn-picker-close').on('click', function () { $('#picker-modal').removeClass('show'); });
+  $('#picker-modal').on('click', function (e) { if (e.target.id === 'picker-modal') $('#picker-modal').removeClass('show'); });
+
+  $('#btn-lookup-customer').on('click', function () {
+    if (!customers.length) { showToast('Customer list still loading - try again in a moment', true); return; }
+    openPicker('customer', function (c) {
+      $('#d-cust-code').val(c.code);
+      applyCustomerRecord(c);
+      $('#cust-lookup-status').text('Found (from company list)');
+      markDirty('customer selected');
+    });
+  });
+  // F11 keyboard shortcut, matching native Alaya's Customer field
+  $(document).on('keydown', function (e) {
+    if (e.key === 'F11' && $('#view-detail').is(':visible')) { e.preventDefault(); $('#btn-lookup-customer').trigger('click'); }
+  });
 
   /* ── Host eval-bridge write path (identical mechanism to jm6todo) ──
      No REST write API exists in SIT; only ZZTGetDataTable is callable from a
@@ -1150,21 +1280,31 @@
      header's Customer field. On a matching code (typed or picked from the browser's
      native autocomplete), auto-fill Description + UOM from the cached item list -
      same "only load my own company's list" scoping as GetAllItemMasterByCompanyID. */
+  function applyItemToRow(i, itemRecord) {
+    editingReport.actionTaken[i].item = itemRecord.code;
+    editingReport.actionTaken[i].desc = itemRecord.desc;
+    editingReport.actionTaken[i].uom = itemRecord.uom;
+    renderActionTable();
+    markDirty('item selected');
+  }
   function renderActionTable() {
     var $tb = $('#action-tbody').empty();
     (editingReport.actionTaken || []).forEach(function (a, i) {
       var $tr = $('<tr>');
-      $tr.append($('<td>').append($('<input list="item-datalist">').val(a.item || '')
+      var $wrap = $('<div class="search-input-wrap">');
+      var $itemInput = $('<input list="item-datalist">').val(a.item || '')
         .on('input', function () { editingReport.actionTaken[i].item = $(this).val(); })
         .on('change', function () {
           var code = $(this).val();
           var match = items.filter(function (im) { return im.code === code; })[0];
-          if (match) {
-            editingReport.actionTaken[i].desc = match.desc;
-            editingReport.actionTaken[i].uom = match.uom;
-            renderActionTable();
-          }
-        })));
+          if (match) applyItemToRow(i, match);
+        });
+      var $searchBtn = $('<button class="search-icon-btn" type="button" title="Search Item">&#128269;</button>').on('click', function () {
+        if (!items.length) { showToast('Item list still loading - try again in a moment', true); return; }
+        openPicker('item', function (im) { applyItemToRow(i, im); });
+      });
+      $wrap.append($itemInput).append($searchBtn);
+      $tr.append($('<td>').append($wrap));
       $tr.append($('<td>').append($('<input>').val(a.desc || '').on('input', function () { editingReport.actionTaken[i].desc = $(this).val(); })));
       $tr.append($('<td>').append($('<input>').val(a.uom || '').on('input', function () { editingReport.actionTaken[i].uom = $(this).val(); })));
       $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; })));
