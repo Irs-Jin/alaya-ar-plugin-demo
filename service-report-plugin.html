@@ -105,24 +105,58 @@
     .header-col .form-group.full > .customer-row { flex:1; }
     .form-group select { min-width:140px; }
 
-    /* ── List View ── */
+    /* ── List View - mirrors native Cash Sales/Quotation listing shape ── */
+    .list-filter-row { display:flex; align-items:flex-end; gap:24px; flex-wrap:wrap; margin-bottom:12px; }
+    .list-filter-field { display:flex; flex-direction:column; gap:5px; }
+    .list-filter-field label { font-size:0.83rem; font-weight:600; color:#374151; }
+    .list-filter-field select {
+      border:1px solid #d1d5db; border-radius:6px; padding:7px 10px; font-size:0.85rem; min-width:220px; font-family:inherit;
+    }
+    .status-check-group { display:flex; gap:14px; align-items:center; height:32px; }
+    .status-check-group label { display:flex; align-items:center; gap:5px; font-size:0.85rem; font-weight:400; color:#374151; cursor:pointer; }
+    .btn-list-search {
+      background:#1565c0; color:#fff; border:none; border-radius:6px; padding:9px 28px; font-size:0.85rem;
+      font-weight:600; cursor:pointer; font-family:inherit; margin-left:auto;
+    }
+    .btn-list-search:hover { background:#0d47a1; }
+    .list-search-row { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+    .list-search-row label { font-size:0.85rem; font-weight:600; color:#374151; }
+    .list-search-row input {
+      border:1px solid #d1d5db; border-radius:6px; padding:7px 10px; font-size:0.85rem; min-width:260px; font-family:inherit;
+    }
+    .list-search-row a { color:#1565c0; font-size:0.83rem; text-decoration:none; }
+    .list-search-row a:hover { text-decoration:underline; }
+    .btn-outline {
+      background:#fff; color:#374151; border:1px solid #d1d5db; border-radius:6px; padding:7px 16px;
+      font-size:0.83rem; font-weight:600; cursor:pointer; font-family:inherit;
+    }
+    .btn-outline:hover { background:#f9fafb; }
+    .btn-list-new {
+      background:#2e7d32; color:#fff; border:none; border-radius:6px; padding:5px 14px; font-size:0.78rem;
+      font-weight:700; cursor:pointer; font-family:inherit;
+    }
+    .btn-list-new:hover { background:#1b5e20; }
     .rpt-table { width:100%; border-collapse:collapse; font-size:0.84rem; }
     .rpt-table thead th {
-      text-align:left; padding:10px 12px; background:#f9fafb; border-bottom:2px solid #e5e7eb;
+      text-align:left; padding:8px 12px; background:#f9fafb; border-bottom:2px solid #e5e7eb;
       font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#6b7280;
     }
-    .rpt-table tbody td { padding:10px 12px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
-    .rpt-table tbody tr:hover { background:#f9fafb; cursor:pointer; }
-    .doc-link { color:#1565c0; font-weight:700; text-decoration:none; }
+    .rpt-table tbody td { padding:9px 12px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
+    .rpt-table tbody tr:hover { background:#f9fafb; }
+    .doc-link { color:#1565c0; font-weight:700; text-decoration:none; cursor:pointer; }
     .doc-link:hover { text-decoration:underline; }
-    .status-badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.7rem; font-weight:700; }
-    .status-new { background:#e0e7ff; color:#3730a3; }
-    .status-inprogress { background:#dbeafe; color:#1e40af; }
-    .status-completed { background:#dcfce7; color:#166534; }
-    .status-cancelled { background:#fee2e2; color:#b91c1c; }
-    .row-actions { display:flex; gap:6px; }
+    .row-icon-actions { display:flex; gap:8px; }
+    .row-icon-btn { background:none; border:none; cursor:pointer; font-size:0.95rem; padding:2px; color:#6b7280; }
+    .row-icon-btn:hover { color:#1565c0; }
+    .row-icon-btn.danger:hover { color:#dc2626; }
+    .status-text { font-weight:700; font-size:0.8rem; }
+    .status-text.status-new { color:#3730a3; }
+    .status-text.status-inprogress { color:#1e40af; }
+    .status-text.status-completed { color:#166534; }
+    .status-text.status-cancelled { color:#b91c1c; }
     .empty-state { text-align:center; padding:40px 20px; color:#9ca3af; font-size:0.88rem; }
     .empty-state .big-icon { font-size:2.5rem; margin-bottom:8px; }
+    .list-footer { padding:10px 4px 0 4px; font-size:0.85rem; font-weight:700; color:#374151; }
 
     /* ── Detail View ── */
     .header-columns { display:grid; grid-template-columns:1.4fr 1fr; gap:32px; margin-bottom:10px; }
@@ -239,46 +273,39 @@
   </div>
 </div>
 
-<!-- LIST VIEW -->
+<!-- LIST VIEW - mirrors the native Cash Sales/Quotation listing shape: a filter bar
+     (Company / Status checkboxes / Search button) directly above the grid, no
+     title card in between; a compact search row with Clear + Reload; a green
+     "+New" inline with the grid toolbar; icon row-actions instead of a text
+     Delete button; plain-text (not pill) Status. -->
 <div class="card" id="view-list" style="max-width:1280px;">
-  <div class="rpt-toolbar">
-    <div class="hero-title-row">
-      <div style="font-size:1.1rem;">&#128203;</div>
-      <div>
-        <h2 style="margin-bottom:2px;">Service Report Listing</h2>
-        <div class="sub" style="margin-bottom:0;">All service reports for this company</div>
+  <div class="list-filter-row">
+    <div class="list-filter-field">
+      <label>Company:</label>
+      <select id="sel-company-filter"></select>
+    </div>
+    <div class="list-filter-field">
+      <label>Status:</label>
+      <div class="status-check-group">
+        <label><input type="checkbox" class="status-check" value="new" checked> New</label>
+        <label><input type="checkbox" class="status-check" value="inprogress" checked> In Progress</label>
+        <label><input type="checkbox" class="status-check" value="completed" checked> Completed</label>
+        <label><input type="checkbox" class="status-check" value="cancelled"> Cancelled</label>
       </div>
     </div>
-    <div class="btn-row">
-      <button class="btn-primary" id="btn-new-report">+ New Service Report</button>
-      <button class="btn-secondary" id="btn-load" disabled>Reload</button>
-    </div>
+    <button class="btn-list-search" id="btn-search-list" type="button">Search</button>
   </div>
-
-  <div class="filter-row">
-    <div class="form-group">
-      <label>Company</label>
-      <select id="sel-company-filter" style="min-width:200px;"></select>
-    </div>
-    <div class="form-group">
-      <label>Search</label>
-      <input type="text" id="inp-search" placeholder="Doc No / Customer / Reference..." style="min-width:240px;" />
-    </div>
-    <div class="form-group">
-      <label>Status</label>
-      <select id="sel-status-filter">
-        <option value="all">All Status</option>
-        <option value="new">New</option>
-        <option value="inprogress">In Progress</option>
-        <option value="completed">Completed</option>
-        <option value="cancelled">Cancelled</option>
-      </select>
-    </div>
+  <div class="list-search-row">
+    <label>Search:</label>
+    <input type="text" id="inp-search" placeholder="Doc No / Customer / Reference..." />
+    <a href="#" id="btn-clear-search">Clear</a>
+    <button class="btn-outline" id="btn-load" disabled style="margin-left:auto;">Reload</button>
   </div>
 
   <table class="rpt-table" id="rpt-table">
     <thead>
       <tr>
+        <th style="width:110px;"><button class="btn-list-new" id="btn-new-report" type="button">+ New</button></th>
         <th>Doc No</th>
         <th>Date</th>
         <th>Customer</th>
@@ -286,15 +313,15 @@
         <th>Received By</th>
         <th>Serviced By</th>
         <th>Status</th>
-        <th></th>
       </tr>
     </thead>
     <tbody id="rpt-tbody"></tbody>
   </table>
   <div class="empty-state" id="empty-state" style="display:none;">
     <div class="big-icon">&#128203;</div>
-    <div>No service reports yet. Click <b>+ New Service Report</b> to create one.</div>
+    <div>No service reports yet. Click <b>+ New</b> to create one.</div>
   </div>
+  <div class="list-footer" id="list-footer"></div>
 </div>
 
 <!-- DETAIL VIEW -->
@@ -1056,13 +1083,16 @@
     if ($sel.find('option[value="' + prev + '"]').length) $sel.val(prev); else if ($sel.find('option[value="' + DEFAULT_COMPANY_ID + '"]').length) $sel.val(DEFAULT_COMPANY_ID); else $sel.prop('selectedIndex', 0);
   }
 
+  function checkedStatuses() {
+    return $('.status-check:checked').map(function () { return $(this).val(); }).get();
+  }
   function renderList() {
     var q = ($('#inp-search').val() || '').toLowerCase();
-    var statusFilter = $('#sel-status-filter').val();
+    var statuses = checkedStatuses();
     var companyFilter = $('#sel-company-filter').val() || String(DEFAULT_COMPANY_ID);
     var filtered = reports.filter(function (r) {
       if (String(r.companyID || DEFAULT_COMPANY_ID) !== String(companyFilter)) return false;
-      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (statuses.length && statuses.indexOf(r.status) < 0) return false;
       if (!q) return true;
       return (r.code + ' ' + r.custName + ' ' + r.custCode + ' ' + r.ref).toLowerCase().indexOf(q) >= 0;
     });
@@ -1070,23 +1100,26 @@
     filtered.sort(function (a, b) { return (b.code || '').localeCompare(a.code || ''); });
     filtered.forEach(function (r) {
       var $tr = $('<tr>');
+      var $edit = $('<button class="row-icon-btn" title="Edit">&#9998;</button>').on('click', function (e) { e.stopPropagation(); openDetail(r.code); });
+      var $del = $('<button class="row-icon-btn danger" title="Delete">&#128465;</button>').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); });
+      $tr.append($('<td>').append($('<div class="row-icon-actions">').append($edit, $del)));
       $tr.append($('<td>').append($('<a class="doc-link" href="#">').text(r.code || '[unsaved]').on('click', function (e) { e.preventDefault(); openDetail(r.code); })));
       $tr.append($('<td>').text(fmtDate(r.date)));
       $tr.append($('<td>').text(r.custName ? (r.custCode + ' - ' + r.custName) : (r.custCode || '-')));
       $tr.append($('<td>').text(r.ref || '-'));
       $tr.append($('<td>').text(r.receivedBy || '-'));
       $tr.append($('<td>').text(r.servicedBy || '-'));
-      $tr.append($('<td>').append($('<span class="status-badge status-' + r.status + '">').text(statusLabel(r.status))));
-      var $del = $('<button class="btn-secondary btn-sm">').text('Delete').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); });
-      $tr.append($('<td>').append($('<div class="row-actions">').append($del)));
-      $tr.on('click', function () { openDetail(r.code); });
+      $tr.append($('<td>').append($('<span class="status-text status-' + r.status + '">').text(statusLabel(r.status).toUpperCase())));
       $tbody.append($tr);
     });
     $('#empty-state').toggle(filtered.length === 0);
     $('#rpt-table').toggle(filtered.length > 0);
+    $('#list-footer').text('Rec: ' + filtered.length);
   }
   $('#inp-search').on('input', renderList);
-  $('#sel-status-filter').on('change', renderList);
+  $('.status-check').on('change', renderList);
+  $('#btn-search-list').on('click', renderList);
+  $('#btn-clear-search').on('click', function (e) { e.preventDefault(); $('#inp-search').val(''); renderList(); });
   $('#sel-company-filter').on('change', renderList);
 
   function deleteReport(code) {
