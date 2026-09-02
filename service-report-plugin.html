@@ -498,9 +498,9 @@
           return;
         }
         var c = resp.data;
-        $('#d-cust-name').val(c.Cust_Description || c.Description || '');
-        $('#d-cust-phone').val(c.Cust_TelNo1 || c.TelNo1 || '');
-        var addr = [c.Cust_Address1, c.Cust_Address2, c.Cust_Address3].filter(Boolean).join(', ');
+        $('#d-cust-name').val(c.Cust_NAME || '');
+        $('#d-cust-phone').val(c.Cust_Phone1 || c.Cust_Mobile || '');
+        var addr = [c.Cust_MainAddress1, c.Cust_MainAddress2, c.Cust_MainAddress3, c.Cust_MainAddress4].filter(Boolean).join(', ');
         $('#d-cust-address').val(addr);
         $('#cust-lookup-status').text('Found');
         addLog('Customer lookup OK: ' + code);
