@@ -207,15 +207,6 @@
     </div>
   </div>
 
-  <div class="real-banner">
-    <b>Service Report Plugin.</b> Reads/writes real data via <code>api/Udf/ZZTGetDataTable</code> against the Master Data
-    table <code>ZZT_svcrpt</code> (register a Master Data entry with code <code>svcrpt</code> under the JinMenu7 module in
-    Module Editor before use). Each report is packed as JSON in <code>ZZC_Description</code>, keyed by <code>ZZC_Code</code>
-    (the Doc No). Customer Name/Address/Telephone are looked up live from the real Customer Master via
-    <code>api/Customer/GetCustomerByAccountCode</code> &mdash; read-only, never written back. Click the <b>system toolbar
-    Save</b> (when <code>Use System Toolbar</code> is enabled) to persist changes to the database.
-  </div>
-
   <div class="filter-row">
     <div class="form-group">
       <label>Company</label>
@@ -351,8 +342,10 @@
   </div>
 </div>
 
-<!-- Log -->
-<div class="card" style="max-width:1280px;">
+<!-- Event Log - kept in the DOM (addLog() still writes to it) but hidden from view,
+     since it's dev-facing debug output, not something an end user should see on a
+     production-looking screen. Inspect via devtools if needed. -->
+<div class="card" style="max-width:1280px; display:none;">
   <div class="log-label">Event Log</div>
   <ul id="log"></ul>
 </div>
