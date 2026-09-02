@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Service Report Plugin - Alaya</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5; color: #1a1a1a; min-height: 100vh; padding: 24px 20px; line-height: 1.5;
+    }
+    .card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06); padding: 24px 28px; max-width: 1280px; margin: 0 auto 16px auto;
+    }
+    h1 { font-size: 1.3rem; font-weight: 800; color: #111827; }
+    h2 { font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 12px; }
+    .sub { font-size: 0.82rem; color: #6b7280; margin-bottom: 14px; }
+    .sub code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    .badge-fail { background:#fee2e2; color:#991b1b; }
+    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#6b7280; }
+    .hero-card { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .hero-title-row { display:flex; align-items:center; gap:12px; }
+    .hero-icon {
+      flex-shrink:0; width:42px; height:42px; border-radius:11px;
+      background: linear-gradient(135deg, #0ea5a5, #14b8a6);
+      display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:#fff;
+    }
+    .real-banner {
+      background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0;
+      border-radius: 10px; padding: 12px 16px; font-size: 0.8rem; margin-bottom: 16px;
+    }
+    .real-banner code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .btn-primary { background:#0d9488; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#0f766e; }
+    .btn-secondary { background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
+    .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
+    .btn-danger { background:#dc2626; color:#fff; }
+    .btn-danger:hover:not(:disabled) { background:#b91c1c; }
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
+    .btn-sm { padding:5px 10px; font-size:0.74rem; border-radius:6px; }
+
+    /* ── Toolbar ── */
+    .rpt-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
+    .filter-row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px; }
+    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-group.full { grid-column:1/-1; }
+    .form-group label { font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
+    .form-group input, .form-group select, .form-group textarea {
+      border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.85rem; color:#111827; outline:none;
+      font-family:inherit; transition:border-color 0.15s;
+    }
+    .form-group input:disabled { background:#f9fafb; color:#6b7280; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color:#0d9488; box-shadow:0 0 0 3px rgba(13,148,136,0.1); }
+    .form-group select { min-width:140px; }
+
+    /* ── List View ── */
+    .rpt-table { width:100%; border-collapse:collapse; font-size:0.84rem; }
+    .rpt-table thead th {
+      text-align:left; padding:10px 12px; background:#f9fafb; border-bottom:2px solid #e5e7eb;
+      font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#6b7280;
+    }
+    .rpt-table tbody td { padding:10px 12px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
+    .rpt-table tbody tr:hover { background:#f9fafb; cursor:pointer; }
+    .doc-link { color:#0d9488; font-weight:700; text-decoration:none; }
+    .doc-link:hover { text-decoration:underline; }
+    .status-badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.7rem; font-weight:700; }
+    .status-new { background:#e0e7ff; color:#3730a3; }
+    .status-inprogress { background:#dbeafe; color:#1e40af; }
+    .status-completed { background:#dcfce7; color:#166534; }
+    .status-cancelled { background:#fee2e2; color:#b91c1c; }
+    .row-actions { display:flex; gap:6px; }
+    .empty-state { text-align:center; padding:40px 20px; color:#9ca3af; font-size:0.88rem; }
+    .empty-state .big-icon { font-size:2.5rem; margin-bottom:8px; }
+
+    /* ── Detail View ── */
+    .header-columns { display:grid; grid-template-columns:1.4fr 1fr; gap:32px; margin-bottom:10px; }
+    .header-col { display:flex; flex-direction:column; gap:12px; }
+    .header-col .form-group.full { grid-column:auto; }
+    .section-title {
+      font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; color:#0d9488;
+      margin:20px 0 10px 0; padding-top:14px; border-top:1px solid #f0f2f5;
+    }
+    .sub-grid-table { width:100%; border-collapse:collapse; font-size:0.82rem; margin-bottom:10px; }
+    .sub-grid-table th {
+      text-align:left; padding:8px 10px; background:#f9fafb; border-bottom:2px solid #e5e7eb;
+      font-size:0.7rem; font-weight:700; text-transform:uppercase; color:#6b7280;
+    }
+    .sub-grid-table td { padding:6px 8px; border-bottom:1px solid #f3f4f6; }
+    .sub-grid-table td input, .sub-grid-table td select {
+      width:100%; border:1px solid #e5e7eb; border-radius:6px; padding:6px 8px; font-size:0.82rem; font-family:inherit;
+    }
+    .sub-grid-empty { text-align:center; padding:16px; color:#9ca3af; font-size:0.8rem; }
+    .customer-row { display:flex; gap:8px; align-items:flex-end; }
+
+    /* ── Toast ── */
+    .toast {
+      position:fixed; top:16px; left:50%; transform:translateX(-50%);
+      background:#16a34a; color:#fff; font-weight:700; padding:10px 22px;
+      border-radius:999px; box-shadow:0 8px 24px rgba(0,0,0,0.15); z-index:9999;
+      opacity:0; pointer-events:none; transition:opacity 0.25s; font-size:0.84rem;
+    }
+    .toast.show { opacity:1; }
+    .toast.toast-error { background:#dc2626; }
+
+    .log-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#9ca3af; margin:14px 0 6px 0; }
+    #log { list-style:none; max-height:90px; overflow-y:auto; font-size:0.72rem; color:#4b5563; }
+    #log li { padding:2px 0; border-bottom:1px solid #f5f5f5; }
+    #log .ts { color:#b0b4bb; margin-right:5px; font-family:monospace; }
+
+    @media (max-width:900px) { .header-columns { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<!-- Status / handshake card -->
+<div class="card">
+  <div class="hero-card">
+    <div class="hero-title-row">
+      <div class="hero-icon">&#128295;</div>
+      <div>
+        <h1>Service Report</h1>
+        <div class="sub" style="margin-bottom:0;">Log customer equipment service visits &mdash; equipment received, action taken, and outcome.</div>
+      </div>
+    </div>
+    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span> <span id="save-status" class="badge" style="display:none;"></span></div>
+  </div>
+</div>
+
+<!-- LIST VIEW -->
+<div class="card" id="view-list" style="max-width:1280px;">
+  <div class="rpt-toolbar">
+    <div class="hero-title-row">
+      <div style="font-size:1.1rem;">&#128203;</div>
+      <div>
+        <h2 style="margin-bottom:2px;">Service Report Listing</h2>
+        <div class="sub" style="margin-bottom:0;">All service reports for this company</div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="btn-new-report">+ New Service Report</button>
+      <button class="btn-secondary" id="btn-load" disabled>Reload</button>
+    </div>
+  </div>
+
+  <div class="real-banner">
+    <b>Service Report Plugin.</b> Reads/writes real data via <code>api/Udf/ZZTGetDataTable</code> against the Master Data
+    table <code>ZZT_svcrpt</code> (register a Master Data entry with code <code>svcrpt</code> under the JinMenu7 module in
+    Module Editor before use). Each report is packed as JSON in <code>ZZC_Description</code>, keyed by <code>ZZC_Code</code>
+    (the Doc No). Customer Name/Address/Telephone are looked up live from the real Customer Master via
+    <code>api/Customer/GetCustomerByAccountCode</code> &mdash; read-only, never written back. Click the <b>system toolbar
+    Save</b> (when <code>Use System Toolbar</code> is enabled) to persist changes to the database.
+  </div>
+
+  <div class="filter-row">
+    <div class="form-group">
+      <label>Company</label>
+      <select id="sel-company-filter" style="min-width:200px;"></select>
+    </div>
+    <div class="form-group">
+      <label>Search</label>
+      <input type="text" id="inp-search" placeholder="Doc No / Customer / Reference..." style="min-width:240px;" />
+    </div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="sel-status-filter">
+        <option value="all">All Status</option>
+        <option value="new">New</option>
+        <option value="inprogress">In Progress</option>
+        <option value="completed">Completed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    </div>
+  </div>
+
+  <table class="rpt-table" id="rpt-table">
+    <thead>
+      <tr>
+        <th>Doc No</th>
+        <th>Date</th>
+        <th>Customer</th>
+        <th>Reference</th>
+        <th>Received By</th>
+        <th>Serviced By</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="rpt-tbody"></tbody>
+  </table>
+  <div class="empty-state" id="empty-state" style="display:none;">
+    <div class="big-icon">&#128203;</div>
+    <div>No service reports yet. Click <b>+ New Service Report</b> to create one.</div>
+  </div>
+</div>
+
+<!-- DETAIL VIEW -->
+<div class="card" id="view-detail" style="max-width:1280px; display:none;">
+  <div class="rpt-toolbar">
+    <div class="hero-title-row">
+      <div style="font-size:1.1rem;">&#128295;</div>
+      <div>
+        <h2 style="margin-bottom:2px;" id="detail-title">New Service Report</h2>
+        <div class="sub" style="margin-bottom:0;">Fill in customer, equipment and action-taken details</div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-secondary" id="btn-back-to-list">&larr; Back to List</button>
+      <button class="btn-danger" id="btn-delete-report" style="display:none;">Delete</button>
+    </div>
+  </div>
+
+  <!-- Two-column header, matching the sample: Account/Name/Address/Telephone/Remark on the
+       left, Doc No/Date/Expiry/Received By/Serviced By/Status on the right. -->
+  <div class="header-columns">
+    <div class="header-col">
+      <div class="form-group full">
+        <label>Account (Customer Code) *</label>
+        <div class="customer-row">
+          <input type="text" id="d-cust-code" placeholder="e.g. 000000462" />
+          <button class="btn-secondary btn-sm" id="btn-lookup-customer" type="button">F11 Lookup</button>
+        </div>
+        <span id="cust-lookup-status" class="sub" style="margin-bottom:0;"></span>
+      </div>
+      <div class="form-group full"><label>Name</label><input type="text" id="d-cust-name" disabled /></div>
+      <div class="form-group full"><label>Address</label><input type="text" id="d-cust-address" disabled /></div>
+      <div class="form-group full"><label>Telephone</label><input type="text" id="d-cust-phone" disabled /></div>
+      <div class="form-group full"><label>Remark</label><textarea id="d-remark" style="min-height:70px;"></textarea></div>
+    </div>
+    <div class="header-col">
+      <div class="form-group full"><label>Doc No</label><input type="text" id="d-docno" disabled placeholder="[Auto on Save]" /></div>
+      <div class="form-group full"><label>Date *</label><input type="date" id="d-date" /></div>
+      <div class="form-group full"><label>Expiry Date</label><input type="date" id="d-expiry" /></div>
+      <div class="form-group full"><label>Reference</label><input type="text" id="d-ref" /></div>
+      <div class="form-group full"><label>Received By</label><input type="text" id="d-received-by" /></div>
+      <div class="form-group full"><label>Serviced By</label><input type="text" id="d-serviced-by" /></div>
+      <div class="form-group full">
+        <label>Status</label>
+        <select id="d-status">
+          <option value="new" selected>NEW</option>
+          <option value="inprogress">IN PROGRESS</option>
+          <option value="completed">COMPLETED</option>
+          <option value="cancelled">CANCELLED</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Equipment</div>
+  <table class="sub-grid-table" id="equip-table">
+    <thead><tr><th style="width:4%">No</th><th style="width:24%">Description</th><th style="width:16%">Brand</th><th style="width:16%">Model</th><th style="width:16%">S/N</th><th style="width:20%">Remark</th><th style="width:4%"></th></tr></thead>
+    <tbody id="equip-tbody"></tbody>
+  </table>
+  <div class="sub-grid-empty" id="equip-empty" style="display:none;">No equipment added yet.</div>
+  <button class="btn-secondary btn-sm" id="btn-add-equip" type="button">+ Add Equipment</button>
+
+  <!-- Tabbed like the sample's "Action Taken" / "Remark" panel (Remark already lives in the
+       left column above, so this tab strip only needs Action Taken for now). -->
+  <div class="section-title">Action Taken</div>
+  <table class="sub-grid-table" id="action-table">
+    <thead><tr><th style="width:14%">Item No</th><th style="width:32%">Description</th><th style="width:12%">UOM</th><th style="width:12%">Qty</th><th style="width:16%">Price</th><th style="width:8%"></th></tr></thead>
+    <tbody id="action-tbody"></tbody>
+  </table>
+  <div class="sub-grid-empty" id="action-empty" style="display:none;">No action-taken lines added yet.</div>
+  <button class="btn-secondary btn-sm" id="btn-add-action" type="button">+ Add Line</button>
+
+  <div class="btn-row" style="margin-top:20px;">
+    <button class="btn-primary" id="btn-save-detail">Save (local) &mdash; then use system toolbar Save to persist</button>
+    <button class="btn-secondary" id="btn-cancel-detail">Cancel</button>
+  </div>
+</div>
+
+<!-- Log -->
+<div class="card" style="max-width:1280px;">
+  <div class="log-label">Event Log</div>
+  <ul id="log"></ul>
+</div>
+
+<script>
+  /* Matches the DevKey now registered on the JinMenu7 module (Module Editor > Edit
+     Module > DevKey) - reused from jinmenu6/jm6todo since DevKey appears to protect
+     module export rather than scope per-module API access (per its own tooltip:
+     "You need to provide the same DevKey to export this module"). */
+  var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+  var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
+  var hostOrigin = '';
+  var REPORT_TABLE_CODE = 'svcrpt';
+  var DEFAULT_COMPANY_ID = 548; // matches jin's default test company (JIN6 SDN BHD)
+  var DEFAULT_COMPANY_NAME = 'JIN6 SDN BHD';
+  /* No company-list API is confirmed reachable from a plugin iframe (ALAYA_INIT's
+     payload only carries apiurl/nonce/client/username — no company/companyid field,
+     confirmed against every other plugin in this repo). Until a real endpoint is
+     found, the Company filter is populated from whatever companyID/companyName
+     values actually show up in loaded records, seeded with the default company so
+     the dropdown is never empty on a fresh table. */
+  var pendingDcbCallbacks = {};
+
+  var reports = [];
+  var editingCode = null; // null = new report
+  var hasUnsavedChanges = false;
+  var isSaving = false;
+
+  function ts() { return new Date().toLocaleTimeString(); }
+  function addLog(msg) { $('#log').prepend($('<li>').append($('<span class="ts">').text(ts()), document.createTextNode(msg))); }
+  function postToParent(type, data) {
+    if (window.parent && window.parent !== window) { window.parent.postMessage({ type: type, data: data }, '*'); addLog('Sent -> ' + type); }
+  }
+  function todayStr() { var t = new Date(); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); }
+  function fmtDate(s) { if (!s) return '-'; var d = new Date(s); if (isNaN(d.getTime())) return s; return d.toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  function showToast(msg, isError) {
+    var $t = $('#toast');
+    $t.text(msg).toggleClass('toast-error', !!isError).addClass('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(function () { $t.removeClass('show'); }, 2500);
+  }
+  function markDirty(reason) {
+    hasUnsavedChanges = true;
+    setSaveStatus('Unsaved changes', 'badge-fail');
+    addLog('Local change' + (reason ? ' (' + reason + ')' : '') + ' — click Save in system toolbar to persist');
+    try { postToParent('ALAYA_DIRTY', { dirty: true, reason: reason || 'report change' }); } catch (e) {}
+    try { postToParent('ALAYA_HAS_UNSAVED_CHANGES', { hasUnsavedChanges: true }); } catch (e) {}
+  }
+  function clearDirty() {
+    hasUnsavedChanges = false;
+    try { postToParent('ALAYA_DIRTY', { dirty: false }); } catch (e) {}
+    try { postToParent('ALAYA_HAS_UNSAVED_CHANGES', { hasUnsavedChanges: false }); } catch (e) {}
+  }
+  function setSaveStatus(text, cls) {
+    var $b = $('#save-status');
+    if (!$b.length) return;
+    $b.attr('class', 'badge ' + (cls || '')).css('display', 'inline-block').text(text);
+  }
+
+  /* ── ALAYA_INIT handshake ── */
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.type !== 'ALAYA_INIT') return;
+    addLog('Received <- ALAYA_INIT');
+    hostOrigin = e.originalEvent.origin || '';
+    var payload = msg.data !== undefined ? msg.data : msg;
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
+    if (payload && payload.nonce) nonce = payload.nonce;
+    if (payload && payload.client) clientId = payload.client;
+    if (payload && payload.username) username = payload.username;
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+    if (apiUrl && nonce && clientId && username) requestToken();
+    if (username) { $('#d-received-by').val(username); }
+    if (hostOrigin) {
+      window.top.postMessage({ target: hostOrigin, eval:
+        '(function(){' +
+        'if(document.getElementById("hidden-memo-frame"))return;' +
+        'var f=document.createElement("iframe");' +
+        'f.id="hidden-memo-frame";' +
+        'f.style.display="none";' +
+        'f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+        'document.body.appendChild(f);' +
+        '})();'
+      }, '*');
+      addLog('Pre-loading hidden memoQuery iframe in host window');
+      try { hookHostToolbarSave(); } catch (err) { addLog('hookHostToolbarSave deferred: ' + err.message); }
+    }
+  });
+
+  window.doSaveReportsToDb = doSaveReportsToDb;
+  window.pluginSave = doSaveReportsToDb;
+  window.AlayaSave = doSaveReportsToDb;
+  window.onSave = doSaveReportsToDb;
+
+  function requestToken() {
+    addLog('POST ' + apiUrl + 'token');
+    $.ajax({
+      url: apiUrl + 'token', type: 'POST', cache: false,
+      data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+      success: function (r) {
+        authToken = r.token_type + ' ' + r.access_token;
+        addLog('Token obtained');
+        $('#btn-load').prop('disabled', false);
+        loadCompaniesFromApi();
+        loadReportsFromDb();
+      },
+      error: function (r) {
+        var msg = '';
+        try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch (e) { msg = r.responseText || 'Unknown'; }
+        addLog('Token failed: ' + msg);
+      }
+    });
+  }
+
+  /* ── Company list (real, read-only) ──
+     GET api/Company/GetAllCompany -> { data: [ {CO_ID, CO_Code, CO_Name}, ... ] }
+     confirmed live against SIT (returns all companies the account can access).
+     Populates the Company filter with real companies instead of deriving options
+     from whatever's already been saved. */
+  var companies = [];
+  function loadCompaniesFromApi() {
+    if (!apiUrl || !authToken) return;
+    var endpoint = apiUrl + 'api/Company/GetAllCompany';
+    addLog('GET ' + endpoint);
+    $.ajax({
+      url: endpoint, type: 'GET', cache: false,
+      headers: { 'Authorization': authToken },
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        if (!data.length) { addLog('GetAllCompany returned no rows - keeping default company only'); return; }
+        companies = data.map(function (c) { return { id: c.CO_ID, code: c.CO_Code, name: c.CO_Name }; });
+        addLog('Loaded ' + companies.length + ' companies from GetAllCompany');
+        renderCompanyFilterOptions();
+        renderList();
+      },
+      error: function (xhr) { addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company only'); }
+    });
+  }
+
+  /* ── Customer lookup (read-only) ──
+     api/Customer/GetCustomerByAccountCode { accountCode, companyID } -> real
+     Customer Master row. Never written back (unlike the AR plugin's Notes
+     write path, which has known side effects) — this is read-only autofill. */
+  function lookupCustomer() {
+    var code = ($('#d-cust-code').val() || '').trim();
+    if (!code) { showToast('Enter a Customer Account Code first', true); return; }
+    if (!apiUrl || !authToken) { showToast('Not connected to host yet', true); return; }
+    $('#cust-lookup-status').text('Looking up…');
+    var endpoint = apiUrl + 'api/Customer/GetCustomerByAccountCode';
+    addLog('POST ' + endpoint + ' { accountCode: "' + code + '" }');
+    $.ajax({
+      url: endpoint, type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken },
+      data: JSON.stringify({ accountCode: code, companyID: DEFAULT_COMPANY_ID }),
+      success: function (resp) {
+        if (!resp || resp.Result === false || !resp.data) {
+          $('#cust-lookup-status').text('Not found');
+          $('#d-cust-name, #d-cust-phone, #d-cust-address').val('');
+          addLog('Customer lookup failed: ' + (resp && resp.msg));
+          showToast('Customer not found', true);
+          return;
+        }
+        var c = resp.data;
+        $('#d-cust-name').val(c.Cust_Description || c.Description || '');
+        $('#d-cust-phone').val(c.Cust_TelNo1 || c.TelNo1 || '');
+        var addr = [c.Cust_Address1, c.Cust_Address2, c.Cust_Address3].filter(Boolean).join(', ');
+        $('#d-cust-address').val(addr);
+        $('#cust-lookup-status').text('Found');
+        addLog('Customer lookup OK: ' + code);
+        markDirty('customer lookup');
+      },
+      error: function (xhr) {
+        $('#cust-lookup-status').text('Lookup failed');
+        addLog('Customer lookup error (' + xhr.status + ')');
+        showToast('Customer lookup failed', true);
+      }
+    });
+  }
+  $('#btn-lookup-customer').on('click', lookupCustomer);
+
+  /* ── Host eval-bridge write path (identical mechanism to jm6todo) ──
+     No REST write API exists in SIT; only ZZTGetDataTable is callable from a
+     cross-origin plugin iframe. Persist via the host's memoQuery controller +
+     WebForm_DoCallback, reached through a hidden m_UserDefinedFieldModuleEditor.aspx
+     iframe pre-loaded on ALAYA_INIT. */
+  var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
+
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.source !== 'alaya-dcb-result' || !msg.requestId) return;
+    var cb = pendingDcbCallbacks[msg.requestId];
+    if (!cb) return;
+    delete pendingDcbCallbacks[msg.requestId];
+    clearTimeout(cb.timer);
+    cb.resolve(msg);
+  });
+
+  function executeSqlViaHost(sql) {
+    return new Promise(function (resolve, reject) {
+      if (!hostOrigin) { reject(new Error('Host origin unknown — ALAYA_INIT not received yet')); return; }
+      var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      var timer = setTimeout(function () {
+        delete pendingDcbCallbacks[requestId];
+        reject(new Error('Database callback timed out after 60s'));
+      }, 60000);
+      pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+      var evalScript =
+        '(function(){' +
+        'try{' +
+          'var sql=result.sql, reqId=result.requestId;' +
+          'function findMemoFrame(win){' +
+            'try{ if(typeof win.memoQuery==="object" && typeof win.WebForm_DoCallback==="function") return win; }catch(e){}' +
+            'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){}' +
+            'return null;' +
+          '}' +
+          'function bcast(m){' +
+            'function postAll(win){' +
+              'try{ win.postMessage(m,"*"); }catch(e){}' +
+              'try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}' +
+            '}' +
+            'postAll(window);' +
+          '}' +
+          'function runOnMemo(mf){' +
+            'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+            'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+            'var arg="RunQuery|"+JSON.stringify(hdr);' +
+            'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+            'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+            'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+          '}' +
+          'var mf=findMemoFrame(window);' +
+          'if(mf){ runOnMemo(mf); return; }' +
+          'var hidden=document.getElementById("hidden-memo-frame");' +
+          'if(hidden && hidden.contentWindow){' +
+            'try{ if(typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+          '}' +
+          'if(!hidden){' +
+            'hidden=document.createElement("iframe");' +
+            'hidden.id="hidden-memo-frame";' +
+            'hidden.style.display="none";' +
+            'hidden.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+            'document.body.appendChild(hidden);' +
+          '}' +
+          'var attempts=0;' +
+          'function poll(){' +
+            'attempts++;' +
+            'try{ if(hidden.contentWindow && typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+            'if(attempts<40){ setTimeout(poll,500); }' +
+            'else { bcast({source:"alaya-dcb-result",requestId:reqId,error:"memoQuery not available after 20s (hidden iframe load failed)"}); }' +
+          '}' +
+          'poll();' +
+        '}catch(e){ bcast({source:"alaya-dcb-result",requestId:result.requestId,error:e.message}); }' +
+        '})();';
+      window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
+      addLog('POST eval-bridge RunQuery (sql ' + sql.length + ' chars, id ' + requestId + ')');
+    });
+  }
+
+  function doSaveReportsToDb() {
+    if (isSaving) { addLog('Save already in progress — please wait'); return Promise.resolve(false); }
+    if (!hostOrigin) { addLog('Save skipped — no host origin yet (ALAYA_INIT pending)'); showToast('Save failed — not connected to host', true); return Promise.resolve(false); }
+    if (!hasUnsavedChanges) {
+      addLog('Save clicked — no unsaved changes');
+      setSaveStatus('No changes to save', 'badge-waiting');
+      showToast('No changes to save');
+      setTimeout(function () { if (!hasUnsavedChanges) setSaveStatus('All changes saved', 'badge-received'); }, 1800);
+      try { postToParent('ALAYA_SAVE_COMPLETED', { success: true, noChanges: true }); } catch (e) {}
+      return Promise.resolve(true);
+    }
+    isSaving = true;
+    var sql = buildExportSql();
+    setSaveStatus('Saving…', 'badge-waiting');
+    addLog('Saving ' + reports.length + ' reports to DB via host eval bridge…');
+    return executeSqlViaHost(sql).then(function (msg) {
+      isSaving = false;
+      if (msg.error) {
+        setSaveStatus('Save failed', 'badge-fail');
+        addLog('DB save ERROR: ' + msg.error);
+        showToast('Save failed — ' + msg.error, true);
+        try { postToParent('ALAYA_SAVE_FAILED', { success: false, error: msg.error }); } catch (e) {}
+        return false;
+      }
+      var parsed = null;
+      try { parsed = JSON.parse(msg.result); } catch (e) { parsed = null; }
+      var ok = parsed && parsed.success;
+      if (ok && parsed.results) { for (var i = 0; i < parsed.results.length; i++) { if (parsed.results[i].success === false) { ok = false; break; } } }
+      if (ok) {
+        clearDirty();
+        setSaveStatus('Saved successfully', 'badge-received');
+        addLog('DB save OK — ' + reports.length + ' reports persisted. Reloading from DB…');
+        showToast('Save successful — ' + reports.length + ' reports saved');
+        try { postToParent('ALAYA_SAVE_SUCCESS', { success: true, count: reports.length }); } catch (e) {}
+        try { postToParent('ALAYA_SAVE_COMPLETED', { success: true }); } catch (e) {}
+        loadReportsFromDb();
+        return true;
+      } else {
+        setSaveStatus('Save failed', 'badge-fail');
+        addLog('DB save FAILED — server reported success=false. Result: ' + (msg.result || '').slice(0, 300));
+        showToast('Save failed — server error', true);
+        try { postToParent('ALAYA_SAVE_FAILED', { success: false, result: msg.result }); } catch (e) {}
+        return false;
+      }
+    }).catch(function (err) {
+      isSaving = false;
+      setSaveStatus('Save failed', 'badge-fail');
+      var m = (err && err.message ? err.message : String(err));
+      addLog('DB save ERROR: ' + m);
+      showToast('Save failed — ' + m, true);
+      try { postToParent('ALAYA_SAVE_FAILED', { success: false, error: m }); } catch (e) {}
+      return false;
+    });
+  }
+
+  function hookHostToolbarSave() {
+    if (!hostOrigin) return;
+    var evalScript =
+      '(function(){' +
+      'try{' +
+        'if(window.__svcrptSaveHookInstalled) return;' +
+        'window.__svcrptSaveHookInstalled = true;' +
+        'function findPluginFrameInDoc(doc, depth){' +
+          'if(!doc || depth>3) return null;' +
+          'var iframes=doc.querySelectorAll("iframe");' +
+          'for(var i=0;i<iframes.length;i++){' +
+            'var s=iframes[i].src||"";' +
+            'if(s.indexOf("service-report-plugin.html")>=0) return iframes[i];' +
+            'try{ var c=findPluginFrameInDoc(iframes[i].contentDocument, depth+1); if(c) return c; }catch(e){}' +
+          '}' +
+          'return null;' +
+        '}' +
+        'function findSaveBtnInDoc(doc, depth){' +
+          'if(!doc || depth>3) return null;' +
+          'var byId=doc.getElementById("ctl00_mToolBars_DXI1_");' +
+          'if(byId) return byId;' +
+          'var els=doc.querySelectorAll("a,button,li,span,div");' +
+          'for(var i=0;i<els.length;i++){' +
+            'var t=(els[i].innerText||els[i].textContent||"").trim();' +
+            'if(t==="Save"){ var r=els[i].getBoundingClientRect(); if(r.width>0) return els[i]; }' +
+          '}' +
+          'var iframes=doc.querySelectorAll("iframe");' +
+          'for(var i=0;i<iframes.length;i++){ try{ var c=findSaveBtnInDoc(iframes[i].contentDocument, depth+1); if(c) return c; }catch(e){} }' +
+          'return null;' +
+        '}' +
+        'function notifyPlugin(){' +
+          'var pf=findPluginFrameInDoc(document,0);' +
+          'if(pf && pf.contentWindow){' +
+            'try{ pf.contentWindow.postMessage({type:"ALAYA_SAVE", source:"host-toolbar"}, "*"); }catch(e){}' +
+          '}' +
+        '}' +
+        'function attach(){' +
+          'var btn=findSaveBtnInDoc(document,0);' +
+          'if(btn && !btn.__svcrptHooked){ btn.__svcrptHooked=true; btn.addEventListener("click", function(e){ setTimeout(notifyPlugin, 80); }, true); }' +
+          'return !!btn;' +
+        '}' +
+        'if(!attach()){ var attempts=0; var iv=setInterval(function(){ attempts++; if(attach() || attempts>40) clearInterval(iv); }, 500); }' +
+        'try{ var mo=new MutationObserver(function(){ attach(); }); mo.observe(document.body, {childList:true, subtree:true}); }catch(e){}' +
+      '}catch(e){}' +
+      '})();';
+    window.top.postMessage({ target: hostOrigin, eval: evalScript }, '*');
+    addLog('Hooking host system toolbar Save → plugin save');
+  }
+
+  window.addEventListener('message', function (e) {
+    var msg = e.data;
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.source === 'alaya-dcb-result') return;
+    if (msg.type === 'ALAYA_INIT') return;
+    var t = (msg.type || msg.action || msg.command || msg.event || '').toString();
+    if (/save/i.test(t)) {
+      if (t === 'ALAYA_SAVE_SUCCESS' || t === 'ALAYA_SAVE_FAILED' || t === 'ALAYA_SAVE_COMPLETED') return;
+      addLog('Received <- ' + (t || 'unknown'));
+      doSaveReportsToDb();
+    }
+  });
+
+  $(document).on('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); doSaveReportsToDb(); }
+  });
+  window.addEventListener('beforeunload', function (e) {
+    if (hasUnsavedChanges) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  /* ── Load reports (ZZTGetDataTable) ── */
+  function loadReportsFromDb() {
+    if (!apiUrl || !authToken) { addLog('No token yet - cannot load from DB'); return; }
+    var endpoint = apiUrl + 'api/Udf/ZZTGetDataTable';
+    addLog('POST ' + endpoint + ' { tableName: "' + REPORT_TABLE_CODE + '" }');
+    $('#btn-load').prop('disabled', true).text('Loading...');
+    $.ajax({
+      url: endpoint, type: 'POST', cache: false, contentType: 'application/json; charset=UTF-8',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ tableName: REPORT_TABLE_CODE }),
+      success: function (response) {
+        if (!response || response.Result === false) { addLog('API Error: ' + (response && response.Message)); renderList(); return; }
+        var obj = response.Obj || [];
+        var rows = [];
+        for (var i = 0; i < obj.length; i++) {
+          if (obj[i] === null || typeof obj[i] !== 'object') continue;
+          if (obj[i].rowNum !== undefined && obj[i].rowNum > 0) rows.push(obj[i]);
+          else if (obj[i].ZZC_Code) rows.push(obj[i]);
+        }
+        reports = rows.map(function (r) {
+          var meta = {};
+          try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
+          return $.extend({ code: r.ZZC_Code || '' }, {
+            date: meta.date || '', expiry: meta.expiry || '', status: (meta.status || 'new').toLowerCase(),
+            companyID: meta.companyID || DEFAULT_COMPANY_ID, companyName: meta.companyName || DEFAULT_COMPANY_NAME,
+            custCode: meta.custCode || '', custName: meta.custName || '', custPhone: meta.custPhone || '', custAddress: meta.custAddress || '',
+            ref: meta.ref || '', receivedBy: meta.receivedBy || '', servicedBy: meta.servicedBy || '', remark: meta.remark || '',
+            equipment: meta.equipment || [], actionTaken: meta.actionTaken || [],
+            createdAt: meta.createdAt || '', createdBy: meta.createdBy || ''
+          });
+        });
+        addLog('Loaded ' + reports.length + ' service reports from DB table ' + REPORT_TABLE_CODE);
+        renderCompanyFilterOptions();
+        renderList();
+        clearDirty();
+        setSaveStatus('All changes saved', 'badge-received');
+      },
+      error: function (xhr) { addLog('DB load failed (' + xhr.status + ')'); renderList(); clearDirty(); },
+      complete: function () { $('#btn-load').prop('disabled', false).text('Reload'); }
+    });
+  }
+  $('#btn-load').on('click', function () { loadReportsFromDb(); });
+
+  /* ── List rendering ── */
+  function statusLabel(s) { return { new: 'New', inprogress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled' }[s] || s; }
+
+  /* Company filter, positioned first in the filter row like Quotation/Cash Sales.
+     Populated from distinct companyID/companyName pairs actually present in the
+     loaded reports (seeded with the default company so it's never empty). */
+  function renderCompanyFilterOptions() {
+    var $sel = $('#sel-company-filter');
+    var prev = $sel.val() || String(DEFAULT_COMPANY_ID);
+    var opts;
+    if (companies.length) {
+      // Real list from GetAllCompany.
+      opts = companies.map(function (c) { return { id: c.id, name: c.code + ' - ' + c.name }; });
+    } else {
+      // Fallback before the API call resolves (or if it fails): derive from
+      // whatever companyID/companyName values are already on loaded records,
+      // seeded with the default company so the dropdown is never empty.
+      var seen = {}; opts = [{ id: DEFAULT_COMPANY_ID, name: DEFAULT_COMPANY_NAME }];
+      seen[DEFAULT_COMPANY_ID] = true;
+      reports.forEach(function (r) {
+        if (r.companyID && !seen[r.companyID]) { seen[r.companyID] = true; opts.push({ id: r.companyID, name: r.companyName || ('Company ' + r.companyID) }); }
+      });
+    }
+    $sel.empty();
+    opts.forEach(function (o) { $sel.append($('<option>').val(o.id).text(o.name)); });
+    if ($sel.find('option[value="' + prev + '"]').length) $sel.val(prev); else if ($sel.find('option[value="' + DEFAULT_COMPANY_ID + '"]').length) $sel.val(DEFAULT_COMPANY_ID); else $sel.prop('selectedIndex', 0);
+  }
+
+  function renderList() {
+    var q = ($('#inp-search').val() || '').toLowerCase();
+    var statusFilter = $('#sel-status-filter').val();
+    var companyFilter = $('#sel-company-filter').val() || String(DEFAULT_COMPANY_ID);
+    var filtered = reports.filter(function (r) {
+      if (String(r.companyID || DEFAULT_COMPANY_ID) !== String(companyFilter)) return false;
+      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (!q) return true;
+      return (r.code + ' ' + r.custName + ' ' + r.custCode + ' ' + r.ref).toLowerCase().indexOf(q) >= 0;
+    });
+    var $tbody = $('#rpt-tbody').empty();
+    filtered.sort(function (a, b) { return (b.code || '').localeCompare(a.code || ''); });
+    filtered.forEach(function (r) {
+      var $tr = $('<tr>');
+      $tr.append($('<td>').append($('<a class="doc-link" href="#">').text(r.code || '[unsaved]').on('click', function (e) { e.preventDefault(); openDetail(r.code); })));
+      $tr.append($('<td>').text(fmtDate(r.date)));
+      $tr.append($('<td>').text(r.custName ? (r.custCode + ' - ' + r.custName) : (r.custCode || '-')));
+      $tr.append($('<td>').text(r.ref || '-'));
+      $tr.append($('<td>').text(r.receivedBy || '-'));
+      $tr.append($('<td>').text(r.servicedBy || '-'));
+      $tr.append($('<td>').append($('<span class="status-badge status-' + r.status + '">').text(statusLabel(r.status))));
+      var $del = $('<button class="btn-secondary btn-sm">').text('Delete').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); });
+      $tr.append($('<td>').append($('<div class="row-actions">').append($del)));
+      $tr.on('click', function () { openDetail(r.code); });
+      $tbody.append($tr);
+    });
+    $('#empty-state').toggle(filtered.length === 0);
+    $('#rpt-table').toggle(filtered.length > 0);
+  }
+  $('#inp-search').on('input', renderList);
+  $('#sel-status-filter').on('change', renderList);
+  $('#sel-company-filter').on('change', renderList);
+
+  function deleteReport(code) {
+    if (!confirm('Remove service report ' + code + '? This only changes the local list — click the system toolbar Save to persist.')) return;
+    reports = reports.filter(function (r) { return r.code !== code; });
+    markDirty('delete ' + code);
+    renderList();
+  }
+
+  /* ── Detail view ── */
+  function blankReport() {
+    var companyID = parseInt($('#sel-company-filter').val(), 10) || DEFAULT_COMPANY_ID;
+    var match = companies.filter(function (c) { return c.id === companyID; })[0];
+    var companyName = match ? match.name : DEFAULT_COMPANY_NAME;
+    return { code: '', date: todayStr(), expiry: '', status: 'new', companyID: companyID, companyName: companyName, custCode: '', custName: '', custPhone: '', custAddress: '', ref: '', receivedBy: username || '', servicedBy: '', remark: '', equipment: [], actionTaken: [], createdAt: '', createdBy: username || '' };
+  }
+  var editingReport = blankReport();
+
+  function openDetail(code) {
+    var found = code ? reports.filter(function (r) { return r.code === code; })[0] : null;
+    editingReport = found ? $.extend(true, {}, found) : blankReport();
+    editingCode = found ? code : null;
+    $('#detail-title').text(found ? ('Service Report ' + code) : 'New Service Report');
+    $('#btn-delete-report').toggle(!!found);
+    $('#d-docno').val(found ? code : '');
+    $('#d-date').val(editingReport.date || todayStr());
+    $('#d-expiry').val(editingReport.expiry || '');
+    $('#d-status').val(editingReport.status || 'new');
+    $('#d-cust-code').val(editingReport.custCode || '');
+    $('#d-cust-name').val(editingReport.custName || '');
+    $('#d-cust-phone').val(editingReport.custPhone || '');
+    $('#d-cust-address').val(editingReport.custAddress || '');
+    $('#d-ref').val(editingReport.ref || '');
+    $('#d-received-by').val(editingReport.receivedBy || '');
+    $('#d-serviced-by').val(editingReport.servicedBy || '');
+    $('#d-remark').val(editingReport.remark || '');
+    $('#cust-lookup-status').text('');
+    renderEquipTable();
+    renderActionTable();
+    $('#view-list').hide();
+    $('#view-detail').show();
+  }
+  $('#btn-new-report').on('click', function () { openDetail(null); });
+  $('#btn-back-to-list').on('click', function () { $('#view-detail').hide(); $('#view-list').show(); renderList(); });
+  $('#btn-cancel-detail').on('click', function () { $('#view-detail').hide(); $('#view-list').show(); });
+  $('#btn-delete-report').on('click', function () { if (editingCode) { deleteReport(editingCode); $('#view-detail').hide(); $('#view-list').show(); } });
+
+  function renderEquipTable() {
+    var $tb = $('#equip-tbody').empty();
+    (editingReport.equipment || []).forEach(function (eq, i) {
+      var $tr = $('<tr>');
+      $tr.append($('<td>').text(i + 1));
+      $tr.append($('<td>').append($('<input>').val(eq.desc || '').on('input', function () { editingReport.equipment[i].desc = $(this).val(); })));
+      $tr.append($('<td>').append($('<input>').val(eq.brand || '').on('input', function () { editingReport.equipment[i].brand = $(this).val(); })));
+      $tr.append($('<td>').append($('<input>').val(eq.model || '').on('input', function () { editingReport.equipment[i].model = $(this).val(); })));
+      $tr.append($('<td>').append($('<input>').val(eq.sn || '').on('input', function () { editingReport.equipment[i].sn = $(this).val(); })));
+      $tr.append($('<td>').append($('<input>').val(eq.remark || '').on('input', function () { editingReport.equipment[i].remark = $(this).val(); })));
+      $tr.append($('<td>').append($('<button class="btn-secondary btn-sm">').text('✕').on('click', function () { editingReport.equipment.splice(i, 1); renderEquipTable(); })));
+      $tb.append($tr);
+    });
+    $('#equip-empty').toggle((editingReport.equipment || []).length === 0);
+  }
+  $('#btn-add-equip').on('click', function () { editingReport.equipment = editingReport.equipment || []; editingReport.equipment.push({ desc: '', brand: '', model: '', sn: '', remark: '' }); renderEquipTable(); });
+
+  function renderActionTable() {
+    var $tb = $('#action-tbody').empty();
+    (editingReport.actionTaken || []).forEach(function (a, i) {
+      var $tr = $('<tr>');
+      $tr.append($('<td>').append($('<input>').val(a.item || '').on('input', function () { editingReport.actionTaken[i].item = $(this).val(); })));
+      $tr.append($('<td>').append($('<input>').val(a.desc || '').on('input', function () { editingReport.actionTaken[i].desc = $(this).val(); })));
+      $tr.append($('<td>').append($('<input>').val(a.uom || '').on('input', function () { editingReport.actionTaken[i].uom = $(this).val(); })));
+      $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; })));
+      $tr.append($('<td>').append($('<input type="number" step="0.01" min="0">').val(a.price || 0).on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; })));
+      $tr.append($('<td>').append($('<button class="btn-secondary btn-sm">').text('✕').on('click', function () { editingReport.actionTaken.splice(i, 1); renderActionTable(); })));
+      $tb.append($tr);
+    });
+    $('#action-empty').toggle((editingReport.actionTaken || []).length === 0);
+  }
+  $('#btn-add-action').on('click', function () { editingReport.actionTaken = editingReport.actionTaken || []; editingReport.actionTaken.push({ item: '', desc: '', uom: '', qty: 1, price: 0 }); renderActionTable(); });
+
+  function nextDocCode() {
+    var max = 0;
+    reports.forEach(function (r) { var m = /^SR-(\d+)$/.exec(r.code || ''); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+    return 'SR-' + String(max + 1).padStart(6, '0');
+  }
+
+  $('#btn-save-detail').on('click', function () {
+    if (!$('#d-date').val()) { showToast('Date is required', true); return; }
+    if (!$('#d-cust-code').val().trim()) { showToast('Customer Account Code is required', true); return; }
+    editingReport.date = $('#d-date').val();
+    editingReport.expiry = $('#d-expiry').val();
+    editingReport.status = $('#d-status').val();
+    editingReport.custCode = $('#d-cust-code').val().trim();
+    editingReport.custName = $('#d-cust-name').val();
+    editingReport.custPhone = $('#d-cust-phone').val();
+    editingReport.custAddress = $('#d-cust-address').val();
+    editingReport.ref = $('#d-ref').val();
+    editingReport.receivedBy = $('#d-received-by').val();
+    editingReport.servicedBy = $('#d-serviced-by').val();
+    editingReport.remark = $('#d-remark').val();
+
+    if (editingCode) {
+      var idx = reports.findIndex(function (r) { return r.code === editingCode; });
+      if (idx >= 0) reports[idx] = editingReport;
+    } else {
+      editingReport.code = nextDocCode();
+      editingReport.createdAt = new Date().toISOString();
+      editingReport.createdBy = username || '';
+      reports.push(editingReport);
+      editingCode = editingReport.code;
+    }
+    markDirty('save ' + editingReport.code);
+    showToast('Saved locally as ' + editingReport.code + ' — use system toolbar Save to persist');
+    $('#view-detail').hide();
+    $('#view-list').show();
+    renderList();
+  });
+
+  /* ── Persist SQL (same delete-all + reinsert pattern as jm6todo) ── */
+  function fmtAuditDate(d) {
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  function buildExportSql() {
+    var now = fmtAuditDate(new Date());
+    var lines = ['DELETE FROM ZZT_' + REPORT_TABLE_CODE + ';'];
+    reports.forEach(function (r) {
+      var payload = {
+        date: r.date || '', expiry: r.expiry || '', status: r.status || 'new',
+        companyID: r.companyID || DEFAULT_COMPANY_ID, companyName: r.companyName || DEFAULT_COMPANY_NAME,
+        custCode: r.custCode || '', custName: r.custName || '', custPhone: r.custPhone || '', custAddress: r.custAddress || '',
+        ref: r.ref || '', receivedBy: r.receivedBy || '', servicedBy: r.servicedBy || '', remark: r.remark || '',
+        equipment: r.equipment || [], actionTaken: r.actionTaken || [],
+        createdAt: r.createdAt || '', createdBy: r.createdBy || ''
+      };
+      var json = JSON.stringify(payload);
+      var sqlSafe = json.replace(/'/g, "''");
+      var codeSafe = (r.code || '').replace(/'/g, "''");
+      var dateCreated = r.createdAt ? fmtAuditDate(new Date(r.createdAt)) : now;
+      lines.push("INSERT INTO ZZT_" + REPORT_TABLE_CODE
+        + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified)"
+        + " VALUES ('" + codeSafe + "', '" + sqlSafe + "', '" + dateCreated + "', '" + now + "');");
+    });
+    return lines.join('\n');
+  }
+
+  /* ── Init ── */
+  renderCompanyFilterOptions();
+  renderList();
+  addLog('Page loaded - listening for ALAYA_INIT');
+</script>
+
+</body>
+</html>
