@@ -345,6 +345,8 @@
   var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
   var hostOrigin = '';
   var REPORT_TABLE_CODE = 'svcrpt';
+  var EQUIP_TABLE_CODE = 'svcrpteq';
+  var ACTION_TABLE_CODE = 'svcrptact';
   var DEFAULT_COMPANY_ID = 548; // matches jin's default test company (JIN6 SDN BHD)
   var DEFAULT_COMPANY_NAME = 'JIN6 SDN BHD';
   /* No company-list API is confirmed reachable from a plugin iframe (ALAYA_INIT's
@@ -717,45 +719,68 @@
     if (hasUnsavedChanges) { e.preventDefault(); e.returnValue = ''; }
   });
 
-  /* ── Load reports (ZZTGetDataTable) ── */
+  /* ── Load reports (ZZTGetDataTable) ──
+     ZZC_Description is NVARCHAR(400) - confirmed live too small to hold a report's
+     full JSON once Equipment/Action Taken arrays are embedded. Normalised into three
+     tables instead (mirrors jm6data/jm6usr already being separate tables): svcrpt
+     holds one compact header row per report; svcrpteq/svcrptact hold one row per
+     equipment/action-taken LINE, keyed '<docCode>-E<n>' / '<docCode>-A<n>' and
+     carrying the parent docCode in their own JSON so rows can be grouped after
+     all three tables load. */
+  function fetchUdfTable(tableCode) {
+    return $.ajax({
+      url: apiUrl + 'api/Udf/ZZTGetDataTable', type: 'POST', cache: false, contentType: 'application/json; charset=UTF-8',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ tableName: tableCode }),
+    }).then(function (response) {
+      if (!response || response.Result === false) { addLog('API Error (' + tableCode + '): ' + (response && response.Message)); return []; }
+      var obj = response.Obj || [];
+      var rows = [];
+      for (var i = 0; i < obj.length; i++) {
+        if (obj[i] === null || typeof obj[i] !== 'object') continue;
+        if (obj[i].rowNum !== undefined && obj[i].rowNum > 0) rows.push(obj[i]);
+        else if (obj[i].ZZC_Code) rows.push(obj[i]);
+      }
+      return rows;
+    });
+  }
+
   function loadReportsFromDb() {
     if (!apiUrl || !authToken) { addLog('No token yet - cannot load from DB'); return; }
-    var endpoint = apiUrl + 'api/Udf/ZZTGetDataTable';
-    addLog('POST ' + endpoint + ' { tableName: "' + REPORT_TABLE_CODE + '" }');
+    addLog('Loading ' + REPORT_TABLE_CODE + ' / ' + EQUIP_TABLE_CODE + ' / ' + ACTION_TABLE_CODE + '...');
     $('#btn-load').prop('disabled', true).text('Loading...');
-    $.ajax({
-      url: endpoint, type: 'POST', cache: false, contentType: 'application/json; charset=UTF-8',
-      headers: { 'Authorization': authToken }, data: JSON.stringify({ tableName: REPORT_TABLE_CODE }),
-      success: function (response) {
-        if (!response || response.Result === false) { addLog('API Error: ' + (response && response.Message)); renderList(); return; }
-        var obj = response.Obj || [];
-        var rows = [];
-        for (var i = 0; i < obj.length; i++) {
-          if (obj[i] === null || typeof obj[i] !== 'object') continue;
-          if (obj[i].rowNum !== undefined && obj[i].rowNum > 0) rows.push(obj[i]);
-          else if (obj[i].ZZC_Code) rows.push(obj[i]);
-        }
-        reports = rows.map(function (r) {
-          var meta = {};
-          try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
-          return $.extend({ code: r.ZZC_Code || '' }, {
+    $.when(fetchUdfTable(REPORT_TABLE_CODE), fetchUdfTable(EQUIP_TABLE_CODE), fetchUdfTable(ACTION_TABLE_CODE))
+      .done(function (headerRows, equipRows, actionRows) {
+        var equipByDoc = {}, actionByDoc = {};
+        equipRows.forEach(function (r) {
+          var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
+          if (!meta.docCode) return;
+          (equipByDoc[meta.docCode] = equipByDoc[meta.docCode] || []).push({ desc: meta.desc || '', brand: meta.brand || '', model: meta.model || '', sn: meta.sn || '', remark: meta.remark || '' });
+        });
+        actionRows.forEach(function (r) {
+          var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
+          if (!meta.docCode) return;
+          (actionByDoc[meta.docCode] = actionByDoc[meta.docCode] || []).push({ item: meta.item || '', desc: meta.desc || '', uom: meta.uom || '', qty: meta.qty || 0, price: meta.price || 0 });
+        });
+        reports = headerRows.map(function (r) {
+          var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
+          var code = r.ZZC_Code || '';
+          return $.extend({ code: code }, {
             date: meta.date || '', expiry: meta.expiry || '', status: (meta.status || 'new').toLowerCase(),
             companyID: meta.companyID || DEFAULT_COMPANY_ID, companyName: meta.companyName || DEFAULT_COMPANY_NAME,
             custCode: meta.custCode || '', custName: meta.custName || '', custPhone: meta.custPhone || '', custAddress: meta.custAddress || '',
             ref: meta.ref || '', receivedBy: meta.receivedBy || '', servicedBy: meta.servicedBy || '', remark: meta.remark || '',
-            equipment: meta.equipment || [], actionTaken: meta.actionTaken || [],
+            equipment: equipByDoc[code] || [], actionTaken: actionByDoc[code] || [],
             createdAt: meta.createdAt || '', createdBy: meta.createdBy || ''
           });
         });
-        addLog('Loaded ' + reports.length + ' service reports from DB table ' + REPORT_TABLE_CODE);
+        addLog('Loaded ' + reports.length + ' service reports (' + equipRows.length + ' equipment, ' + actionRows.length + ' action-taken lines)');
         renderCompanyFilterOptions();
         renderList();
         clearDirty();
         setSaveStatus('All changes saved', 'badge-received');
-      },
-      error: function (xhr) { addLog('DB load failed (' + xhr.status + ')'); renderList(); clearDirty(); },
-      complete: function () { $('#btn-load').prop('disabled', false).text('Reload'); }
-    });
+      })
+      .fail(function (xhr) { addLog('DB load failed (' + (xhr && xhr.status) + ')'); renderList(); clearDirty(); })
+      .always(function () { $('#btn-load').prop('disabled', false).text('Reload'); });
   }
   $('#btn-load').on('click', function () { loadReportsFromDb(); });
 
@@ -942,25 +967,47 @@
     function p(n) { return (n < 10 ? '0' : '') + n; }
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
+  function sqlInsertLine(tableCode, code, payload, dateCreated, now) {
+    var json = JSON.stringify(payload);
+    var sqlSafe = json.replace(/'/g, "''");
+    var codeSafe = (code || '').replace(/'/g, "''");
+    return "INSERT INTO ZZT_" + tableCode
+      + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified)"
+      + " VALUES ('" + codeSafe + "', '" + sqlSafe + "', '" + dateCreated + "', '" + now + "');";
+  }
+
+  /* ZZC_Description is NVARCHAR(400) - a header row with Equipment/Action Taken
+     embedded easily exceeds that (confirmed live: "String or binary data would be
+     truncated", SQL error 8152). Normalised into three DELETE-all + reinsert
+     batches: svcrpt (compact header only), svcrpteq, svcrptact (one row per line,
+     keyed '<docCode>-E<n>'/'<docCode>-A<n>', each carrying docCode so loadReportsFromDb
+     can regroup them). */
   function buildExportSql() {
     var now = fmtAuditDate(new Date());
-    var lines = ['DELETE FROM ZZT_' + REPORT_TABLE_CODE + ';'];
+    var lines = [
+      'DELETE FROM ZZT_' + REPORT_TABLE_CODE + ';',
+      'DELETE FROM ZZT_' + EQUIP_TABLE_CODE + ';',
+      'DELETE FROM ZZT_' + ACTION_TABLE_CODE + ';'
+    ];
     reports.forEach(function (r) {
-      var payload = {
+      var dateCreated = r.createdAt ? fmtAuditDate(new Date(r.createdAt)) : now;
+      var headerPayload = {
         date: r.date || '', expiry: r.expiry || '', status: r.status || 'new',
         companyID: r.companyID || DEFAULT_COMPANY_ID, companyName: r.companyName || DEFAULT_COMPANY_NAME,
         custCode: r.custCode || '', custName: r.custName || '', custPhone: r.custPhone || '', custAddress: r.custAddress || '',
         ref: r.ref || '', receivedBy: r.receivedBy || '', servicedBy: r.servicedBy || '', remark: r.remark || '',
-        equipment: r.equipment || [], actionTaken: r.actionTaken || [],
         createdAt: r.createdAt || '', createdBy: r.createdBy || ''
       };
-      var json = JSON.stringify(payload);
-      var sqlSafe = json.replace(/'/g, "''");
-      var codeSafe = (r.code || '').replace(/'/g, "''");
-      var dateCreated = r.createdAt ? fmtAuditDate(new Date(r.createdAt)) : now;
-      lines.push("INSERT INTO ZZT_" + REPORT_TABLE_CODE
-        + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified)"
-        + " VALUES ('" + codeSafe + "', '" + sqlSafe + "', '" + dateCreated + "', '" + now + "');");
+      lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now));
+
+      (r.equipment || []).forEach(function (eq, i) {
+        var payload = { docCode: r.code, desc: eq.desc || '', brand: eq.brand || '', model: eq.model || '', sn: eq.sn || '', remark: eq.remark || '' };
+        lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now));
+      });
+      (r.actionTaken || []).forEach(function (a, i) {
+        var payload = { docCode: r.code, item: a.item || '', desc: a.desc || '', uom: a.uom || '', qty: a.qty || 0, price: a.price || 0 };
+        lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now));
+      });
     });
     return lines.join('\n');
   }
