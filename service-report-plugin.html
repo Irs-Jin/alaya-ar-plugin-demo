@@ -1661,7 +1661,9 @@
     if (unresolvedItems.length) { showToast('These Item No(s) are not in the company item list: ' + unresolvedItems.join(', '), true); return; }
 
     var companyID = currentFilterCompanyID();
-    var branch = salesBranches.filter(function (b) { return b.warehouseID; })[0];
+    var branchID = editingReport.salesBranchID;
+    var branch = branchID ? salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0] : null;
+    if (!branch) branch = salesBranches.filter(function (b) { return b.warehouseID; })[0];
     if (!branch) { showToast('No Sales Branch loaded for this company yet - try again in a moment', true); return; }
     dtl.forEach(function (d) { d.WarehouseID = String(branch.warehouseID); d.BinLocationID = String(branch.binLocationID); });
 
@@ -1893,7 +1895,10 @@
       $('#batch-tbody').empty();
       $('#batch-empty').hide();
       var compId = currentFilterCompanyID();
-      var sql = "SELECT TOP 20 IB_BatchNo, IB_Qty, IB_ExpiryDate, IB_BinLocationID FROM ItemBatch WHERE IB_ItemID=" + parseInt(itemRec.id,10) + " AND IB_CompanyID=" + compId + " AND IB_Qty>0 ORDER BY IB_ExpiryDate";
+      var branchID = editingReport.salesBranchID;
+      var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
+      var whID = branch ? branch.warehouseID : 0;
+      var sql = "SELECT TOP 20 IB_BatchNo, IB_Qty, IB_ExpiryDate, IB_BinLocationID FROM ItemBatch WHERE IB_ItemID=" + parseInt(itemRec.id,10) + " AND IB_CompanyID=" + compId + (whID ? " AND IB_WarehouseID=" + parseInt(whID,10) : "") + " AND IB_Qty>0 ORDER BY IB_ExpiryDate";
       qrySql(sql, 20).then(function (resp) {
         var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
         if (!rows.length) { $('#batch-empty').show(); return; }
