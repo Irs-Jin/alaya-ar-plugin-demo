@@ -869,7 +869,20 @@
         var found = batch.filter(function (im) { return String(im.id) === String(r[0]); })[0];
         if (found && r[1]) found.price = parseFloat(r[1]) || 0;
       });
-      if (rows.length) addLog('Enriched ' + rows.length + ' items with price');
+      if (rows.length) addLog('Enriched ' + rows.length + ' items with price from PGI');
+      // Items still with price=0: try ItemUOM fallback
+      var missing = batch.filter(function (im) { return !im.price; });
+      if (missing.length) {
+        var mIds = missing.map(function (im) { return parseInt(im.id,10); }).join(',');
+        qrySql("SELECT IU_ItemID, MIN(IU_SalesPrice1) FROM ItemUOM WHERE IU_ItemID IN (" + mIds + ") GROUP BY IU_ItemID", 500).then(function (resp2) {
+          var rows2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows || [];
+          rows2.forEach(function (r) {
+            var found = missing.filter(function (im) { return String(im.id) === String(r[0]); })[0];
+            if (found && r[1]) found.price = parseFloat(r[1]) || 0;
+          });
+          if (rows2.length) addLog('Enriched ' + rows2.length + ' items with price from ItemUOM fallback');
+        });
+      }
     });
   }
 
@@ -1737,9 +1750,11 @@
     // If still no price, lazy fetch price via PriceGroupItem then ItemUOM fallback
     if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0)) {
       (function (idx, im) {
+        addLog('Lazy price fetch for item ' + im.code + ' (id=' + im.id + ')');
         qrySql("SELECT TOP 1 PGI_SalesPrice1 FROM PriceGroupItem WHERE PGI_ItemID=" + parseInt(im.id,10) + " ORDER BY PGI_ID", 5).then(function (resp) {
           var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
           var p = r && parseFloat(r[0]);
+          addLog('PGI price result for ' + im.code + ': ' + p);
           if (p && p>0) {
             im.price = p;
             if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p; renderActionTable(); }
@@ -1749,9 +1764,10 @@
           return qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ItemID=" + parseInt(im.id,10) + " ORDER BY IU_ID", 5).then(function (resp2) {
             var r2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows && resp2.results[0].rows[0];
             var p2 = r2 && parseFloat(r2[0]);
+            addLog('IU price fallback for ' + im.code + ': ' + p2);
             if (p2 && p2>0) { im.price = p2; if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p2; renderActionTable(); } }
           });
-        });
+        }).fail(function(e){ addLog('Price fetch failed for ' + im.code + ': ' + (e&&e.statusText||e)); });
       })(i, itemRecord);
     }
     renderActionTable();
