@@ -31,7 +31,7 @@
     .hero-title-row { display:flex; align-items:center; gap:12px; }
     .hero-icon {
       flex-shrink:0; width:42px; height:42px; border-radius:11px;
-      background: linear-gradient(135deg, #0ea5a5, #14b8a6);
+      background: linear-gradient(135deg, #1565c0, #1e88e5);
       display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:#fff;
     }
     .real-banner {
@@ -41,8 +41,8 @@
     .real-banner code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
     button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
     button:disabled { opacity:0.45; cursor:not-allowed; }
-    .btn-primary { background:#0d9488; color:#fff; }
-    .btn-primary:hover:not(:disabled) { background:#0f766e; }
+    .btn-primary { background:#1565c0; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#0d47a1; }
     .btn-secondary { background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
     .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
     .btn-danger { background:#dc2626; color:#fff; }
@@ -50,7 +50,32 @@
     .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
     .btn-sm { padding:5px 10px; font-size:0.74rem; border-radius:6px; }
 
-    /* ── Toolbar ── */
+    /* ── Alaya-style document toolbar (mirrors the New/Post/Preview Report row
+       on native screens like Cash Sales/Quotation) ── */
+    .doc-toolbar {
+      display:flex; align-items:center; gap:4px; flex-wrap:wrap;
+      background:#fff; border-bottom:1px solid #e5e7eb; padding:8px 4px; margin:-24px -28px 20px -28px;
+    }
+    .doc-toolbar-btn {
+      display:flex; align-items:center; gap:6px; background:transparent; border:none; border-radius:4px;
+      padding:8px 14px; font-size:0.83rem; font-weight:600; color:#374151; cursor:pointer; font-family:inherit;
+    }
+    .doc-toolbar-btn:hover:not(:disabled) { background:#f3f4f6; }
+    .doc-toolbar-btn .icon { font-size:0.95rem; }
+    .doc-toolbar-btn.primary { color:#1565c0; }
+    .doc-toolbar-btn.danger { color:#dc2626; }
+    .doc-toolbar-sep { width:1px; align-self:stretch; background:#e5e7eb; margin:4px 4px; }
+
+    /* ── Panel header bar (mirrors "Sales Header" on Cash Sales/Quotation) ── */
+    .doc-panel { border:1px solid #e5e7eb; border-radius:6px; margin-bottom:18px; overflow:hidden; }
+    .doc-panel-header {
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+      background:#f7f8fa; border-bottom:1px solid #e5e7eb; padding:10px 16px;
+    }
+    .doc-panel-header .title { display:flex; align-items:center; gap:8px; font-size:0.88rem; font-weight:700; color:#111827; }
+    .doc-panel-body { padding:18px 20px; }
+
+    /* ── Toolbar (legacy hero-style rows still used for the list/detail intro) ── */
     .rpt-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px; }
     .filter-row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px; }
     .form-group { display:flex; flex-direction:column; gap:4px; }
@@ -61,7 +86,18 @@
       font-family:inherit; transition:border-color 0.15s;
     }
     .form-group input:disabled { background:#f9fafb; color:#6b7280; }
-    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color:#0d9488; box-shadow:0 0 0 3px rgba(13,148,136,0.1); }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color:#1565c0; box-shadow:0 0 0 3px rgba(21,101,192,0.1); }
+    .required-mark { color:#dc2626; margin-left:2px; }
+    /* Horizontal label-left layout for the detail header fields, matching native
+       Alaya document forms (e.g. Cash Sales: "Customer:*" label beside its input,
+       not stacked above it). */
+    .header-col .form-group.full { display:flex; flex-direction:row; align-items:center; gap:10px; }
+    .header-col .form-group.full > label {
+      flex:0 0 140px; text-transform:none; font-weight:600; font-size:0.83rem; color:#374151; letter-spacing:normal;
+    }
+    .header-col .form-group.full > label::after { content:':'; }
+    .header-col .form-group.full > input, .header-col .form-group.full > select, .header-col .form-group.full > textarea { flex:1; }
+    .header-col .form-group.full > .customer-row { flex:1; }
     .form-group select { min-width:140px; }
 
     /* ── List View ── */
@@ -72,7 +108,7 @@
     }
     .rpt-table tbody td { padding:10px 12px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
     .rpt-table tbody tr:hover { background:#f9fafb; cursor:pointer; }
-    .doc-link { color:#0d9488; font-weight:700; text-decoration:none; }
+    .doc-link { color:#1565c0; font-weight:700; text-decoration:none; }
     .doc-link:hover { text-decoration:underline; }
     .status-badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.7rem; font-weight:700; }
     .status-new { background:#e0e7ff; color:#3730a3; }
@@ -88,7 +124,7 @@
     .header-col { display:flex; flex-direction:column; gap:12px; }
     .header-col .form-group.full { grid-column:auto; }
     .section-title {
-      font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; color:#0d9488;
+      font-size:0.78rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; color:#1565c0;
       margin:20px 0 10px 0; padding-top:14px; border-top:1px solid #f0f2f5;
     }
     .sub-grid-table { width:100%; border-collapse:collapse; font-size:0.82rem; margin-bottom:10px; }
@@ -208,26 +244,36 @@
 
 <!-- DETAIL VIEW -->
 <div class="card" id="view-detail" style="max-width:1280px; display:none;">
-  <div class="rpt-toolbar">
-    <div class="hero-title-row">
-      <div style="font-size:1.1rem;">&#128295;</div>
-      <div>
-        <h2 style="margin-bottom:2px;" id="detail-title">New Service Report</h2>
-        <div class="sub" style="margin-bottom:0;">Fill in customer, equipment and action-taken details</div>
-      </div>
-    </div>
-    <div class="btn-row">
-      <button class="btn-secondary" id="btn-back-to-list">&larr; Back to List</button>
-      <button class="btn-danger" id="btn-delete-report" style="display:none;">Delete</button>
+  <!-- Mirrors the native toolbar row on Cash Sales/Quotation (Back / New / Save / Delete) -->
+  <div class="doc-toolbar">
+    <button class="doc-toolbar-btn" id="btn-back-to-list"><span class="icon">&#8592;</span>Back</button>
+    <div class="doc-toolbar-sep"></div>
+    <button class="doc-toolbar-btn primary" id="btn-save-detail-top"><span class="icon">&#128190;</span>Save</button>
+    <button class="doc-toolbar-btn" id="btn-new-report-top"><span class="icon">&#10133;</span>New</button>
+    <button class="doc-toolbar-btn danger" id="btn-delete-report" style="display:none;"><span class="icon">&#128465;</span>Delete</button>
+  </div>
+
+  <div class="hero-title-row" style="margin-bottom:16px;">
+    <div style="font-size:1.1rem;">&#128295;</div>
+    <div>
+      <h2 style="margin-bottom:2px;" id="detail-title">New Service Report</h2>
+      <div class="sub" style="margin-bottom:0;">Fill in customer, equipment and action-taken details</div>
     </div>
   </div>
 
-  <!-- Two-column header, matching the sample: Account/Name/Address/Telephone/Remark on the
-       left, Doc No/Date/Expiry/Received By/Serviced By/Status on the right. -->
+  <!-- Panel styled like the native "Sales Header" bar on Cash Sales/Quotation, with a
+       two-column layout inside: Account/Name/Address/Telephone/Remark on the left,
+       Doc No/Date/Expiry/Received By/Serviced By/Status on the right. -->
+  <div class="doc-panel">
+    <div class="doc-panel-header">
+      <div class="title"><span>&#127968;</span> Service Header</div>
+      <span style="color:#9ca3af;">&#9650;</span>
+    </div>
+    <div class="doc-panel-body">
   <div class="header-columns">
     <div class="header-col">
       <div class="form-group full">
-        <label>Account (Customer Code) *</label>
+        <label>Account (Customer Code)<span class="required-mark">*</span></label>
         <div class="customer-row">
           <input type="text" id="d-cust-code" placeholder="e.g. 000000462" />
           <button class="btn-secondary btn-sm" id="btn-lookup-customer" type="button">F11 Lookup</button>
@@ -241,7 +287,7 @@
     </div>
     <div class="header-col">
       <div class="form-group full"><label>Doc No</label><input type="text" id="d-docno" disabled placeholder="[Auto on Save]" /></div>
-      <div class="form-group full"><label>Date *</label><input type="date" id="d-date" /></div>
+      <div class="form-group full"><label>Date<span class="required-mark">*</span></label><input type="date" id="d-date" /></div>
       <div class="form-group full"><label>Expiry Date</label><input type="date" id="d-expiry" /></div>
       <div class="form-group full"><label>Reference</label><input type="text" id="d-ref" /></div>
       <div class="form-group full"><label>Received By</label><input type="text" id="d-received-by" /></div>
@@ -255,6 +301,8 @@
           <option value="cancelled">CANCELLED</option>
         </select>
       </div>
+    </div>
+  </div>
     </div>
   </div>
 
@@ -812,8 +860,9 @@
     $('#view-list').hide();
     $('#view-detail').show();
   }
-  $('#btn-new-report').on('click', function () { openDetail(null); });
+  $('#btn-new-report, #btn-new-report-top').on('click', function () { openDetail(null); });
   $('#btn-back-to-list').on('click', function () { $('#view-detail').hide(); $('#view-list').show(); renderList(); });
+  $('#btn-save-detail-top').on('click', function () { $('#btn-save-detail').trigger('click'); });
   $('#btn-cancel-detail').on('click', function () { $('#view-detail').hide(); $('#view-list').show(); });
   $('#btn-delete-report').on('click', function () { if (editingCode) { deleteReport(editingCode); $('#view-detail').hide(); $('#view-list').show(); } });
 
