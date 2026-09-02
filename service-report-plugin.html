@@ -155,7 +155,8 @@
     .row-icon-btn.danger:hover { color:#dc2626; }
     .status-text { font-weight:700; font-size:0.8rem; }
     .status-text.status-new { color:#3730a3; }
-    .status-text.status-inprogress { color:#1e40af; }
+    .status-text.status-repairing { color:#b45309; }
+    .status-text.status-readycollect { color:#0e7490; }
     .status-text.status-completed { color:#166534; }
     .status-text.status-cancelled { color:#b91c1c; }
     .empty-state { text-align:center; padding:40px 20px; color:#9ca3af; font-size:0.88rem; }
@@ -292,7 +293,8 @@
       <label>Status:</label>
       <div class="status-check-group">
         <label><input type="checkbox" class="status-check" value="new" checked> New</label>
-        <label><input type="checkbox" class="status-check" value="inprogress" checked> In Progress</label>
+        <label><input type="checkbox" class="status-check" value="repairing" checked> Repairing</label>
+        <label><input type="checkbox" class="status-check" value="readycollect" checked> Ready to Collect</label>
         <label><input type="checkbox" class="status-check" value="completed" checked> Completed</label>
         <label><input type="checkbox" class="status-check" value="cancelled"> Cancelled</label>
       </div>
@@ -311,15 +313,13 @@
       <label>To Date:<span class="required-mark">*</span></label>
       <input type="date" id="inp-date-to" />
     </div>
-    <button class="btn-outline" id="btn-analysis" type="button" style="margin-left:auto;">Analysis</button>
-    <button class="btn-list-search" id="btn-search-list" type="button">Search</button>
+    <button class="btn-list-search" id="btn-search-list" type="button" style="margin-left:auto;">Search</button>
   </div>
   <div class="list-search-row">
     <label>Search:</label>
     <input type="text" id="inp-search" placeholder="Enter text to search" />
     <a href="#" id="btn-clear-search">Clear</a>
     <button class="btn-outline" id="btn-load" disabled style="margin-left:auto;">Reload</button>
-    <button class="btn-outline" id="btn-doc-action" type="button" style="margin-left:8px;">Document Action</button>
   </div>
 
   <table class="rpt-table" id="rpt-table">
@@ -398,11 +398,14 @@
       <div class="form-group full"><label>Reference</label><input type="text" id="d-ref" /></div>
       <div class="form-group full"><label>Received By</label><select id="d-received-by"><option value="">-- Select --</option></select></div>
       <div class="form-group full"><label>Serviced By</label><select id="d-serviced-by"><option value="">-- Select --</option></select></div>
+      <div class="form-group full"><label>Sales Branch<span class="required-mark">*</span></label><select id="d-sales-branch"><option value="">-- Select --</option></select></div>
+      <div class="form-group full"><label>Warehouse<span class="required-mark">*</span></label><select id="d-warehouse"><option value="">-- Select --</option></select></div>
       <div class="form-group full">
         <label>Status</label>
         <select id="d-status">
           <option value="new" selected>NEW</option>
-          <option value="inprogress">IN PROGRESS</option>
+          <option value="repairing">REPAIRING</option>
+          <option value="readycollect">READY TO COLLECT</option>
           <option value="completed">COMPLETED</option>
           <option value="cancelled">CANCELLED</option>
         </select>
@@ -531,6 +534,7 @@
   var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
   var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
   var hostOrigin = '';
+  var canView = true, canSaveEdit = true, canDelete = true, canCopy = true;
   var REPORT_TABLE_CODE = 'svcrpt';
   var EQUIP_TABLE_CODE = 'svcrpteq';
   var ACTION_TABLE_CODE = 'svcrptact';
@@ -594,6 +598,13 @@
     if (payload && payload.nonce) nonce = payload.nonce;
     if (payload && payload.client) clientId = payload.client;
     if (payload && payload.username) username = payload.username;
+    // Read permissions from Plugin View Editor (View / Save-Edit / Delete / Copy)
+    if (payload) {
+      if (payload.canSaveEdit !== undefined) canSaveEdit = !!payload.canSaveEdit;
+      if (payload.canDelete !== undefined) canDelete = !!payload.canDelete;
+      if (payload.canCopy !== undefined) canCopy = !!payload.canCopy;
+      addLog('Permissions: saveEdit=' + canSaveEdit + ' delete=' + canDelete + ' copy=' + canCopy);
+    }
     postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
     if (apiUrl && nonce && clientId && username) requestToken();
     if (username) { $('#d-received-by').val(username); }
@@ -843,6 +854,18 @@
       },
       error: function (xhr) { addLog('GetAllItemMasterByCompanyID failed (' + xhr.status + ') for company ' + companyID); }
     });
+    // Load sales branches for detail page (Sales Branch / Warehouse dropdowns)
+    $.ajax({
+      url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        salesBranches = data.map(function (b) { return { id: b.SB_ID, code: b.SB_Code, name: b.SB_Name, warehouseID: b.SB_DefaultWarehouse, binLocationID: b.SB_DefaultBinLocation }; });
+        addLog('Loaded ' + salesBranches.length + ' sales branches for company ' + companyID);
+        renderSalesBranchOptions();
+      },
+      error: function (xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ') for company ' + companyID); }
+    });
   }
   function enrichItemsBatchAndPrice(batch) {
     if (!batch.length) return;
@@ -935,9 +958,34 @@
     var $dl = $('#item-datalist').empty();
     items.forEach(function (im) { $dl.append($('<option>').attr('value', $.trim(im.code)).text(im.desc)); });
   }
+  function renderSalesBranchOptions() {
+    var $sel = $('#d-sales-branch').empty().append($('<option value="">-- Select --</option>'));
+    salesBranches.forEach(function (b) { $sel.append($('<option>').val(b.id).text(b.code + ' - ' + b.name)); });
+    // Restore previously selected value if still in list
+    if (editingReport && editingReport.salesBranchID && $sel.find('option[value="' + editingReport.salesBranchID + '"]').length) {
+      $sel.val(editingReport.salesBranchID);
+    }
+    // Auto-select first branch if only one
+    if (salesBranches.length === 1) { $sel.val(salesBranches[0].id).trigger('change'); }
+  }
+  function renderWarehouseOptions(branchID) {
+    var $sel = $('#d-warehouse').empty().append($('<option value="">-- Select --</option>'));
+    var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
+    if (branch && branch.warehouseID) {
+      $sel.append($('<option>').val(branch.warehouseID).text('Default Warehouse'));
+      $sel.val(branch.warehouseID);
+    }
+  }
+  $('#d-sales-branch').on('change', function () {
+    var branchID = $(this).val();
+    editingReport.salesBranchID = branchID;
+    var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
+    editingReport.salesBranchCode = branch ? branch.code : '';
+    renderWarehouseOptions(branchID);
+    markDirty('sales branch');
+  });
   $('#sel-company-filter').on('change', function () { loadScopedListsForCurrentCompany(); });
-  $('#btn-analysis').on('click', function () { renderList(); showToast('Analysis: ' + $('#rpt-tbody tr').length + ' rows'); });
-  $('#btn-doc-action').on('click', function () { showToast('Document Action - select a row first', true); });
+  $('#btn-search-list').on('click', renderList);
   $('#sel-date-type').on('change', renderList);
 
   /* ── Customer lookup ──
@@ -1330,7 +1378,7 @@
   $('#btn-load').on('click', function () { loadReportsFromDb(); });
 
   /* ── List rendering ── */
-  function statusLabel(s) { return { new: 'New', inprogress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled' }[s] || s; }
+  function statusLabel(s) { return { new: 'New', repairing: 'Repairing', readycollect: 'Ready to Collect', completed: 'Completed', cancelled: 'Cancelled' }[s] || s; }
 
   /* Company filter, positioned first in the filter row like Quotation/Cash Sales.
      Populated from distinct companyID/companyName pairs actually present in the
@@ -1375,10 +1423,11 @@
     filtered.sort(function (a, b) { return (b.code || '').localeCompare(a.code || ''); });
     filtered.forEach(function (r) {
       var $tr = $('<tr>');
-      var $edit = $('<button class="row-icon-btn" title="Edit">&#9998;</button>').on('click', function (e) { e.stopPropagation(); openDetail(r.code); });
-      var $del = $('<button class="row-icon-btn danger" title="Delete">&#128465;</button>').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); });
-      var $copy = $('<button class="row-icon-btn" title="Copy Document">&#128203;</button>').on('click', function (e) { e.stopPropagation(); copyReport(r.code); });
-      $tr.append($('<td>').append($('<div class="row-icon-actions">').append($edit, $del, $copy)));
+      var $icons = $('<div class="row-icon-actions">');
+      if (canSaveEdit) $icons.append($('<button class="row-icon-btn" title="Edit">&#9998;</button>').on('click', function (e) { e.stopPropagation(); openDetail(r.code); }));
+      if (canDelete) $icons.append($('<button class="row-icon-btn danger" title="Delete">&#128465;</button>').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); }));
+      if (canCopy) $icons.append($('<button class="row-icon-btn" title="Copy Document">&#128203;</button>').on('click', function (e) { e.stopPropagation(); copyReport(r.code); }));
+      $tr.append($('<td>').append($icons));
       $tr.append($('<td>').append($('<a class="doc-link" href="#">').text(r.code || '[unsaved]').on('click', function (e) { e.preventDefault(); openDetail(r.code); })));
       $tr.append($('<td>').text(fmtDate(r.date)));
       $tr.append($('<td>').text(r.custName ? (r.custCode + ' - ' + r.custName) : (r.custCode || '-')));
@@ -1413,7 +1462,7 @@
     var companyID = parseInt($('#sel-company-filter').val(), 10) || DEFAULT_COMPANY_ID;
     var match = companies.filter(function (c) { return c.id === companyID; })[0];
     var companyName = match ? match.name : DEFAULT_COMPANY_NAME;
-    return { code: '', date: todayStr(), expiry: '', status: 'new', companyID: companyID, companyName: companyName, custCode: '', custName: '', custPhone: '', custAddress: '', custAddr1: '', custAddr2: '', custAddr3: '', custAddr4: '', ref: '', receivedBy: username || '', servicedBy: '', remark: '', equipment: [], actionTaken: [], createdAt: '', createdBy: username || '' };
+    return { code: '', date: todayStr(), expiry: '', status: 'new', companyID: companyID, companyName: companyName, custCode: '', custName: '', custPhone: '', custAddress: '', custAddr1: '', custAddr2: '', custAddr3: '', custAddr4: '', ref: '', receivedBy: username || '', servicedBy: '', remark: '', salesBranchID: '', salesBranchCode: '', equipment: [], actionTaken: [], createdAt: '', createdBy: username || '' };
   }
   var editingReport = blankReport();
 
@@ -1422,7 +1471,8 @@
     editingReport = found ? $.extend(true, {}, found) : blankReport();
     editingCode = found ? code : null;
     $('#detail-title').text(found ? ('Service Report ' + code) : 'New Service Report');
-    $('#btn-delete-report').toggle(!!found);
+    $('#btn-delete-report').toggle(!!found && canDelete);
+    $('#btn-copy-to-sales').toggle(canSaveEdit);
     $('#d-docno').val(found ? code : '');
     $('#d-date').val(editingReport.date || todayStr());
     $('#d-expiry').val(editingReport.expiry || '');
@@ -1441,6 +1491,14 @@
     $('#d-received-by').val(editingReport.receivedBy || '');
     $('#d-serviced-by').val(editingReport.servicedBy || '');
     $('#d-remark').val(editingReport.remark || '');
+    // Initialize Sales Branch and Warehouse dropdowns
+    renderSalesBranchOptions();
+    if (editingReport.salesBranchID) {
+      $('#d-sales-branch').val(editingReport.salesBranchID);
+      renderWarehouseOptions(editingReport.salesBranchID);
+    } else if (salesBranches.length === 1) {
+      $('#d-sales-branch').val(salesBranches[0].id).trigger('change');
+    }
     $('#cust-lookup-status').text('');
     renderEquipTable();
     renderActionTable();
@@ -1480,6 +1538,12 @@
     $('#d-received-by').val(editingReport.receivedBy || '');
     $('#d-serviced-by').val(editingReport.servicedBy || '');
     $('#d-remark').val(editingReport.remark || '');
+    // Initialize Sales Branch and Warehouse dropdowns
+    renderSalesBranchOptions();
+    if (editingReport.salesBranchID) {
+      $('#d-sales-branch').val(editingReport.salesBranchID);
+      renderWarehouseOptions(editingReport.salesBranchID);
+    }
     $('#cust-lookup-status').text('');
     renderEquipTable();
     renderActionTable();
@@ -1970,6 +2034,8 @@
     editingReport.receivedBy = $('#d-received-by').val();
     editingReport.servicedBy = $('#d-serviced-by').val();
     editingReport.remark = $('#d-remark').val();
+    editingReport.salesBranchID = $('#d-sales-branch').val();
+    editingReport.salesBranchCode = $('#d-sales-branch option:selected').text().split(' - ')[0] || '';
 
     if (editingCode) {
       var idx = reports.findIndex(function (r) { return r.code === editingCode; });
