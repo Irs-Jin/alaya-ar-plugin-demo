@@ -830,7 +830,7 @@
       success: function (resp) {
         var data = (resp && resp.data) || [];
         items = data.map(function (im) {
-          return { id: im.IM_ID, code: im.IM_Code, desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
+          return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
         }).filter(function (im) { return im.code; });
         addLog('Loaded ' + items.length + ' items for company ' + companyID);
         renderItemDatalist();
@@ -920,7 +920,7 @@
   }
   function renderItemDatalist() {
     var $dl = $('#item-datalist').empty();
-    items.forEach(function (im) { $dl.append($('<option>').attr('value', im.code).text(im.desc)); });
+    items.forEach(function (im) { $dl.append($('<option>').attr('value', $.trim(im.code)).text(im.desc)); });
   }
   $('#sel-company-filter').on('change', function () { loadScopedListsForCurrentCompany(); });
   $('#btn-analysis').on('click', function () { renderList(); showToast('Analysis: ' + $('#rpt-tbody tr').length + ' rows'); });
@@ -1793,7 +1793,7 @@
   function openBatchModalForRow(idx, force) {
     var row = editingReport.actionTaken[idx];
     if (!row || !row.item) return;
-    var itemRec = items.filter(function (im) { return im.code === row.item; })[0];
+    var itemRec = items.filter(function (im) { return $.trim(im.code) === row.item; })[0];
     if (!itemRec) return;
     batchEditingIdx = idx;
     var needBatch = !!itemRec.batchControl;
@@ -1860,7 +1860,7 @@
         .on('change', function () {
           var code = $.trim($(this).val());
           if (!code) return;
-          var match = items.filter(function (im) { return im.code === code; })[0];
+          var match = items.filter(function (im) { return $.trim(im.code) === code; })[0];
           if (match) { applyItemToRow(i, match); return; }
           // Fallback: item not in company-filtered list (e.g., batch item not assigned to JIN6 CompanyItem) - fetch directly from ItemMaster
           var esc = code.replace(/'/g, "''");
@@ -1894,7 +1894,7 @@
       $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; })));
       $tr.append($('<td>').append($('<input type="number" step="0.01" min="0">').val(a.price || 0).on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; })));
       (function () {
-        var itemRec = a.item ? items.filter(function (im) { return im.code === a.item; })[0] : null;
+        var itemRec = a.item ? items.filter(function (im) { return $.trim(im.code) === a.item; })[0] : null;
         var need = itemRec && (itemRec.batchControl || itemRec.serialControl);
         var label = '-';
         if (need) {
