@@ -388,8 +388,8 @@
       <div class="form-group full"><label>Date<span class="required-mark">*</span></label><input type="date" id="d-date" /></div>
       <div class="form-group full"><label>Expiry Date</label><input type="date" id="d-expiry" /></div>
       <div class="form-group full"><label>Reference</label><input type="text" id="d-ref" /></div>
-      <div class="form-group full"><label>Received By</label><input type="text" id="d-received-by" /></div>
-      <div class="form-group full"><label>Serviced By</label><input type="text" id="d-serviced-by" /></div>
+      <div class="form-group full"><label>Received By</label><select id="d-received-by"><option value="">-- Select --</option></select></div>
+      <div class="form-group full"><label>Serviced By</label><select id="d-serviced-by"><option value="">-- Select --</option></select></div>
       <div class="form-group full">
         <label>Status</label>
         <select id="d-status">
@@ -575,6 +575,22 @@
     });
   }
 
+  /* ── Per-user company access (hardcoded stopgap) ──
+     GetAllCompany returns EVERY company the whole account/client can see, not just
+     what the logged-in user is actually assigned to (Users.US_Admin_YN /
+     UserGroupMapping+Company would give that properly, but the Users table is on
+     Alaya's own "denied table list" for the eval-bridge SQL path, and there's no
+     REST endpoint for "get my access" - confirmed live, see project history for
+     the investigation). Until a real api/User/GetMyAccess-type endpoint exists,
+     admins see everything; everyone else is manually mapped here to match their
+     real User Group Mapping (Module Editor > Users > User Group Mapping tab) -
+     update this list by hand when access changes. Unlisted non-admin usernames
+     fall back to their own default company only, never the full list. */
+  var ADMIN_USERNAMES = ['jin1'];
+  var USER_COMPANY_ACCESS = {
+    'jin2': ['JIN4', 'jin3', 'JIN5', 'JIN6', 'JIN9', 'JIN7', 'Adidas'],
+  };
+
   /* ── Company list (real, read-only) ──
      GET api/Company/GetAllCompany -> { data: [ {CO_ID, CO_Code, CO_Name}, ... ] }
      confirmed live against SIT (returns all companies the account can access).
@@ -629,13 +645,46 @@
      JIN6 SDN BHD only ever shows JIN6's own customers/items, never another
      company's. Backs the datalist autocomplete on Customer Account Code and each
      Action Taken row's Item No. */
-  var customers = [], items = [], salesBranches = [], paymentModes = [], companyPaymentTerms = [];
+  var customers = [], items = [], salesBranches = [], paymentModes = [], companyPaymentTerms = [], staffList = [];
   function currentFilterCompanyID() {
     return parseInt($('#sel-company-filter').val(), 10) || DEFAULT_COMPANY_ID;
   }
+
+  /* ── Staff list (real, read-only, via the eval-bridge SQL path - NOT a REST call) ──
+     Received By / Serviced By must be real Staff, not free text. api/Udf and the
+     Customer/Item REST endpoints have no Staff equivalent, but the Staff table
+     itself is reachable through the same host eval-bridge used for saving (unlike
+     Users, which is explicitly denied) - confirmed live: SELECT with explicit
+     columns works, only "SELECT *" is rejected. Populates the Received
+     By/Serviced By <select> dropdowns, scoped to the current company. */
+  function loadStaffForCompany(companyID) {
+    if (!hostOrigin) return;
+    var sql = "SELECT ST_ID, ST_Code, ST_Description FROM Staff WHERE ST_CompanyID = " + companyID + " AND ST_Active_YN = 1 ORDER BY ST_Description";
+    executeSqlViaHost(sql).then(function (msg) {
+      if (msg.error) { addLog('Staff load error: ' + msg.error); return; }
+      var parsed = null;
+      try { parsed = JSON.parse(msg.result); } catch (e) { parsed = null; }
+      var rows = parsed && parsed.success && parsed.results && parsed.results[0] && parsed.results[0].rows;
+      if (!rows) { addLog('Staff load failed: ' + (msg.result || '').slice(0, 200)); return; }
+      staffList = rows.map(function (r) { return { id: r[0], code: r[1], name: r[2] }; });
+      addLog('Loaded ' + staffList.length + ' staff for company ' + companyID);
+      renderStaffOptions();
+    }).catch(function (err) { addLog('Staff load failed: ' + err.message); });
+  }
+  function renderStaffOptions() {
+    [$('#d-received-by'), $('#d-serviced-by')].forEach(function ($sel) {
+      var prev = $sel.val();
+      $sel.empty().append($('<option value="">-- Select --</option>'));
+      staffList.forEach(function (s) { $sel.append($('<option>').val(s.code).text(s.name)); });
+      if (prev && $sel.find('option[value="' + prev + '"]').length) $sel.val(prev);
+      else if (prev) $sel.append($('<option>').val(prev).text(prev + ' (not in current staff list)')).val(prev);
+    });
+  }
+
   function loadScopedListsForCurrentCompany() {
     var companyID = currentFilterCompanyID();
     if (!apiUrl || !authToken) return;
+    loadStaffForCompany(companyID);
     addLog('Loading customers + items for company ' + companyID + '...');
     $.ajax({
       url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
@@ -1148,7 +1197,8 @@
       var $tr = $('<tr>');
       var $edit = $('<button class="row-icon-btn" title="Edit">&#9998;</button>').on('click', function (e) { e.stopPropagation(); openDetail(r.code); });
       var $del = $('<button class="row-icon-btn danger" title="Delete">&#128465;</button>').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); });
-      $tr.append($('<td>').append($('<div class="row-icon-actions">').append($edit, $del)));
+      var $copy = $('<button class="row-icon-btn" title="Copy Document">&#128203;</button>').on('click', function (e) { e.stopPropagation(); copyReport(r.code); });
+      $tr.append($('<td>').append($('<div class="row-icon-actions">').append($edit, $del, $copy)));
       $tr.append($('<td>').append($('<a class="doc-link" href="#">').text(r.code || '[unsaved]').on('click', function (e) { e.preventDefault(); openDetail(r.code); })));
       $tr.append($('<td>').text(fmtDate(r.date)));
       $tr.append($('<td>').text(r.custName ? (r.custCode + ' - ' + r.custName) : (r.custCode || '-')));
@@ -1211,6 +1261,42 @@
     $('#view-list').hide();
     $('#view-detail').show();
   }
+  /* ── Copy Document (row action) ──
+     Clones an existing report's Customer/Equipment/Action Taken into a fresh,
+     unsaved record (new Doc No on save, Date reset to today, Status reset to
+     New) - matches native Cash Sales/Purchase Order's row-level Copy icon. */
+  function copyReport(code) {
+    var found = reports.filter(function (r) { return r.code === code; })[0];
+    if (!found) return;
+    editingReport = $.extend(true, {}, found);
+    editingReport.code = '';
+    editingReport.date = todayStr();
+    editingReport.status = 'new';
+    editingReport.createdAt = '';
+    editingReport.createdBy = username || '';
+    editingCode = null;
+    $('#detail-title').text('New Service Report (copied from ' + code + ')');
+    $('#btn-delete-report').hide();
+    $('#d-docno').val('');
+    $('#d-date').val(editingReport.date);
+    $('#d-expiry').val(editingReport.expiry || '');
+    $('#d-status').val('new');
+    $('#d-cust-code').val(editingReport.custCode || '');
+    $('#d-cust-name').val(editingReport.custName || '');
+    $('#d-cust-phone').val(editingReport.custPhone || '');
+    $('#d-cust-address').val(editingReport.custAddress || '');
+    $('#d-ref').val(editingReport.ref || '');
+    $('#d-received-by').val(editingReport.receivedBy || '');
+    $('#d-serviced-by').val(editingReport.servicedBy || '');
+    $('#d-remark').val(editingReport.remark || '');
+    $('#cust-lookup-status').text('');
+    renderEquipTable();
+    renderActionTable();
+    $('#view-list').hide();
+    $('#view-detail').show();
+    markDirty('copied from ' + code);
+  }
+
   $('#btn-new-report, #btn-new-report-top').on('click', function () { openDetail(null); });
   $('#btn-back-to-list').on('click', function () { $('#view-detail').hide(); $('#view-list').show(); renderList(); });
   $('#btn-save-detail-top').on('click', function () { $('#btn-save-detail').trigger('click'); });
@@ -1495,6 +1581,14 @@
   }
 
   /* ── Init ── */
+  (function setDefaultDateRange() {
+    var to = new Date();
+    var from = new Date();
+    from.setDate(from.getDate() - 7);
+    function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    $('#inp-date-from').val(fmt(from));
+    $('#inp-date-to').val(fmt(to));
+  })();
   renderCompanyFilterOptions();
   renderList();
   addLog('Page loaded - listening for ALAYA_INIT');
