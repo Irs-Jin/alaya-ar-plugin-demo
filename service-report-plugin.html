@@ -826,8 +826,10 @@
         }).filter(function (im) { return im.code; });
         addLog('Loaded ' + items.length + ' items for company ' + companyID);
         renderItemDatalist();
-        // Bulk enrich with batch/serial flags and price so second-screen prompt is instant
-        enrichItemsBatchAndPrice(items.slice(0, 200));
+        // Bulk enrich all items in chunks of 80 to avoid huge IN clause and rate-limit
+        for (var _c = 0; _c < items.length; _c += 80) {
+          enrichItemsBatchAndPrice(items.slice(_c, _c + 80));
+        }
       },
       error: function (xhr) { addLog('GetAllItemMasterByCompanyID failed (' + xhr.status + ') for company ' + companyID); }
     });
@@ -835,14 +837,21 @@
   function enrichItemsBatchAndPrice(batch) {
     if (!batch.length) return;
     var ids = batch.map(function (im) { return parseInt(im.id,10); }).join(',');
-    // Flags
+    // Flags - also fetch price in same round-trip if possible, but keep separate for fallback
     qrySql("SELECT IM_ID, IM_BatchControl_YN, IM_SerializeControl_YN FROM ItemMaster WHERE IM_ID IN (" + ids + ")", 500).then(function (resp) {
       var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
       var map = {};
       rows.forEach(function (r) { map[r[0]] = { batch: !!r[1], serial: !!r[2] }; });
-      batch.forEach(function (im) { if (map[im.id]) { im.batchControl = map[im.id].batch; im.serialControl = map[im.id].serial; } });
+      batch.forEach(function (im) {
+        if (map[im.id]) { im.batchControl = map[im.id].batch; im.serialControl = map[im.id].serial; }
+        else { im.batchControl = false; im.serialControl = false; }
+      });
       addLog('Enriched ' + rows.length + ' items with batch/serial flags');
-    }).fail(function () { addLog('Batch flags enrich failed'); });
+    }).fail(function (e) {
+      addLog('Batch flags enrich failed: ' + (e && e.statusText || e));
+      // Mark as non-batch to avoid infinite lazy retries, but still allow manual batch entry via second-screen button
+      batch.forEach(function (im) { if (im.batchControl === undefined) { im.batchControl = false; im.serialControl = false; } });
+    });
     // Price from PriceGroupItem (first price) - fallback to ItemUOM
     qrySql("SELECT PGI_ItemID, MIN(PGI_SalesPrice1) FROM PriceGroupItem WHERE PGI_ItemID IN (" + ids + ") GROUP BY PGI_ItemID", 500).then(function (resp) {
       var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
