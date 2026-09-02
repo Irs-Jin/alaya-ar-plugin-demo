@@ -416,7 +416,7 @@
        left column above, so this tab strip only needs Action Taken for now). -->
   <div class="section-title">Action Taken</div>
   <table class="sub-grid-table" id="action-table">
-    <thead><tr><th style="width:14%">Item No</th><th style="width:32%">Description</th><th style="width:12%">UOM</th><th style="width:12%">Qty</th><th style="width:16%">Price</th><th style="width:8%"></th></tr></thead>
+    <thead><tr><th style="width:13%">Item No</th><th style="width:28%">Description</th><th style="width:10%">UOM</th><th style="width:10%">Qty</th><th style="width:14%">Price</th><th style="width:15%">Batch / Serial</th><th style="width:10%"></th></tr></thead>
     <tbody id="action-tbody"></tbody>
   </table>
   <datalist id="item-datalist"></datalist>
@@ -439,6 +439,61 @@
 
 <!-- Print view - populated just before window.print(), hidden otherwise (see @media print) -->
 <div id="print-view"></div>
+
+<!-- Batch/Serial modal - mirrors native Cash Sales Batch/Serial popup (Batch No, Qty Available, etc.) -->
+<div class="modal-overlay" id="batch-modal">
+  <div class="modal" style="max-width:720px;">
+    <h2 id="batch-title">Select Batch</h2>
+    <div id="batch-info" class="sub" style="margin-bottom:8px;"></div>
+    <div id="batch-batch-section">
+      <div class="picker-table-wrap" style="max-height:240px;">
+        <table class="picker-table" id="batch-table">
+          <thead><tr><th>Batch No</th><th>Qty Available</th><th>Expiry Date</th><th>Bin Location</th></tr></thead>
+          <tbody id="batch-tbody"></tbody>
+        </table>
+        <div class="picker-empty" id="batch-empty" style="display:none;">No batch available</div>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+        <label style="font-size:0.82rem; font-weight:600;">Batch No:</label>
+        <input type="text" id="batch-input" placeholder="e.g. G0046-231001" style="flex:1; border:1px solid #d1d5db; border-radius:6px; padding:7px 10px;" />
+        <label style="font-size:0.82rem; font-weight:600;">Qty:</label>
+        <input type="number" id="batch-qty" min="0" step="1" style="width:80px; border:1px solid #d1d5db; border-radius:6px; padding:7px 10px;" />
+      </div>
+    </div>
+    <div id="batch-serial-section" style="display:none;">
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:0.82rem; font-weight:600;">Serial No(s) - one per line, count must match Qty</label>
+        <textarea id="serial-input" rows="4" placeholder="Enter serial numbers, one per line" style="border:1px solid #d1d5db; border-radius:6px; padding:8px 10px; font-family:inherit;"></textarea>
+        <div class="sub" id="serial-hint"></div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button class="btn-primary" id="btn-batch-ok" type="button">OK</button>
+      <button class="btn-secondary" id="btn-batch-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Equipment modal - mirrors legacy desktop Service Report popup (Description, Brand, Model, Serial No., Symptom, Remark) -->
+<div class="modal-overlay" id="equip-modal">
+  <div class="modal" style="max-width:560px;">
+    <h2 id="equip-modal-title">Equipment</h2>
+    <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+      <div class="form-group"><label>Description<span class="required-mark">*</span></label><input type="text" id="eq-desc" placeholder="Equipment description" /></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>Brand</label><input type="text" id="eq-brand" /></div>
+        <div class="form-group"><label>Model</label><input type="text" id="eq-model" /></div>
+      </div>
+      <div class="form-group"><label>Serial No.</label><input type="text" id="eq-sn" /></div>
+      <div class="form-group"><label>Symptom</label><textarea id="eq-symptom" rows="3" placeholder="Symptom / issue reported"></textarea></div>
+      <div class="form-group"><label>Remark</label><textarea id="eq-remark" rows="3" placeholder="Remark"></textarea></div>
+    </div>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button class="btn-primary" id="btn-equip-ok" type="button">OK</button>
+      <button class="btn-secondary" id="btn-equip-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- Picker modal - shared by Customer and Item search, mirrors Alaya's native
      "Search" popup (search box + results table, click a row to select). -->
@@ -1177,12 +1232,12 @@
         equipRows.forEach(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           if (!meta.docCode) return;
-          (equipByDoc[meta.docCode] = equipByDoc[meta.docCode] || []).push({ desc: meta.desc || '', brand: meta.brand || '', model: meta.model || '', sn: meta.sn || '', remark: meta.remark || '' });
+          (equipByDoc[meta.docCode] = equipByDoc[meta.docCode] || []).push({ desc: meta.desc || '', brand: meta.brand || '', model: meta.model || '', sn: meta.sn || '', symptom: meta.symptom || '', remark: meta.remark || '' });
         });
         actionRows.forEach(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           if (!meta.docCode) return;
-          (actionByDoc[meta.docCode] = actionByDoc[meta.docCode] || []).push({ item: meta.item || '', desc: meta.desc || '', uom: meta.uom || '', qty: meta.qty || 0, price: meta.price || 0 });
+          (actionByDoc[meta.docCode] = actionByDoc[meta.docCode] || []).push({ item: meta.item || '', desc: meta.desc || '', uom: meta.uom || '', qty: meta.qty || 0, price: meta.price || 0, batchNo: meta.batchNo || '', serialNos: meta.serialNos || [] });
         });
         reports = headerRows.map(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
@@ -1424,18 +1479,42 @@
     var lines = (editingReport.actionTaken || []).filter(function (a) { return a.item && a.qty > 0; });
     if (!lines.length) { showToast('Add at least one Action Taken line with an Item No and Qty > 0', true); return; }
 
+    // Validate batch/serial requirements before building payload
+    var batchErrors = [];
+    lines.forEach(function (a) {
+      var im = items.filter(function (x) { return x.code === a.item; })[0];
+      if (!im) return;
+      if (im.batchControl && !a.batchNo) batchErrors.push(a.item + ' (batch required)');
+      if (im.serialControl) {
+        var need = parseInt(a.qty, 10) || 0;
+        var have = (a.serialNos || []).length;
+        if (!have || have !== need) batchErrors.push(a.item + ' (need ' + need + ' serial(s))');
+      }
+    });
+    if (batchErrors.length) {
+      showToast('Please enter item batch/serial: ' + batchErrors.join(', '), true);
+      // highlight rows that need attention
+      renderActionTable();
+      return;
+    }
+
     var unresolvedItems = [];
-    var dtl = lines.map(function (a) {
+    var dtl = lines.map(function (a, idx) {
       var itemRecord = items.filter(function (im) { return im.code === a.item; })[0];
       if (!itemRecord || !itemRecord.id) { unresolvedItems.push(a.item); return null; }
       var qty = a.qty.toFixed(4), total = (a.qty * (a.price || 0)).toFixed(4);
-      return {
+      var grp = 'G' + (idx + 1);
+      var obj = {
         Description: itemRecord.desc || a.desc || '', Qty: qty, ItemID: String(itemRecord.id), ItemUOMID: String(itemRecord.uomID || ''),
         UnitPrice: (a.price || 0).toFixed(6), NewUnitPrice: (a.price || 0).toFixed(2), DiscountAmt: '0.00', DiscountFormula: '', ItemTypeID: String(itemRecord.typeID || ''),
-        WarehouseID: '', BinLocationID: '', Remarks: '', GroupID: '',
+        WarehouseID: '', BinLocationID: '', Remarks: '', GroupID: grp,
         SubTotal: total, TaxAmt: '0.0000', TaxableAmt: total, Total: total, TaxCode: '',
         TaxableExcFooterDisc: total, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
       };
+      // Inline batch/serial fields for APIs that expect them on the DTL
+      if (a.batchNo) { obj.BatchNo = a.batchNo; obj.CSB_BatchNo = a.batchNo; }
+      if (a.serialNos && a.serialNos.length) { obj.SerialNo = a.serialNos[0]; obj.CSSN_SerialNo = a.serialNos[0]; }
+      return obj;
     }).filter(Boolean);
     if (unresolvedItems.length) { showToast('These Item No(s) are not in the company item list: ' + unresolvedItems.join(', '), true); return; }
 
@@ -1448,6 +1527,29 @@
     if (!cashMode) { showToast('No Payment Mode loaded for this company yet - try again in a moment', true); return; }
 
     var payTerm = companyPaymentTerms.filter(function (t) { return t.active; })[0] || companyPaymentTerms[0];
+
+    // Build child arrays for batch/serial items (CashSalesBatch / CashSalesSN). GroupID links to SalesDTL.
+    var salesBatches = [], salesSNs = [];
+    lines.forEach(function (a, idx) {
+      var im2 = items.filter(function (x) { return x.code === a.item; })[0];
+      if (!im2) return;
+      var grp = 'G' + (idx + 1);
+      if (im2.batchControl && a.batchNo) {
+        salesBatches.push({
+          GroupID: grp, ItemID: String(im2.id), BatchNo: a.batchNo, Qty: a.qty.toFixed(4), BaseQty: a.qty.toFixed(4),
+          BinLocationID: String(branch.binLocationID), WarehouseID: String(branch.warehouseID),
+          CSB_BatchNo: a.batchNo, CSB_Qty: a.qty.toFixed(4), CSB_GroupID: grp
+        });
+      }
+      if (im2.serialControl && a.serialNos) {
+        a.serialNos.forEach(function (sn) {
+          salesSNs.push({
+            GroupID: grp, ItemID: String(im2.id), SerialNo: sn, BatchNo: a.batchNo || '',
+            CSSN_SerialNo: sn, CSSN_BatchNo: a.batchNo || '', BinLocationID: String(branch.binLocationID)
+          });
+        });
+      }
+    });
 
     var total = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
     var now = fmtCashSalesDate(new Date());
@@ -1462,6 +1564,13 @@
       SalesDTL: dtl,
       SalesPayment: [{ PaymentModeID: String(cashMode.id), Remarks: '', ChequeNo: null, PaymentAmount: total.toFixed(4), Currency: 'RINGGIT MALAYSIA', CurrencyRate: '1.00', Reason: '', RedeemPoint: '0' }],
     };
+    // Attach batch/serial child arrays under multiple possible keys for API compatibility
+    if (salesBatches.length) {
+      body.SalesBatch = salesBatches; body.CashSalesBatch = salesBatches; body.DetailBatch = salesBatches; body.BatchList = salesBatches;
+    }
+    if (salesSNs.length) {
+      body.SalesSN = salesSNs; body.CashSalesSN = salesSNs; body.DetailSN = salesSNs; body.SerialList = salesSNs;
+    }
 
     if (!confirm('This creates a REAL posted Cash Sales document for ' + custRecord.name + ' totalling RM' + total.toFixed(2) + '. This cannot be undone (only reversed via a Sales Return). Continue?')) return;
 
@@ -1493,34 +1602,155 @@
   }
   $('#btn-copy-to-sales').on('click', copyToCashSales);
 
+  /* ── Equipment modal (mirrors legacy desktop popup) ── */
+  var equipEditingIdx = null;
+  function openEquipModal(idx) {
+    equipEditingIdx = idx;
+    var eq = idx !== null && editingReport.equipment[idx] ? editingReport.equipment[idx] : { desc:'', brand:'', model:'', sn:'', symptom:'', remark:'' };
+    $('#equip-modal-title').text(idx !== null ? 'Edit Equipment' : 'Add Equipment');
+    $('#eq-desc').val(eq.desc || ''); $('#eq-brand').val(eq.brand || ''); $('#eq-model').val(eq.model || '');
+    $('#eq-sn').val(eq.sn || ''); $('#eq-symptom').val(eq.symptom || ''); $('#eq-remark').val(eq.remark || '');
+    $('#equip-modal').addClass('show');
+    setTimeout(function(){ $('#eq-desc').focus(); }, 50);
+  }
+  function closeEquipModal(){ $('#equip-modal').removeClass('show'); equipEditingIdx=null; }
+  $('#btn-equip-cancel').on('click', closeEquipModal);
+  $('#equip-modal').on('click', function(e){ if(e.target.id==='equip-modal') closeEquipModal(); });
+  $('#btn-equip-ok').on('click', function(){
+    var data = {
+      desc: $.trim($('#eq-desc').val()),
+      brand: $.trim($('#eq-brand').val()),
+      model: $.trim($('#eq-model').val()),
+      sn: $.trim($('#eq-sn').val()),
+      symptom: $.trim($('#eq-symptom').val()),
+      remark: $.trim($('#eq-remark').val())
+    };
+    if(!data.desc){ showToast('Description is required', true); return; }
+    editingReport.equipment = editingReport.equipment || [];
+    if(equipEditingIdx!==null) editingReport.equipment[equipEditingIdx]=data;
+    else editingReport.equipment.push(data);
+    closeEquipModal();
+    renderEquipTable();
+    markDirty(equipEditingIdx!==null ? 'edit equipment' : 'add equipment');
+  });
+
   function renderEquipTable() {
     var $tb = $('#equip-tbody').empty();
     (editingReport.equipment || []).forEach(function (eq, i) {
       var $tr = $('<tr>');
       $tr.append($('<td>').text(i + 1));
-      $tr.append($('<td>').append($('<input>').val(eq.desc || '').on('input', function () { editingReport.equipment[i].desc = $(this).val(); })));
-      $tr.append($('<td>').append($('<input>').val(eq.brand || '').on('input', function () { editingReport.equipment[i].brand = $(this).val(); })));
-      $tr.append($('<td>').append($('<input>').val(eq.model || '').on('input', function () { editingReport.equipment[i].model = $(this).val(); })));
-      $tr.append($('<td>').append($('<input>').val(eq.sn || '').on('input', function () { editingReport.equipment[i].sn = $(this).val(); })));
-      $tr.append($('<td>').append($('<input>').val(eq.remark || '').on('input', function () { editingReport.equipment[i].remark = $(this).val(); })));
-      $tr.append($('<td>').append($('<button class="btn-secondary btn-sm">').text('✕').on('click', function () { editingReport.equipment.splice(i, 1); renderEquipTable(); })));
+      $tr.append($('<td>').text(eq.desc || '-'));
+      $tr.append($('<td>').text(eq.brand || '-'));
+      $tr.append($('<td>').text(eq.model || '-'));
+      $tr.append($('<td>').text(eq.sn || '-'));
+      $tr.append($('<td>').text(eq.remark || '-').attr('title', (eq.symptom ? 'Symptom: '+eq.symptom+'\n' : '') + (eq.remark||'')));
+      var $actions = $('<td>');
+      var $edit = $('<button class="row-icon-btn" title="Edit">\u270E</button>').on('click', function(){ openEquipModal(i); });
+      var $del = $('<button class="row-icon-btn danger" title="Delete">\uD83D\uDDD1</button>').on('click', function(){ editingReport.equipment.splice(i,1); renderEquipTable(); markDirty('delete equipment'); });
+      $actions.append($edit).append($del);
+      $tr.append($actions);
+      $tr.css('cursor','pointer').on('dblclick', function(){ openEquipModal(i); });
       $tb.append($tr);
     });
     $('#equip-empty').toggle((editingReport.equipment || []).length === 0);
   }
-  $('#btn-add-equip').on('click', function () { editingReport.equipment = editingReport.equipment || []; editingReport.equipment.push({ desc: '', brand: '', model: '', sn: '', remark: '' }); renderEquipTable(); });
+  $('#btn-add-equip').on('click', function () { openEquipModal(null); });
 
   /* Item No cells use the same company-scoped <datalist id="item-datalist"> as the
      header's Customer field. On a matching code (typed or picked from the browser's
      native autocomplete), auto-fill Description + UOM from the cached item list -
      same "only load my own company's list" scoping as GetAllItemMasterByCompanyID. */
-  function applyItemToRow(i, itemRecord) {
+   function applyItemToRow(i, itemRecord) {
     editingReport.actionTaken[i].item = itemRecord.code;
     editingReport.actionTaken[i].desc = itemRecord.desc;
     editingReport.actionTaken[i].uom = itemRecord.uom;
+    editingReport.actionTaken[i].itemId = itemRecord.id;
     renderActionTable();
     markDirty('item selected');
+    // Check if this item needs batch/serial - lazy fetch flags via query.irs-alaya.com
+    var needCheck = (itemRecord.batchControl === undefined || itemRecord.serialControl === undefined);
+    if (needCheck) {
+      var sql = "SELECT IM_BatchControl_YN, IM_SerializeControl_YN FROM ItemMaster WHERE IM_ID=" + parseInt(itemRecord.id, 10);
+      qrySql(sql, 5).then(function (resp) {
+        var row = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
+        if (row) {
+          itemRecord.batchControl = !!row[0];
+          itemRecord.serialControl = !!row[1];
+          if (itemRecord.batchControl || itemRecord.serialControl) {
+            addLog('Item ' + itemRecord.code + ' requires ' + (itemRecord.batchControl ? 'batch ' : '') + (itemRecord.serialControl ? 'serial' : ''));
+            openBatchModalForRow(i);
+          }
+        }
+      }).fail(function () { addLog('Item flags lookup failed for ' + itemRecord.code); });
+    } else if (itemRecord.batchControl || itemRecord.serialControl) {
+      openBatchModalForRow(i);
+    }
   }
+  /* ── Batch/Serial handling (mirrors native Cash Sales Batch/Serial popup) ──
+     When a batch/serial item is selected, prompt for Batch No (and Serial Nos).
+     Data is stored on the row as batchNo / serialNos and validated before
+     Copy To Sales. Available batches are loaded from ItemBatch via query.irs-alaya.com. */
+  var batchEditingIdx = null;
+  function openBatchModalForRow(idx) {
+    var row = editingReport.actionTaken[idx];
+    if (!row || !row.item) return;
+    var itemRec = items.filter(function (im) { return im.code === row.item; })[0];
+    if (!itemRec) return;
+    batchEditingIdx = idx;
+    var needBatch = !!itemRec.batchControl;
+    var needSerial = !!itemRec.serialControl;
+    $('#batch-title').text(needBatch && needSerial ? 'Batch & Serial' : needBatch ? 'Batch Item' : 'Serial Number');
+    $('#batch-info').text(itemRec.code + ' - ' + (itemRec.desc || row.desc || ''));
+    $('#batch-batch-section').toggle(needBatch);
+    $('#batch-serial-section').toggle(needSerial);
+    $('#batch-input').val(row.batchNo || '');
+    $('#batch-qty').val(row.qty || 1);
+    $('#serial-input').val((row.serialNos || []).join('\n'));
+    $('#serial-hint').text(needSerial ? 'Enter ' + (row.qty || 1) + ' serial(s), one per line' : '');
+    if (needBatch) {
+      $('#batch-tbody').empty();
+      $('#batch-empty').hide();
+      var compId = currentFilterCompanyID();
+      var sql = "SELECT TOP 20 IB_BatchNo, IB_Qty, IB_ExpiryDate, IB_BinLocationID FROM ItemBatch WHERE IB_ItemID=" + parseInt(itemRec.id,10) + " AND IB_CompanyID=" + compId + " AND IB_Qty>0 ORDER BY IB_ExpiryDate";
+      qrySql(sql, 20).then(function (resp) {
+        var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+        if (!rows.length) { $('#batch-empty').show(); return; }
+        rows.forEach(function (r) {
+          var batchNo = r[0], qty = r[1], exp = r[2];
+          var expStr = exp ? new Date(exp).toLocaleDateString('en-MY') : '-';
+          var $tr = $('<tr>').append($('<td>').text(batchNo)).append($('<td>').text(qty)).append($('<td>').text(expStr)).append($('<td>').text(r[3] || ''));
+          $tr.css('cursor','pointer').on('click', function () { $('#batch-input').val(batchNo); });
+          $('#batch-tbody').append($tr);
+        });
+      });
+    }
+    $('#batch-modal').addClass('show');
+  }
+  function closeBatchModal() { $('#batch-modal').removeClass('show'); batchEditingIdx = null; }
+  $('#btn-batch-cancel').on('click', closeBatchModal);
+  $('#batch-modal').on('click', function (e) { if (e.target.id === 'batch-modal') closeBatchModal(); });
+  $('#btn-batch-ok').on('click', function () {
+    if (batchEditingIdx === null) return;
+    var row = editingReport.actionTaken[batchEditingIdx];
+    var itemRec = items.filter(function (im) { return im.code === row.item; })[0];
+    var needBatch = itemRec && itemRec.batchControl;
+    var needSerial = itemRec && itemRec.serialControl;
+    var bNo = $.trim($('#batch-input').val());
+    var sText = $.trim($('#serial-input').val());
+    var serials = sText ? sText.split(/\n/).map(function (s) { return $.trim(s); }).filter(Boolean) : [];
+    if (needBatch && !bNo) { showToast('Batch No is required for this item', true); return; }
+    if (needSerial && serials.length !== parseInt(row.qty || 0, 10)) {
+      showToast('Serial count (' + serials.length + ') must match Qty (' + row.qty + ')', true); return;
+    }
+    if (needSerial && !serials.length) { showToast('Serial No is required', true); return; }
+    row.batchNo = needBatch ? bNo : '';
+    row.serialNos = needSerial ? serials : [];
+    addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batch=' + (row.batchNo||'-') + ' serials=' + (row.serialNos||[]).length);
+    closeBatchModal();
+    renderActionTable();
+    markDirty('batch/serial');
+  });
+
   function renderActionTable() {
     var $tb = $('#action-tbody').empty();
     (editingReport.actionTaken || []).forEach(function (a, i) {
@@ -1543,6 +1773,26 @@
       $tr.append($('<td>').append($('<input>').val(a.uom || '').on('input', function () { editingReport.actionTaken[i].uom = $(this).val(); })));
       $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; })));
       $tr.append($('<td>').append($('<input type="number" step="0.01" min="0">').val(a.price || 0).on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; })));
+      (function () {
+        var itemRec = a.item ? items.filter(function (im) { return im.code === a.item; })[0] : null;
+        var need = itemRec && (itemRec.batchControl || itemRec.serialControl);
+        var label = '-';
+        if (need) {
+          var parts = [];
+          if (a.batchNo) parts.push('B:' + a.batchNo);
+          if (a.serialNos && a.serialNos.length) parts.push('S:' + a.serialNos.length);
+          label = parts.length ? parts.join(' ') : '<span style="color:#dc2626;">required</span>';
+        }
+        var $cell = $('<td>');
+        if (need) {
+          var $btn = $('<button class="btn-secondary btn-sm" type="button">').html(label).on('click', function () { openBatchModalForRow(i); });
+          if (!a.batchNo && !a.serialNos) $btn.css({ color:'#dc2626', borderColor:'#fecaca' });
+          $cell.append($btn);
+        } else {
+          $cell.text(a.item ? '-' : '');
+        }
+        $tr.append($cell);
+      })();
       $tr.append($('<td>').append($('<button class="btn-secondary btn-sm">').text('✕').on('click', function () { editingReport.actionTaken.splice(i, 1); renderActionTable(); })));
       $tb.append($tr);
     });
@@ -1627,11 +1877,11 @@
       lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now));
 
       (r.equipment || []).forEach(function (eq, i) {
-        var payload = { docCode: r.code, desc: eq.desc || '', brand: eq.brand || '', model: eq.model || '', sn: eq.sn || '', remark: eq.remark || '' };
+        var payload = { docCode: r.code, desc: eq.desc || '', brand: eq.brand || '', model: eq.model || '', sn: eq.sn || '', symptom: eq.symptom || '', remark: eq.remark || '' };
         lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now));
       });
       (r.actionTaken || []).forEach(function (a, i) {
-        var payload = { docCode: r.code, item: a.item || '', desc: a.desc || '', uom: a.uom || '', qty: a.qty || 0, price: a.price || 0 };
+        var payload = { docCode: r.code, item: a.item || '', desc: a.desc || '', uom: a.uom || '', qty: a.qty || 0, price: a.price || 0, batchNo: a.batchNo || '', serialNos: a.serialNos || [] };
         lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now));
       });
     });
