@@ -962,11 +962,12 @@
   }
   function renderWarehouseOptions(branchID) {
     var $sel = $('#d-warehouse').empty().append($('<option value="">-- Select --</option>'));
+    // List every warehouse the company has (confirmed live: JIN6 has 3 -
+    // PRIMARY/SECOND/THIRD), not just the selected branch's single default -
+    // the branch's default is only used to PRE-SELECT, not to restrict the list.
+    warehouses.forEach(function (w) { $sel.append($('<option>').val(w.id).text(w.code + ' - ' + w.name)); });
     var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
-    if (branch && branch.warehouseID) {
-      var wh = warehouses.filter(function (w) { return w.id === branch.warehouseID; })[0];
-      var whLabel = wh ? (wh.code + ' - ' + wh.name) : ('Warehouse #' + branch.warehouseID);
-      $sel.append($('<option>').val(branch.warehouseID).text(whLabel));
+    if (branch && branch.warehouseID && $sel.find('option[value="' + branch.warehouseID + '"]').length) {
       $sel.val(branch.warehouseID);
     }
   }
