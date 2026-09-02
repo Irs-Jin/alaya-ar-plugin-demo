@@ -535,6 +535,7 @@
   var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
   var hostOrigin = '';
   var canView = true, canSaveEdit = true, canDelete = true, canCopy = true;
+  var warehouses = [];
   var REPORT_TABLE_CODE = 'svcrpt';
   var EQUIP_TABLE_CODE = 'svcrpteq';
   var ACTION_TABLE_CODE = 'svcrptact';
@@ -866,6 +867,17 @@
       },
       error: function (xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ') for company ' + companyID); }
     });
+    // Load warehouses for detail page
+    $.ajax({
+      url: apiUrl + 'api/Warehouse/GetAllWarehouse', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        warehouses = data.map(function (w) { return { id: w.WH_ID, code: w.WH_Code, name: w.WH_Name }; });
+        addLog('Loaded ' + warehouses.length + ' warehouses for company ' + companyID);
+      },
+      error: function (xhr) { addLog('GetAllWarehouse failed (' + xhr.status + ') for company ' + companyID); }
+    });
   }
   function enrichItemsBatchAndPrice(batch) {
     if (!batch.length) return;
@@ -972,7 +984,9 @@
     var $sel = $('#d-warehouse').empty().append($('<option value="">-- Select --</option>'));
     var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
     if (branch && branch.warehouseID) {
-      $sel.append($('<option>').val(branch.warehouseID).text('Default Warehouse'));
+      var wh = warehouses.filter(function (w) { return w.id === branch.warehouseID; })[0];
+      var whLabel = wh ? (wh.code + ' - ' + wh.name) : ('Warehouse #' + branch.warehouseID);
+      $sel.append($('<option>').val(branch.warehouseID).text(whLabel));
       $sel.val(branch.warehouseID);
     }
   }
