@@ -1112,8 +1112,10 @@
       $tr.append($('<td>').append($('<span class="status-text status-' + r.status + '">').text(statusLabel(r.status).toUpperCase())));
       $tbody.append($tr);
     });
+    // Never hide the table itself - its <thead> holds the "+ New" button, which
+    // must stay visible even with zero results (confirmed live: hiding the whole
+    // table on an empty company made "+ New" disappear along with it).
     $('#empty-state').toggle(filtered.length === 0);
-    $('#rpt-table').toggle(filtered.length > 0);
     $('#list-footer').text('Rec: ' + filtered.length);
   }
   $('#inp-search').on('input', renderList);
