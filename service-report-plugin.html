@@ -1855,9 +1855,21 @@
     (editingReport.actionTaken || []).forEach(function (a, i) {
       var $tr = $('<tr>');
       var $wrap = $('<div class="search-input-wrap">');
+      var _itemMatchTimer = null;
       var $itemInput = $('<input list="item-datalist">').val(a.item || '')
-        .on('input', function () { editingReport.actionTaken[i].item = $(this).val(); })
+        .on('input', function () {
+          var raw = $(this).val();
+          editingReport.actionTaken[i].item = raw;
+          var code = $.trim(raw);
+          if (!code) return;
+          clearTimeout(_itemMatchTimer);
+          _itemMatchTimer = setTimeout(function () {
+            var match = items.filter(function (im) { return $.trim(im.code) === code; })[0];
+            if (match) { applyItemToRow(i, match); }
+          }, 150);
+        })
         .on('change', function () {
+          clearTimeout(_itemMatchTimer);
           var code = $.trim($(this).val());
           if (!code) return;
           var match = items.filter(function (im) { return $.trim(im.code) === code; })[0];
