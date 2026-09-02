@@ -289,14 +289,6 @@
       <select id="sel-company-filter"></select>
     </div>
     <div class="list-filter-field">
-      <label>From Date:</label>
-      <input type="date" id="inp-date-from" />
-    </div>
-    <div class="list-filter-field">
-      <label>To Date:</label>
-      <input type="date" id="inp-date-to" />
-    </div>
-    <div class="list-filter-field">
       <label>Status:</label>
       <div class="status-check-group">
         <label><input type="checkbox" class="status-check" value="new" checked> New</label>
@@ -305,13 +297,29 @@
         <label><input type="checkbox" class="status-check" value="cancelled"> Cancelled</label>
       </div>
     </div>
+  </div>
+  <div class="list-filter-row">
+    <div class="list-filter-field">
+      <label>Date Type:<span class="required-mark">*</span></label>
+      <select id="sel-date-type"><option value="docDate" selected>Document Date</option><option value="created">Created Date</option></select>
+    </div>
+    <div class="list-filter-field">
+      <label>From Date:<span class="required-mark">*</span></label>
+      <input type="date" id="inp-date-from" />
+    </div>
+    <div class="list-filter-field">
+      <label>To Date:<span class="required-mark">*</span></label>
+      <input type="date" id="inp-date-to" />
+    </div>
+    <button class="btn-outline" id="btn-analysis" type="button" style="margin-left:auto;">Analysis</button>
     <button class="btn-list-search" id="btn-search-list" type="button">Search</button>
   </div>
   <div class="list-search-row">
     <label>Search:</label>
-    <input type="text" id="inp-search" placeholder="Doc No / Customer / Reference..." />
+    <input type="text" id="inp-search" placeholder="Enter text to search" />
     <a href="#" id="btn-clear-search">Clear</a>
     <button class="btn-outline" id="btn-load" disabled style="margin-left:auto;">Reload</button>
+    <button class="btn-outline" id="btn-doc-action" type="button" style="margin-left:8px;">Document Action</button>
   </div>
 
   <table class="rpt-table" id="rpt-table">
@@ -915,6 +923,9 @@
     items.forEach(function (im) { $dl.append($('<option>').attr('value', im.code).text(im.desc)); });
   }
   $('#sel-company-filter').on('change', function () { loadScopedListsForCurrentCompany(); });
+  $('#btn-analysis').on('click', function () { renderList(); showToast('Analysis: ' + $('#rpt-tbody tr').length + ' rows'); });
+  $('#btn-doc-action').on('click', function () { showToast('Document Action - select a row first', true); });
+  $('#sel-date-type').on('change', renderList);
 
   /* ── Customer lookup ──
      If the typed Account Code matches the company-scoped cache (loaded above), fill
@@ -1847,9 +1858,30 @@
       var $itemInput = $('<input list="item-datalist">').val(a.item || '')
         .on('input', function () { editingReport.actionTaken[i].item = $(this).val(); })
         .on('change', function () {
-          var code = $(this).val();
+          var code = $.trim($(this).val());
+          if (!code) return;
           var match = items.filter(function (im) { return im.code === code; })[0];
-          if (match) applyItemToRow(i, match);
+          if (match) { applyItemToRow(i, match); return; }
+          // Fallback: item not in company-filtered list (e.g., batch item not assigned to JIN6 CompanyItem) - fetch directly from ItemMaster
+          var esc = code.replace(/'/g, "''");
+          addLog('Item ' + code + ' not in company list, fetching from ItemMaster...');
+          qrySql("SELECT TOP 1 IM_ID, IM_Code, IM_Description, IM_BaseUOM, IM_SerializeControl_YN, IM_BatchControl_YN FROM ItemMaster WHERE LTRIM(RTRIM(IM_Code))='" + esc + "'", 5).then(function (resp) {
+            var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
+            if (!r) { showToast('Item not found: ' + code, true); return; }
+            var fetched = { id: r[0], code: String(r[1]).trim(), desc: r[2] || '', uom: '', uomID: r[3], typeID: 1, batchControl: !!r[5], serialControl: !!r[4], price: 0 };
+            // Resolve UOM code if possible
+            if (r[3]) {
+              qrySql("SELECT IU_UOM FROM ItemUOM WHERE IU_ID=" + parseInt(r[3],10), 5).then(function (ur) {
+                var urRow = ur && ur.results && ur.results[0] && ur.results[0].rows && ur.results[0].rows[0];
+                if (urRow) fetched.uom = urRow[0] || '';
+                items.push(fetched); renderItemDatalist();
+                applyItemToRow(i, fetched);
+              }).fail(function(){ items.push(fetched); renderItemDatalist(); applyItemToRow(i, fetched); });
+            } else {
+              items.push(fetched); renderItemDatalist();
+              applyItemToRow(i, fetched);
+            }
+          }).fail(function (e) { addLog('Fetch item failed: ' + (e && e.statusText || e)); showToast('Failed to fetch item ' + code, true); });
         });
       var $searchBtn = $('<button class="search-icon-btn" type="button" title="Search Item">&#128269;</button>').on('click', function () {
         if (!items.length) { showToast('Item list still loading - try again in a moment', true); return; }
