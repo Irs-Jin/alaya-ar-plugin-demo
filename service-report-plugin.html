@@ -578,16 +578,37 @@
       headers: { 'Authorization': authToken },
       success: function (resp) {
         var data = (resp && resp.data) || [];
-        if (!data.length) { addLog('GetAllCompany returned no rows - keeping default company only'); return; }
+        if (!data.length || resp.success === false) {
+          addLog('GetAllCompany returned no rows (' + ((resp && resp.msg) || 'empty') + ') - keeping default company only');
+          showCompanyLoadError(resp && resp.msg);
+          return;
+        }
         companies = data.map(function (c) { return { id: c.CO_ID, code: c.CO_Code, name: c.CO_Name }; });
         addLog('Loaded ' + companies.length + ' companies from GetAllCompany');
+        hideCompanyLoadError();
         renderCompanyFilterOptions();
         renderList();
         loadScopedListsForCurrentCompany();
       },
-      error: function (xhr) { addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company only'); }
+      error: function (xhr) {
+        addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company only');
+        showCompanyLoadError('HTTP ' + xhr.status);
+      }
     });
   }
+  /* Visible error state for the Company list - this API is shared with everything
+     else calling GetAllCompany and has been observed rate-limiting under heavy use
+     ("API calling too frequent, please try again later"). Silently falling back to
+     the default company with no on-screen indication was confusing (looked like
+     other companies had simply vanished); show a Retry link instead. */
+  function showCompanyLoadError(msg) {
+    if ($('#company-load-error').length) { $('#company-load-error').text('Company list failed to load (' + (msg || 'unknown error') + ').').show(); return; }
+    $('<div id="company-load-error" class="sub" style="color:#dc2626; margin-top:4px;">')
+      .text('Company list failed to load (' + (msg || 'unknown error') + ').')
+      .append(' ', $('<a href="#">Retry</a>').on('click', function (e) { e.preventDefault(); loadCompaniesFromApi(); }))
+      .insertAfter('#sel-company-filter');
+  }
+  function hideCompanyLoadError() { $('#company-load-error').hide(); }
 
   /* ── Company-scoped Customer & Item lists (real, read-only) ──
      api/Customer/GetAllCustomer and api/Item/GetAllItemMasterByCompanyID both take
@@ -631,38 +652,47 @@
       },
       error: function (xhr) { addLog('GetAllItemMasterByCompanyID failed (' + xhr.status + ') for company ' + companyID); }
     });
-    /* Prerequisites for "Copy to Cash Sales" - Sales Branch carries its own default
-       Warehouse/BinLocation (SB_DefaultWarehouse/SB_DefaultBinLocation), so no
-       separate warehouse picker is needed. */
-    $.ajax({
-      url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
-      success: function (resp) {
+  }
+
+  /* ── Copy-To-Sales prerequisites (Sales Branch / Payment Mode / Payment Term) ──
+     Loaded LAZILY (only when Copy To Sales is actually clicked), not eagerly with
+     every company switch - these three extra calls aren't needed for normal
+     browsing/editing, and firing them unconditionally on every load meaningfully
+     adds to the shared API's rate limit (confirmed live: GetAllSalesBranch/
+     GetAllCompanyPaymentTerm both hit "API calling too frequent" during heavy
+     testing). Cached per company so repeated Copy To Sales clicks don't re-fetch. */
+  var scopedPrereqsLoadedForCompany = null;
+  function loadCopyToSalesPrereqs(companyID, onDone) {
+    if (scopedPrereqsLoadedForCompany === companyID) { onDone(); return; }
+    addLog('Loading Sales Branch / Payment Mode / Payment Term for company ' + companyID + '...');
+    $.when(
+      $.ajax({
+        url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
+      }).then(function (resp) {
         var data = (resp && resp.data) || [];
         salesBranches = data.map(function (b) { return { id: b.SB_ID, code: b.SB_Code, name: b.SB_Name, warehouseID: b.SB_DefaultWarehouse, binLocationID: b.SB_DefaultBinLocation }; });
         addLog('Loaded ' + salesBranches.length + ' sales branches for company ' + companyID);
-      },
-      error: function (xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ') for company ' + companyID); }
-    });
-    $.ajax({
-      url: apiUrl + 'api/PaymentMode/GetAllPaymentMode', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: companyID, MaxID: 0 }),
-      success: function (resp) {
+      }, function (xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ') for company ' + companyID); }),
+      $.ajax({
+        url: apiUrl + 'api/PaymentMode/GetAllPaymentMode', type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: companyID, MaxID: 0 }),
+      }).then(function (resp) {
         var data = (resp && resp.data) || [];
         paymentModes = data.map(function (p) { return { id: p.PM_ID, code: p.PM_Code, type: p.PM_Type }; });
         addLog('Loaded ' + paymentModes.length + ' payment modes for company ' + companyID);
-      },
-      error: function (xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ') for company ' + companyID); }
-    });
-    $.ajax({
-      url: apiUrl + 'api/CompanyPaymentTerm/GetAllCompanyPaymentTerm', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
-      success: function (resp) {
+      }, function (xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ') for company ' + companyID); }),
+      $.ajax({
+        url: apiUrl + 'api/CompanyPaymentTerm/GetAllCompanyPaymentTerm', type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
+      }).then(function (resp) {
         var data = (resp && resp.data) || [];
         companyPaymentTerms = data.map(function (t) { return { id: t.CPT_ID, active: t.CPT_Active_YN }; });
         addLog('Loaded ' + companyPaymentTerms.length + ' company payment terms for company ' + companyID);
-      },
-      error: function (xhr) { addLog('GetAllCompanyPaymentTerm failed (' + xhr.status + ') for company ' + companyID); }
+      }, function (xhr) { addLog('GetAllCompanyPaymentTerm failed (' + xhr.status + ') for company ' + companyID); })
+    ).always(function () {
+      scopedPrereqsLoadedForCompany = companyID;
+      onDone();
     });
   }
   function renderCustomerDatalist() {
@@ -1218,6 +1248,14 @@
      affects inventory/ledger) - not a sandboxed ZZT_ row. Requires explicit user
      confirmation every time; never fires automatically. */
   function copyToCashSales() {
+    var companyID = currentFilterCompanyID();
+    $('#btn-copy-to-sales').prop('disabled', true);
+    loadCopyToSalesPrereqs(companyID, function () {
+      $('#btn-copy-to-sales').prop('disabled', false);
+      doCopyToCashSales();
+    });
+  }
+  function doCopyToCashSales() {
     var custCode = $('#d-cust-code').val().trim();
     var custRecord = customers.filter(function (c) { return c.code === custCode; })[0];
     if (!custRecord || !custRecord.id) { showToast('Customer must be looked up from the company list first (F11 Lookup or pick from the datalist)', true); return; }
