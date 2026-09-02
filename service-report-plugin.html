@@ -650,93 +650,38 @@
     });
   }
 
-  /* ── Per-user company access (real, via query.irs-alaya.com) ──
-     GetAllCompany returns EVERY company the account can see (682 rows for qa3) -
-     not filtered by the logged-in user. Real access lives in Users.US_Admin_YN
-     + UserGroupMapping (UGM_UserID -> UGM_CompanyID) joined to Company, with
-     Users.US_DefaultCompanyID as the default. The Users table is on Alaya's
-     denied list for the host eval-bridge SQL path, so we reach the same
-     database through query.irs-alaya.com (service account qa3/jin/483533) which
-     has full read - confirmed live against IRSAccounting_IRS0104. Admins see all
-     active companies; non-admins see only their UserGroupMapping companies.
-     Falls back to the old GetAllCompany path if the query site is unreachable. */
-  var QRY_BASE = 'https://query.irs-alaya.com';
-  var QRY_CLIENT = 'qa3';
-  var QRY_USER = 'jin';
-  var QRY_PASS = '483533';
-  var qryToken = null, qryTokenExpiry = 0;
-  var userDefaultCompanyID = null;
-  var userIsAdmin = false;
+  /* ── Per-user company access (hardcoded stopgap) ──
+     GetAllCompany returns EVERY company the whole account/client can see, not just
+     what the logged-in user is actually assigned to (Users.US_Admin_YN /
+     UserGroupMapping+Company would give that properly, but the Users table is on
+     Alaya's own "denied table list" for the eval-bridge SQL path, and there's no
+     REST endpoint for "get my access". query.irs-alaya.com CAN read Users/
+     UserGroupMapping directly, but only via a standing staff-level username+
+     password with unrestricted cross-client read access - that credential must
+     never be embedded in this file, since it is public (GitHub Pages + public
+     repo) and loads into every viewer's browser. A prior revision of this file
+     briefly did exactly that and has been reverted - treat that credential as
+     compromised/rotate it, don't reintroduce this pattern.
+     Until a real api/User/GetMyAccess-type endpoint exists, admins see
+     everything; everyone else is manually mapped here to match their real User
+     Group Mapping (Module Editor > Users > User Group Mapping tab) - update this
+     list by hand when access changes. Unlisted non-admin usernames fall back to
+     their own default company only, never the full list. */
+  var ADMIN_USERNAMES = ['jin1'];
+  var USER_COMPANY_ACCESS = {
+    'jin2': ['JIN4', 'jin3', 'JIN5', 'JIN6', 'JIN9', 'JIN7', 'Adidas'],
+  };
 
-  function getQryToken() {
-    if (qryToken && Date.now() < qryTokenExpiry) return $.Deferred().resolve(qryToken).promise();
-    return $.ajax({
-      url: QRY_BASE + '/api/Access/GetToken', type: 'POST',
-      data: { clientcode: QRY_CLIENT, username: QRY_USER, password: QRY_PASS }
-    }).then(function (r) {
-      if (!r || !r.Result || !r.Obj || !r.Obj.Token) return $.Deferred().reject(r && r.Message || 'GetToken failed').promise();
-      qryToken = r.Obj.Token;
-      qryTokenExpiry = Date.now() + 25 * 60 * 1000;
-      return qryToken;
-    });
-  }
-  function qrySql(sql, rowcount) {
-    rowcount = rowcount || 500;
-    return getQryToken().then(function (tok) {
-      return $.ajax({
-        url: QRY_BASE + '/ashx/sql.ashx?a=a&tmout=30&rowcount=' + rowcount,
-        type: 'POST', headers: { 'Authorization': tok },
-        data: sql, contentType: 'text/plain; charset=UTF-8'
-      });
-    });
-  }
-
+  /* ── Company list (real, read-only) ──
+     GET api/Company/GetAllCompany -> { data: [ {CO_ID, CO_Code, CO_Name}, ... ] }
+     confirmed live against SIT (returns all companies the account can access).
+     Populates the Company filter with real companies instead of deriving options
+     from whatever's already been saved. */
   var companies = [];
   function loadCompaniesFromApi() {
-    if (!username) { addLog('No username yet - cannot load company access'); return; }
-    var escUser = String(username).replace(/'/g, "''");
-    // 1) Who is this user? Admin? Default company?
-    var userSql = "SELECT US_ID, US_Admin_YN, US_DefaultCompanyID FROM Users WHERE US_UserID='" + escUser + "'";
-    addLog('Querying user access for ' + username + ' via ' + QRY_BASE);
-    qrySql(userSql, 10).then(function (resp) {
-      var rows = resp && resp.results && resp.results[0] && resp.results[0].rows;
-      if (!rows || !rows.length) throw new Error('User not found: ' + username);
-      var uid = rows[0][0], isAdmin = !!rows[0][1], defId = rows[0][2];
-      userIsAdmin = isAdmin;
-      userDefaultCompanyID = defId;
-      addLog('User ' + username + ' id=' + uid + ' admin=' + isAdmin + ' defaultCompany=' + defId);
-      // 2) Companies for this user
-      var companySql = isAdmin
-        ? "SELECT CO_ID, CO_Code, CO_Name FROM Company WHERE CO_Active_YN=1 ORDER BY CO_Code"
-        : "SELECT c.CO_ID, c.CO_Code, c.CO_Name FROM Company c WHERE c.CO_ID IN (SELECT UGM_CompanyID FROM UserGroupMapping WHERE UGM_UserID=" + uid + ") ORDER BY c.CO_Code";
-      return qrySql(companySql, 1000);
-    }).then(function (resp2) {
-      var rows2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows;
-      if (!rows2 || !rows2.length) throw new Error('No companies returned for ' + username);
-      companies = rows2.map(function (r) { return { id: r[0], code: String(r[1] || '').trim(), name: r[2] }; });
-      addLog('Loaded ' + companies.length + ' companies for ' + username + (userIsAdmin ? ' (admin - all active)' : ' (from UserGroupMapping)'));
-      hideCompanyLoadError();
-      renderCompanyFilterOptions();
-      // Select user's default company if it is in the allowed list
-      if (userDefaultCompanyID) {
-        var hasDefault = companies.some(function (c) { return c.id === userDefaultCompanyID; });
-        if (hasDefault) {
-          $('#sel-company-filter').val(String(userDefaultCompanyID));
-          addLog('Default company set to ' + userDefaultCompanyID);
-        }
-      }
-      renderList();
-      loadScopedListsForCurrentCompany();
-    }).fail(function (err) {
-      var msg = (err && err.responseJSON && err.responseJSON.Message) || (err && err.statusText) || (err && err.message) || String(err);
-      addLog('Company access query failed (' + msg + ') - falling back to GetAllCompany');
-      fallbackLoadCompaniesFromApi();
-    });
-  }
-  function fallbackLoadCompaniesFromApi() {
     if (!apiUrl || !authToken) return;
     var endpoint = apiUrl + 'api/Company/GetAllCompany';
-    addLog('GET ' + endpoint + ' (fallback)');
+    addLog('GET ' + endpoint);
     $.ajax({
       url: endpoint, type: 'GET', cache: false,
       headers: { 'Authorization': authToken },
@@ -747,8 +692,16 @@
           showCompanyLoadError(resp && resp.msg);
           return;
         }
-        companies = data.map(function (c) { return { id: c.CO_ID, code: String(c.CO_Code || '').trim(), name: c.CO_Name }; });
-        addLog('Loaded ' + companies.length + ' companies from GetAllCompany (fallback)');
+        var allCompanies = data.map(function (c) { return { id: c.CO_ID, code: String(c.CO_Code || '').trim(), name: c.CO_Name }; });
+        if (username && ADMIN_USERNAMES.indexOf(username) >= 0) {
+          companies = allCompanies;
+        } else if (username && USER_COMPANY_ACCESS[username]) {
+          var allowed = USER_COMPANY_ACCESS[username];
+          companies = allCompanies.filter(function (c) { return allowed.indexOf(c.code) >= 0; });
+        } else {
+          companies = allCompanies.filter(function (c) { return c.id === DEFAULT_COMPANY_ID; });
+        }
+        addLog('Loaded ' + companies.length + ' companies for ' + (username || 'unknown user') + ' (of ' + allCompanies.length + ' total from GetAllCompany)');
         hideCompanyLoadError();
         renderCompanyFilterOptions();
         renderList();
@@ -879,6 +832,33 @@
       error: function (xhr) { addLog('GetAllWarehouse failed (' + xhr.status + ') for company ' + companyID); }
     });
   }
+  /* ── qrySql: safe replacement for the removed query.irs-alaya.com helper ──
+     Same call signature/response shape (resp.results[0].rows) the batch/serial +
+     price enrichment code below already expects, but backed by executeSqlViaHost
+     (the plugin's own eval-bridge, riding the CURRENTLY LOGGED-IN user's own
+     session - no credentials of any kind). Confirmed live: ItemMaster/
+     PriceGroupItem/ItemUOM are all readable this way (unlike Users, which is on
+     Alaya's denied-table list for this path). rowcount is accepted for call-site
+     compatibility but not enforced - callers already use TOP N in the SQL itself
+     where it matters. */
+  function qrySql(sql, rowcount) {
+    var dfd = $.Deferred();
+    executeSqlViaHost(sql).then(function (msg) {
+      if (msg.error) { dfd.reject({ statusText: msg.error }); return; }
+      var parsed = null;
+      try { parsed = JSON.parse(msg.result); } catch (e) { parsed = null; }
+      if (!parsed || parsed.success === false) {
+        var errMsg = (parsed && parsed.errors && parsed.errors[0] && parsed.errors[0].message) || 'query failed';
+        dfd.reject({ statusText: errMsg });
+        return;
+      }
+      dfd.resolve(parsed);
+    }, function (err) {
+      dfd.reject({ statusText: (err && err.message) || String(err) });
+    });
+    return dfd.promise();
+  }
+
   function enrichItemsBatchAndPrice(batch) {
     if (!batch.length) return;
     var ids = batch.map(function (im) { return parseInt(im.id,10); }).join(',');
@@ -1399,7 +1379,7 @@
      loaded reports (seeded with the default company so it's never empty). */
   function renderCompanyFilterOptions() {
     var $sel = $('#sel-company-filter');
-    var effectiveDefault = userDefaultCompanyID || DEFAULT_COMPANY_ID;
+    var effectiveDefault = DEFAULT_COMPANY_ID;
     var prev = $sel.val() || String(effectiveDefault);
     var opts;
     if (companies.length) {
