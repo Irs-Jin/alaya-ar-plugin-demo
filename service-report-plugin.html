@@ -112,8 +112,12 @@
     .list-filter-field select {
       border:1px solid #d1d5db; border-radius:6px; padding:7px 10px; font-size:0.85rem; min-width:220px; font-family:inherit;
     }
+    .list-filter-field input[type="date"] {
+      border:1px solid #d1d5db; border-radius:6px; padding:6px 10px; font-size:0.85rem; font-family:inherit;
+    }
     .status-check-group { display:flex; gap:14px; align-items:center; height:32px; }
-    .status-check-group label { display:flex; align-items:center; gap:5px; font-size:0.85rem; font-weight:400; color:#374151; cursor:pointer; }
+    .status-check-group label { display:flex; align-items:center; gap:7px; font-size:0.85rem; font-weight:400; color:#374151; cursor:pointer; }
+    .status-check { width:17px; height:17px; cursor:pointer; }
     .btn-list-search {
       background:#1565c0; color:#fff; border:none; border-radius:6px; padding:9px 28px; font-size:0.85rem;
       font-weight:600; cursor:pointer; font-family:inherit; margin-left:auto;
@@ -283,6 +287,14 @@
     <div class="list-filter-field">
       <label>Company:</label>
       <select id="sel-company-filter"></select>
+    </div>
+    <div class="list-filter-field">
+      <label>From Date:</label>
+      <input type="date" id="inp-date-from" />
+    </div>
+    <div class="list-filter-field">
+      <label>To Date:</label>
+      <input type="date" id="inp-date-to" />
     </div>
     <div class="list-filter-field">
       <label>Status:</label>
@@ -1120,9 +1132,13 @@
     var q = ($('#inp-search').val() || '').toLowerCase();
     var statuses = checkedStatuses();
     var companyFilter = $('#sel-company-filter').val() || String(DEFAULT_COMPANY_ID);
+    var dateFrom = $('#inp-date-from').val();
+    var dateTo = $('#inp-date-to').val();
     var filtered = reports.filter(function (r) {
       if (String(r.companyID || DEFAULT_COMPANY_ID) !== String(companyFilter)) return false;
       if (statuses.length && statuses.indexOf(r.status) < 0) return false;
+      if (dateFrom && r.date && r.date < dateFrom) return false;
+      if (dateTo && r.date && r.date > dateTo) return false;
       if (!q) return true;
       return (r.code + ' ' + r.custName + ' ' + r.custCode + ' ' + r.ref).toLowerCase().indexOf(q) >= 0;
     });
@@ -1151,6 +1167,7 @@
   $('#inp-search').on('input', renderList);
   $('.status-check').on('change', renderList);
   $('#btn-search-list').on('click', renderList);
+  $('#inp-date-from, #inp-date-to').on('change', renderList);
   $('#btn-clear-search').on('click', function (e) { e.preventDefault(); $('#inp-search').val(''); renderList(); });
   $('#sel-company-filter').on('change', renderList);
 
