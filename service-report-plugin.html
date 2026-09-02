@@ -155,6 +155,22 @@
     #log .ts { color:#b0b4bb; margin-right:5px; font-family:monospace; }
 
     @media (max-width:900px) { .header-columns { grid-template-columns:1fr; } }
+
+    /* ── Print view (browser print/PDF - not native FastReport, but a real printable
+       output). Only #print-view shows when printing; everything else is hidden. ── */
+    #print-view { display:none; }
+    #print-view table { width:100%; border-collapse:collapse; margin:10px 0 18px 0; font-size:0.85rem; }
+    #print-view th, #print-view td { border:1px solid #999; padding:6px 8px; text-align:left; }
+    #print-view th { background:#f0f0f0; }
+    #print-view .print-title { font-size:1.3rem; font-weight:800; margin-bottom:2px; }
+    #print-view .print-sub { color:#555; margin-bottom:16px; }
+    #print-view .print-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 24px; margin-bottom:18px; font-size:0.88rem; }
+    #print-view .print-grid div b { display:inline-block; min-width:130px; }
+    @media print {
+      body > *:not(#print-view) { display:none !important; }
+      #print-view { display:block !important; }
+      body { background:#fff; padding:0; }
+    }
   </style>
 </head>
 <body>
@@ -251,6 +267,9 @@
     <button class="doc-toolbar-btn primary" id="btn-save-detail-top"><span class="icon">&#128190;</span>Save</button>
     <button class="doc-toolbar-btn" id="btn-new-report-top"><span class="icon">&#10133;</span>New</button>
     <button class="doc-toolbar-btn danger" id="btn-delete-report" style="display:none;"><span class="icon">&#128465;</span>Delete</button>
+    <div class="doc-toolbar-sep"></div>
+    <button class="doc-toolbar-btn" id="btn-print-report"><span class="icon">&#128424;</span>Print</button>
+    <button class="doc-toolbar-btn" id="btn-copy-to-sales"><span class="icon">&#128179;</span>Copy To Sales</button>
   </div>
 
   <div class="hero-title-row" style="margin-bottom:16px;">
@@ -275,7 +294,8 @@
       <div class="form-group full">
         <label>Account (Customer Code)<span class="required-mark">*</span></label>
         <div class="customer-row">
-          <input type="text" id="d-cust-code" placeholder="e.g. 000000462" />
+          <input type="text" id="d-cust-code" list="customer-datalist" placeholder="e.g. 000000462" />
+          <datalist id="customer-datalist"></datalist>
           <button class="btn-secondary btn-sm" id="btn-lookup-customer" type="button">F11 Lookup</button>
         </div>
         <span id="cust-lookup-status" class="sub" style="margin-bottom:0;"></span>
@@ -321,6 +341,7 @@
     <thead><tr><th style="width:14%">Item No</th><th style="width:32%">Description</th><th style="width:12%">UOM</th><th style="width:12%">Qty</th><th style="width:16%">Price</th><th style="width:8%"></th></tr></thead>
     <tbody id="action-tbody"></tbody>
   </table>
+  <datalist id="item-datalist"></datalist>
   <div class="sub-grid-empty" id="action-empty" style="display:none;">No action-taken lines added yet.</div>
   <button class="btn-secondary btn-sm" id="btn-add-action" type="button">+ Add Line</button>
 
@@ -335,6 +356,9 @@
   <div class="log-label">Event Log</div>
   <ul id="log"></ul>
 </div>
+
+<!-- Print view - populated just before window.print(), hidden otherwise (see @media print) -->
+<div id="print-view"></div>
 
 <script>
   /* Matches the DevKey now registered on the JinMenu7 module (Module Editor > Edit
@@ -471,26 +495,127 @@
         addLog('Loaded ' + companies.length + ' companies from GetAllCompany');
         renderCompanyFilterOptions();
         renderList();
+        loadScopedListsForCurrentCompany();
       },
       error: function (xhr) { addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company only'); }
     });
   }
 
-  /* ── Customer lookup (read-only) ──
-     api/Customer/GetCustomerByAccountCode { accountCode, companyID } -> real
-     Customer Master row. Never written back (unlike the AR plugin's Notes
-     write path, which has known side effects) — this is read-only autofill. */
+  /* ── Company-scoped Customer & Item lists (real, read-only) ──
+     api/Customer/GetAllCustomer and api/Item/GetAllItemMasterByCompanyID both take
+     { companyID } and return every Customer/Item visible for that company only -
+     confirmed live. Reloaded whenever the Company filter changes, so switching to
+     JIN6 SDN BHD only ever shows JIN6's own customers/items, never another
+     company's. Backs the datalist autocomplete on Customer Account Code and each
+     Action Taken row's Item No. */
+  var customers = [], items = [], salesBranches = [], paymentModes = [], companyPaymentTerms = [];
+  function currentFilterCompanyID() {
+    return parseInt($('#sel-company-filter').val(), 10) || DEFAULT_COMPANY_ID;
+  }
+  function loadScopedListsForCurrentCompany() {
+    var companyID = currentFilterCompanyID();
+    if (!apiUrl || !authToken) return;
+    addLog('Loading customers + items for company ' + companyID + '...');
+    $.ajax({
+      url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        customers = data.map(function (c) {
+          var addr = [c.Cust_MainAddress1, c.Cust_MainAddress2, c.Cust_MainAddress3, c.Cust_MainAddress4].filter(Boolean).join(', ');
+          return { id: c.Cust_ID, code: c.Cust_AccountCode, name: c.Cust_NAME, phone: c.Cust_Phone1 || c.Cust_Mobile || '', address: addr };
+        }).filter(function (c) { return c.code; });
+        addLog('Loaded ' + customers.length + ' customers for company ' + companyID);
+        renderCustomerDatalist();
+      },
+      error: function (xhr) { addLog('GetAllCustomer failed (' + xhr.status + ') for company ' + companyID); }
+    });
+    $.ajax({
+      url: apiUrl + 'api/Item/GetAllItemMasterByCompanyID', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        items = data.map(function (im) {
+          return { id: im.IM_ID, code: im.IM_Code, desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID };
+        }).filter(function (im) { return im.code; });
+        addLog('Loaded ' + items.length + ' items for company ' + companyID);
+        renderItemDatalist();
+      },
+      error: function (xhr) { addLog('GetAllItemMasterByCompanyID failed (' + xhr.status + ') for company ' + companyID); }
+    });
+    /* Prerequisites for "Copy to Cash Sales" - Sales Branch carries its own default
+       Warehouse/BinLocation (SB_DefaultWarehouse/SB_DefaultBinLocation), so no
+       separate warehouse picker is needed. */
+    $.ajax({
+      url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        salesBranches = data.map(function (b) { return { id: b.SB_ID, code: b.SB_Code, name: b.SB_Name, warehouseID: b.SB_DefaultWarehouse, binLocationID: b.SB_DefaultBinLocation }; });
+        addLog('Loaded ' + salesBranches.length + ' sales branches for company ' + companyID);
+      },
+      error: function (xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ') for company ' + companyID); }
+    });
+    $.ajax({
+      url: apiUrl + 'api/PaymentMode/GetAllPaymentMode', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: companyID, MaxID: 0 }),
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        paymentModes = data.map(function (p) { return { id: p.PM_ID, code: p.PM_Code, type: p.PM_Type }; });
+        addLog('Loaded ' + paymentModes.length + ' payment modes for company ' + companyID);
+      },
+      error: function (xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ') for company ' + companyID); }
+    });
+    $.ajax({
+      url: apiUrl + 'api/CompanyPaymentTerm/GetAllCompanyPaymentTerm', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        companyPaymentTerms = data.map(function (t) { return { id: t.CPT_ID, active: t.CPT_Active_YN }; });
+        addLog('Loaded ' + companyPaymentTerms.length + ' company payment terms for company ' + companyID);
+      },
+      error: function (xhr) { addLog('GetAllCompanyPaymentTerm failed (' + xhr.status + ') for company ' + companyID); }
+    });
+  }
+  function renderCustomerDatalist() {
+    var $dl = $('#customer-datalist').empty();
+    customers.forEach(function (c) { $dl.append($('<option>').attr('value', c.code).text(c.name)); });
+  }
+  function renderItemDatalist() {
+    var $dl = $('#item-datalist').empty();
+    items.forEach(function (im) { $dl.append($('<option>').attr('value', im.code).text(im.desc)); });
+  }
+  $('#sel-company-filter').on('change', function () { loadScopedListsForCurrentCompany(); });
+
+  /* ── Customer lookup ──
+     If the typed Account Code matches the company-scoped cache (loaded above), fill
+     instantly with no network round-trip. Falls back to the live single-record
+     api/Customer/GetCustomerByAccountCode call (F11 Lookup button) for codes not in
+     the cached list, or to double-check against the live record. Never written back
+     (unlike the AR plugin's Notes write path, which has known side effects). */
+  function applyCustomerRecord(c) {
+    $('#d-cust-name').val(c.name || c.Cust_NAME || '');
+    $('#d-cust-phone').val(c.phone || c.Cust_Phone1 || c.Cust_Mobile || '');
+    var addr = c.address !== undefined ? c.address : [c.Cust_MainAddress1, c.Cust_MainAddress2, c.Cust_MainAddress3, c.Cust_MainAddress4].filter(Boolean).join(', ');
+    $('#d-cust-address').val(addr);
+  }
+  $('#d-cust-code').on('change', function () {
+    var code = ($(this).val() || '').trim();
+    var cached = customers.filter(function (c) { return c.code === code; })[0];
+    if (cached) { applyCustomerRecord(cached); $('#cust-lookup-status').text('Found (from company list)'); markDirty('customer selected'); }
+  });
   function lookupCustomer() {
     var code = ($('#d-cust-code').val() || '').trim();
     if (!code) { showToast('Enter a Customer Account Code first', true); return; }
     if (!apiUrl || !authToken) { showToast('Not connected to host yet', true); return; }
     $('#cust-lookup-status').text('Looking up…');
     var endpoint = apiUrl + 'api/Customer/GetCustomerByAccountCode';
-    addLog('POST ' + endpoint + ' { accountCode: "' + code + '" }');
+    var companyID = currentFilterCompanyID();
+    addLog('POST ' + endpoint + ' { accountCode: "' + code + '", companyID: ' + companyID + ' }');
     $.ajax({
       url: endpoint, type: 'POST', cache: false, contentType: 'application/json',
       headers: { 'Authorization': authToken },
-      data: JSON.stringify({ accountCode: code, companyID: DEFAULT_COMPANY_ID }),
+      data: JSON.stringify({ accountCode: code, companyID: companyID }),
       success: function (resp) {
         if (!resp || resp.Result === false || !resp.data) {
           $('#cust-lookup-status').text('Not found');
@@ -499,11 +624,7 @@
           showToast('Customer not found', true);
           return;
         }
-        var c = resp.data;
-        $('#d-cust-name').val(c.Cust_NAME || '');
-        $('#d-cust-phone').val(c.Cust_Phone1 || c.Cust_Mobile || '');
-        var addr = [c.Cust_MainAddress1, c.Cust_MainAddress2, c.Cust_MainAddress3, c.Cust_MainAddress4].filter(Boolean).join(', ');
-        $('#d-cust-address').val(addr);
+        applyCustomerRecord(resp.data);
         $('#cust-lookup-status').text('Found');
         addLog('Customer lookup OK: ' + code);
         markDirty('customer lookup');
@@ -891,6 +1012,130 @@
   $('#btn-cancel-detail').on('click', function () { $('#view-detail').hide(); $('#view-list').show(); });
   $('#btn-delete-report').on('click', function () { if (editingCode) { deleteReport(editingCode); $('#view-detail').hide(); $('#view-list').show(); } });
 
+  /* ── Print (browser print/PDF) ──
+     Not native FastReport - Alaya's own report engine isn't reachable from a plugin
+     iframe. This renders a clean, print-formatted summary of the CURRENTLY EDITED
+     report into #print-view and calls window.print(); @media print hides everything
+     else on the page (see <style>). Reads live from the on-screen fields, not just
+     editingReport, so it reflects anything typed but not yet locally saved. */
+  function printReport() {
+    var equipRows = (editingReport.equipment || []).map(function (eq, i) {
+      return '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(eq.desc) + '</td><td>' + escapeHtml(eq.brand) + '</td><td>' + escapeHtml(eq.model) + '</td><td>' + escapeHtml(eq.sn) + '</td><td>' + escapeHtml(eq.remark) + '</td></tr>';
+    }).join('') || '<tr><td colspan="6" style="text-align:center;color:#888;">No equipment</td></tr>';
+    var actionRows = (editingReport.actionTaken || []).map(function (a) {
+      return '<tr><td>' + escapeHtml(a.item) + '</td><td>' + escapeHtml(a.desc) + '</td><td>' + escapeHtml(a.uom) + '</td><td>' + (a.qty || 0) + '</td><td>' + (a.price || 0).toFixed(2) + '</td></tr>';
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:#888;">No action taken</td></tr>';
+
+    var html =
+      '<div class="print-title">Service Report ' + escapeHtml($('#d-docno').val() || '[Unsaved]') + '</div>' +
+      '<div class="print-sub">' + escapeHtml($('#sel-company-filter option:selected').text() || '') + '</div>' +
+      '<div class="print-grid">' +
+        '<div><b>Account:</b>' + escapeHtml($('#d-cust-code').val()) + '</div>' +
+        '<div><b>Date:</b>' + escapeHtml($('#d-date').val()) + '</div>' +
+        '<div><b>Name:</b>' + escapeHtml($('#d-cust-name').val()) + '</div>' +
+        '<div><b>Expiry Date:</b>' + escapeHtml($('#d-expiry').val()) + '</div>' +
+        '<div><b>Address:</b>' + escapeHtml($('#d-cust-address').val()) + '</div>' +
+        '<div><b>Reference:</b>' + escapeHtml($('#d-ref').val()) + '</div>' +
+        '<div><b>Telephone:</b>' + escapeHtml($('#d-cust-phone').val()) + '</div>' +
+        '<div><b>Received By:</b>' + escapeHtml($('#d-received-by').val()) + '</div>' +
+        '<div><b>Remark:</b>' + escapeHtml($('#d-remark').val()) + '</div>' +
+        '<div><b>Serviced By:</b>' + escapeHtml($('#d-serviced-by').val()) + '</div>' +
+        '<div></div><div><b>Status:</b>' + escapeHtml($('#d-status option:selected').text()) + '</div>' +
+      '</div>' +
+      '<div style="font-weight:800; margin-bottom:6px;">Equipment</div>' +
+      '<table><thead><tr><th>No</th><th>Description</th><th>Brand</th><th>Model</th><th>S/N</th><th>Remark</th></tr></thead><tbody>' + equipRows + '</tbody></table>' +
+      '<div style="font-weight:800; margin-bottom:6px;">Action Taken</div>' +
+      '<table><thead><tr><th>Item No</th><th>Description</th><th>UOM</th><th>Qty</th><th>Price</th></tr></thead><tbody>' + actionRows + '</tbody></table>';
+
+    $('#print-view').html(html);
+    window.print();
+  }
+  $('#btn-print-report').on('click', printReport);
+
+  /* ── Copy To Sales (real, writes a POSTED Cash Sales document) ──
+     api/CashSales/PostCashSales - schema confirmed against a prior working call in
+     this project (tc010_api_post.js: IV/CS/DO/CN/DR all posted successfully with
+     this exact field shape). UNLIKE everything else in this plugin, this creates a
+     real, hard-to-reverse accounting document (consumes a real document number,
+     affects inventory/ledger) - not a sandboxed ZZT_ row. Requires explicit user
+     confirmation every time; never fires automatically. */
+  function copyToCashSales() {
+    var custCode = $('#d-cust-code').val().trim();
+    var custRecord = customers.filter(function (c) { return c.code === custCode; })[0];
+    if (!custRecord || !custRecord.id) { showToast('Customer must be looked up from the company list first (F11 Lookup or pick from the datalist)', true); return; }
+
+    var lines = (editingReport.actionTaken || []).filter(function (a) { return a.item && a.qty > 0; });
+    if (!lines.length) { showToast('Add at least one Action Taken line with an Item No and Qty > 0', true); return; }
+
+    var unresolvedItems = [];
+    var dtl = lines.map(function (a) {
+      var itemRecord = items.filter(function (im) { return im.code === a.item; })[0];
+      if (!itemRecord || !itemRecord.id) { unresolvedItems.push(a.item); return null; }
+      var qty = a.qty.toFixed(4), total = (a.qty * (a.price || 0)).toFixed(4);
+      return {
+        Description: itemRecord.desc || a.desc || '', Qty: qty, ItemID: String(itemRecord.id), ItemUOMID: String(itemRecord.uomID || ''),
+        UnitPrice: (a.price || 0).toFixed(6), NewUnitPrice: (a.price || 0).toFixed(2), DiscountAmt: '0.00', DiscountFormula: '', ItemTypeID: String(itemRecord.typeID || ''),
+        WarehouseID: '', BinLocationID: '', Remarks: '', GroupID: '',
+        SubTotal: total, TaxAmt: '0.0000', TaxableAmt: total, Total: total, TaxCode: '',
+        TaxableExcFooterDisc: total, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
+      };
+    }).filter(Boolean);
+    if (unresolvedItems.length) { showToast('These Item No(s) are not in the company item list: ' + unresolvedItems.join(', '), true); return; }
+
+    var companyID = currentFilterCompanyID();
+    var branch = salesBranches.filter(function (b) { return b.warehouseID; })[0];
+    if (!branch) { showToast('No Sales Branch loaded for this company yet - try again in a moment', true); return; }
+    dtl.forEach(function (d) { d.WarehouseID = String(branch.warehouseID); d.BinLocationID = String(branch.binLocationID); });
+
+    var cashMode = paymentModes.filter(function (p) { return (p.code || '').toUpperCase().indexOf('CASH') >= 0; })[0] || paymentModes[0];
+    if (!cashMode) { showToast('No Payment Mode loaded for this company yet - try again in a moment', true); return; }
+
+    var payTerm = companyPaymentTerms.filter(function (t) { return t.active; })[0] || companyPaymentTerms[0];
+
+    var total = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
+    var now = fmtCashSalesDate(new Date());
+    var body = {
+      CompanyID: String(companyID), BranchID: String(branch.id), DocumentNo: '',
+      Reference: editingReport.code || 'SVCRPT', Description: 'Copied from Service Report ' + (editingReport.code || ''), Note: '',
+      PostingDate: now, DocumentDate: now, DueDate: '', DeliveryDate: now,
+      CustomerID: String(custRecord.id), WarehouseID: String(branch.warehouseID), PriceLevel: '1',
+      CompanyPaymentTermID: payTerm ? String(payTerm.id) : '',
+      TaxItemize: 'false', InclusiveTax: 'False', Rounding_YN: 'False', RoundingAmount: '0.0000', FooterDiscount: '0.0000',
+      SalesAgentID: '', Total: total.toFixed(4), TotalPoint: '0.0000',
+      SalesDTL: dtl,
+      SalesPayment: [{ PaymentModeID: String(cashMode.id), Remarks: '', ChequeNo: null, PaymentAmount: total.toFixed(4), Currency: 'RINGGIT MALAYSIA', CurrencyRate: '1.00', Reason: '', RedeemPoint: '0' }],
+    };
+
+    if (!confirm('This creates a REAL posted Cash Sales document for ' + custRecord.name + ' totalling RM' + total.toFixed(2) + '. This cannot be undone (only reversed via a Sales Return). Continue?')) return;
+
+    addLog('POST api/CashSales/PostCashSales (company ' + companyID + ', branch ' + branch.id + ', total ' + total.toFixed(2) + ')');
+    $.ajax({
+      url: apiUrl + 'api/CashSales/PostCashSales', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify(body),
+      success: function (resp) {
+        if (resp && resp.success !== false && resp.data) {
+          addLog('Cash Sales posted OK: ' + resp.data);
+          showToast('Cash Sales ' + resp.data + ' created');
+          editingReport.ref = editingReport.ref ? editingReport.ref + ' / CS:' + resp.data : 'CS:' + resp.data;
+          $('#d-ref').val(editingReport.ref);
+          markDirty('copy to sales');
+        } else {
+          addLog('Cash Sales post FAILED: ' + JSON.stringify(resp).slice(0, 300));
+          showToast('Copy to Sales failed: ' + ((resp && resp.msg) || 'unknown error'), true);
+        }
+      },
+      error: function (xhr) {
+        addLog('Cash Sales post error (' + xhr.status + '): ' + (xhr.responseText || '').slice(0, 300));
+        showToast('Copy to Sales failed (' + xhr.status + ')', true);
+      }
+    });
+  }
+  function fmtCashSalesDate(d) {
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return p(d.getMonth() + 1) + '/' + p(d.getDate()) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  $('#btn-copy-to-sales').on('click', copyToCashSales);
+
   function renderEquipTable() {
     var $tb = $('#equip-tbody').empty();
     (editingReport.equipment || []).forEach(function (eq, i) {
@@ -908,11 +1153,25 @@
   }
   $('#btn-add-equip').on('click', function () { editingReport.equipment = editingReport.equipment || []; editingReport.equipment.push({ desc: '', brand: '', model: '', sn: '', remark: '' }); renderEquipTable(); });
 
+  /* Item No cells use the same company-scoped <datalist id="item-datalist"> as the
+     header's Customer field. On a matching code (typed or picked from the browser's
+     native autocomplete), auto-fill Description + UOM from the cached item list -
+     same "only load my own company's list" scoping as GetAllItemMasterByCompanyID. */
   function renderActionTable() {
     var $tb = $('#action-tbody').empty();
     (editingReport.actionTaken || []).forEach(function (a, i) {
       var $tr = $('<tr>');
-      $tr.append($('<td>').append($('<input>').val(a.item || '').on('input', function () { editingReport.actionTaken[i].item = $(this).val(); })));
+      $tr.append($('<td>').append($('<input list="item-datalist">').val(a.item || '')
+        .on('input', function () { editingReport.actionTaken[i].item = $(this).val(); })
+        .on('change', function () {
+          var code = $(this).val();
+          var match = items.filter(function (im) { return im.code === code; })[0];
+          if (match) {
+            editingReport.actionTaken[i].desc = match.desc;
+            editingReport.actionTaken[i].uom = match.uom;
+            renderActionTable();
+          }
+        })));
       $tr.append($('<td>').append($('<input>').val(a.desc || '').on('input', function () { editingReport.actionTaken[i].desc = $(this).val(); })));
       $tr.append($('<td>').append($('<input>').val(a.uom || '').on('input', function () { editingReport.actionTaken[i].uom = $(this).val(); })));
       $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; })));
