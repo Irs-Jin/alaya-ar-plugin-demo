@@ -826,10 +826,12 @@
         }).filter(function (im) { return im.code; });
         addLog('Loaded ' + items.length + ' items for company ' + companyID);
         renderItemDatalist();
-        // Bulk enrich all items in chunks of 80 to avoid huge IN clause and rate-limit
-        for (var _c = 0; _c < items.length; _c += 80) {
-          enrichItemsBatchAndPrice(items.slice(_c, _c + 80));
-        }
+        // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
+        (function enrichSeq(start){
+          if(start>=Math.min(items.length,80)) return;
+          enrichItemsBatchAndPrice(items.slice(start, start+40));
+          setTimeout(function(){ enrichSeq(start+40); }, 800);
+        })(0);
       },
       error: function (xhr) { addLog('GetAllItemMasterByCompanyID failed (' + xhr.status + ') for company ' + companyID); }
     });
@@ -1721,18 +1723,23 @@
     if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0) && itemRecord.price) {
       editingReport.actionTaken[i].price = parseFloat(itemRecord.price) || 0;
     }
-    // If still no price, lazy fetch price via PriceGroupItem
+    // If still no price, lazy fetch price via PriceGroupItem then ItemUOM fallback
     if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0)) {
       (function (idx, im) {
         qrySql("SELECT TOP 1 PGI_SalesPrice1 FROM PriceGroupItem WHERE PGI_ItemID=" + parseInt(im.id,10) + " ORDER BY PGI_ID", 5).then(function (resp) {
           var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
-          if (r && r[0]) {
-            im.price = parseFloat(r[0]) || im.price;
-            if (!editingReport.actionTaken[idx].price) {
-              editingReport.actionTaken[idx].price = im.price;
-              renderActionTable();
-            }
+          var p = r && parseFloat(r[0]);
+          if (p && p>0) {
+            im.price = p;
+            if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p; renderActionTable(); }
+            return;
           }
+          // Fallback to ItemUOM
+          return qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ItemID=" + parseInt(im.id,10) + " ORDER BY IU_ID", 5).then(function (resp2) {
+            var r2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows && resp2.results[0].rows[0];
+            var p2 = r2 && parseFloat(r2[0]);
+            if (p2 && p2>0) { im.price = p2; if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p2; renderActionTable(); } }
+          });
         });
       })(i, itemRecord);
     }
@@ -1750,9 +1757,19 @@
           if (itemRecord.batchControl || itemRecord.serialControl) {
             addLog('Item ' + itemRecord.code + ' requires ' + (itemRecord.batchControl ? 'batch ' : '') + (itemRecord.serialControl ? 'serial' : ''));
             openBatchModalForRow(i);
+          } else {
+            addLog('Item ' + itemRecord.code + ' is not batch/serial');
           }
+        } else {
+          addLog('Item flags empty for ' + itemRecord.code + ' - opening generic batch entry');
+          // Unknown - still offer batch entry so user can proceed (covers rate-limit fallback)
+          openBatchModalForRow(i, true);
         }
-      }).fail(function () { addLog('Item flags lookup failed for ' + itemRecord.code); });
+      }).fail(function (e) {
+        addLog('Item flags lookup failed for ' + itemRecord.code + ': ' + (e && e.statusText || e));
+        // Fallback: still open batch modal so user is not blocked (can skip if not needed)
+        openBatchModalForRow(i, true);
+      });
     } else if (itemRecord.batchControl || itemRecord.serialControl) {
       openBatchModalForRow(i);
     }
@@ -1761,8 +1778,8 @@
      When a batch/serial item is selected, prompt for Batch No (and Serial Nos).
      Data is stored on the row as batchNo / serialNos and validated before
      Copy To Sales. Available batches are loaded from ItemBatch via query.irs-alaya.com. */
-  var batchEditingIdx = null;
-  function openBatchModalForRow(idx) {
+  var batchEditingIdx = null, batchNeedBatch=false, batchNeedSerial=false, batchOptional=false;
+  function openBatchModalForRow(idx, force) {
     var row = editingReport.actionTaken[idx];
     if (!row || !row.item) return;
     var itemRec = items.filter(function (im) { return im.code === row.item; })[0];
@@ -1770,6 +1787,9 @@
     batchEditingIdx = idx;
     var needBatch = !!itemRec.batchControl;
     var needSerial = !!itemRec.serialControl;
+    batchOptional = false;
+    if (force) { needBatch = true; batchOptional = true; }
+    batchNeedBatch = needBatch; batchNeedSerial = needSerial;
     $('#batch-title').text(needBatch && needSerial ? 'Batch & Serial' : needBatch ? 'Batch Item' : 'Serial Number');
     $('#batch-info').text(itemRec.code + ' - ' + (itemRec.desc || row.desc || ''));
     $('#batch-batch-section').toggle(needBatch);
@@ -1803,19 +1823,16 @@
   $('#btn-batch-ok').on('click', function () {
     if (batchEditingIdx === null) return;
     var row = editingReport.actionTaken[batchEditingIdx];
-    var itemRec = items.filter(function (im) { return im.code === row.item; })[0];
-    var needBatch = itemRec && itemRec.batchControl;
-    var needSerial = itemRec && itemRec.serialControl;
     var bNo = $.trim($('#batch-input').val());
     var sText = $.trim($('#serial-input').val());
     var serials = sText ? sText.split(/\n/).map(function (s) { return $.trim(s); }).filter(Boolean) : [];
-    if (needBatch && !bNo) { showToast('Batch No is required for this item', true); return; }
-    if (needSerial && serials.length !== parseInt(row.qty || 0, 10)) {
+    if (batchNeedBatch && !batchOptional && !bNo) { showToast('Batch No is required for this item', true); return; }
+    if (batchNeedSerial && serials.length !== parseInt(row.qty || 0, 10)) {
       showToast('Serial count (' + serials.length + ') must match Qty (' + row.qty + ')', true); return;
     }
-    if (needSerial && !serials.length) { showToast('Serial No is required', true); return; }
-    row.batchNo = needBatch ? bNo : '';
-    row.serialNos = needSerial ? serials : [];
+    if (batchNeedSerial && !serials.length) { showToast('Serial No is required', true); return; }
+    row.batchNo = bNo;
+    row.serialNos = serials;
     addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batch=' + (row.batchNo||'-') + ' serials=' + (row.serialNos||[]).length);
     closeBatchModal();
     renderActionTable();
