@@ -514,6 +514,10 @@
       <label>Payment Mode<span class="required-mark">*</span></label>
       <select id="paymode-select" style="width:100%;"></select>
     </div>
+    <div class="form-group" style="margin-top:10px;">
+      <label>Reference</label>
+      <input type="text" id="paymode-reference" placeholder="e.g. cheque no. / transaction ref" style="width:100%; border:1px solid #d1d5db; border-radius:6px; padding:7px 10px;" />
+    </div>
     <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
       <button class="btn-primary" id="btn-paymode-ok" type="button">Continue</button>
       <button class="btn-secondary" id="btn-paymode-cancel" type="button">Cancel</button>
@@ -1865,6 +1869,7 @@
     paymentModes.forEach(function (p) { $sel.append($('<option>').val(p.id).text(p.code)); });
     var defaultMode = paymentModes.filter(function (p) { return (p.code || '').toUpperCase().indexOf('CASH') >= 0; })[0];
     if (defaultMode) $sel.val(defaultMode.id);
+    $('#paymode-reference').val('');
     $('#paymode-modal').addClass('show');
   }
   var pendingCashSales = null;
@@ -1876,8 +1881,9 @@
     var modeID = $('#paymode-select').val();
     var mode = paymentModes.filter(function (p) { return String(p.id) === String(modeID); })[0];
     if (!mode) { showToast('Please select a Payment Mode', true); return; }
+    var reference = $.trim($('#paymode-reference').val());
     var ctx = pendingCashSales;
-    ctx.body.SalesPayment = [{ PaymentModeID: String(mode.id), Remarks: '', ChequeNo: null, PaymentAmount: ctx.total.toFixed(4), Currency: 'RINGGIT MALAYSIA', CurrencyRate: '1.00', Reason: '', RedeemPoint: '0' }];
+    ctx.body.SalesPayment = [{ PaymentModeID: String(mode.id), Remarks: reference, ChequeNo: null, PaymentAmount: ctx.total.toFixed(4), Currency: 'RINGGIT MALAYSIA', CurrencyRate: '1.00', Reason: '', RedeemPoint: '0' }];
     closePaymodeModal();
 
     if (!confirm('This creates a REAL posted Cash Sales document for ' + ctx.custRecord.name + ' totalling RM' + ctx.total.toFixed(2) + ' (' + mode.code + '). This cannot be undone (only reversed via a Sales Return). Continue?')) return;
