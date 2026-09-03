@@ -827,65 +827,53 @@
     if (!apiUrl || !authToken) return;
     loadStaffForCompany(companyID);
     addLog('Loading customers + items for company ' + companyID + '...');
-    $.ajax({
-      url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
-      success: function (resp) {
-        var data = (resp && resp.data) || [];
-        customers = data.map(function (c) {
-          var addr = [c.Cust_MainAddress1, c.Cust_MainAddress2, c.Cust_MainAddress3, c.Cust_MainAddress4].filter(Boolean).join(', ');
-          return { id: c.Cust_ID, code: c.Cust_AccountCode, name: c.Cust_NAME, phone: c.Cust_Phone1 || c.Cust_Mobile || '', address: addr, address1: c.Cust_MainAddress1 || '', address2: c.Cust_MainAddress2 || '', address3: c.Cust_MainAddress3 || '', address4: c.Cust_MainAddress4 || '' };
-        }).filter(function (c) { return c.code; });
-        addLog('Loaded ' + customers.length + ' customers for company ' + companyID);
-        renderCustomerDatalist();
-      },
-      error: function (xhr) { addLog('GetAllCustomer failed (' + xhr.status + ') for company ' + companyID); }
+    apiPost('api/Customer/GetAllCustomer', { companyID: companyID }).then(function (r) {
+      if (!r.ok) { addLog('GetAllCustomer FAILED for company ' + companyID + ' (kept previous list)'); return; }
+      var resp = r.resp;
+      var data = (resp && resp.data) || [];
+      customers = data.map(function (c) {
+        var addr = [c.Cust_MainAddress1, c.Cust_MainAddress2, c.Cust_MainAddress3, c.Cust_MainAddress4].filter(Boolean).join(', ');
+        return { id: c.Cust_ID, code: c.Cust_AccountCode, name: c.Cust_NAME, phone: c.Cust_Phone1 || c.Cust_Mobile || '', address: addr, address1: c.Cust_MainAddress1 || '', address2: c.Cust_MainAddress2 || '', address3: c.Cust_MainAddress3 || '', address4: c.Cust_MainAddress4 || '' };
+      }).filter(function (c) { return c.code; });
+      addLog('Loaded ' + customers.length + ' customers for company ' + companyID);
+      renderCustomerDatalist();
     });
-    $.ajax({
-      url: apiUrl + 'api/Item/GetAllItemMasterByCompanyID', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
-      success: function (resp) {
-        var data = (resp && resp.data) || [];
-        items = data.map(function (im) {
-          return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
-        }).filter(function (im) { return im.code; });
-        addLog('Loaded ' + items.length + ' items for company ' + companyID);
-        renderItemDatalist();
-        // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
-        (function enrichSeq(start){
-          if(start>=Math.min(items.length,80)) return;
-          enrichItemsBatchAndPrice(items.slice(start, start+40));
-          setTimeout(function(){ enrichSeq(start+40); }, 800);
-        })(0);
-      },
-      error: function (xhr) { addLog('GetAllItemMasterByCompanyID failed (' + xhr.status + ') for company ' + companyID); }
+    apiPost('api/Item/GetAllItemMasterByCompanyID', { companyID: companyID }).then(function (r) {
+      if (!r.ok) { addLog('GetAllItemMasterByCompanyID FAILED for company ' + companyID + ' (kept previous list)'); return; }
+      var resp = r.resp;
+      var data = (resp && resp.data) || [];
+      items = data.map(function (im) {
+        return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
+      }).filter(function (im) { return im.code; });
+      addLog('Loaded ' + items.length + ' items for company ' + companyID);
+      renderItemDatalist();
+      // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
+      (function enrichSeq(start){
+        if(start>=Math.min(items.length,80)) return;
+        enrichItemsBatchAndPrice(items.slice(start, start+40));
+        setTimeout(function(){ enrichSeq(start+40); }, 800);
+      })(0);
     });
     // Load sales branches for detail page (Sales Branch / Warehouse dropdowns)
-    $.ajax({
-      url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
-      success: function (resp) {
-        var data = (resp && resp.data) || [];
-        salesBranches = data.map(function (b) { return { id: b.SB_ID, code: b.SB_Code, name: b.SB_Name, warehouseID: b.SB_DefaultWarehouse, binLocationID: b.SB_DefaultBinLocation }; });
-        addLog('Loaded ' + salesBranches.length + ' sales branches for company ' + companyID);
-        renderSalesBranchOptions();
-      },
-      error: function (xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ') for company ' + companyID); }
+    apiPost('api/SalesBranch/GetAllSalesBranch', { companyID: companyID }).then(function (r) {
+      if (!r.ok) { addLog('GetAllSalesBranch FAILED for company ' + companyID + ' (kept previous list)'); return; }
+      var resp = r.resp;
+      var data = (resp && resp.data) || [];
+      salesBranches = data.map(function (b) { return { id: b.SB_ID, code: b.SB_Code, name: b.SB_Name, warehouseID: b.SB_DefaultWarehouse, binLocationID: b.SB_DefaultBinLocation }; });
+      addLog('Loaded ' + salesBranches.length + ' sales branches for company ' + companyID);
+      renderSalesBranchOptions();
     });
     // Load warehouses for detail page
-    $.ajax({
-      url: apiUrl + 'api/Warehouse/GetAllWarehouseAndBinLocationByCompanyID', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: companyID }),
-      success: function (resp) {
-        var data = (resp && resp.data) || [];
-        warehouses = data.map(function (w) {
-          var bins = (w.BinLocation || []).map(function (bl) { return { id: bl.BL_ID, code: bl.BL_Code, name: bl.BL_Name }; });
-          return { id: w.WH_ID, code: w.WH_Code, name: w.WH_Name, bins: bins };
-        });
-        addLog('Loaded ' + warehouses.length + ' warehouses for company ' + companyID);
-        renderActionTable(); // refresh Bin Location dropdowns now that bin data exists
-      },
-      error: function (xhr) { addLog('GetAllWarehouse failed (' + xhr.status + ') for company ' + companyID); }
+    apiPost('api/Warehouse/GetAllWarehouseAndBinLocationByCompanyID', { CompanyID: companyID }).then(function (r) {
+      if (!r.ok) { addLog('GetAllWarehouse FAILED for company ' + companyID + ' (kept previous list)'); return; }
+      var resp = r.resp;
+      var data = (resp && resp.data) || [];
+      warehouses = data.map(function (w) {
+        var bins = (w.BinLocation || []).map(function (bl) { return { id: bl.BL_ID, code: bl.BL_Code, name: bl.BL_Name }; });
+        return { id: w.WH_ID, code: w.WH_Code, name: w.WH_Name, bins: bins };
+      });
+      addLog('Loaded ' + warehouses.length + ' warehouses for company ' + companyID);
+      renderActionTable(); // refresh Bin Location dropdowns now that bin data exists
     });
   }
   /* ── qrySql: safe replacement for the removed query.irs-alaya.com helper ──
@@ -958,36 +946,69 @@
      adds to the shared API's rate limit (confirmed live: GetAllSalesBranch/
      GetAllCompanyPaymentTerm both hit "API calling too frequent" during heavy
      testing). Cached per company so repeated Copy To Sales clicks don't re-fetch. */
+  /* ── Resilient REST helper ──
+     The shared api.* endpoints rate-limit parallel bursts (confirmed live:
+     "API calling too frequent, please try again later" on GetAllSalesBranch
+     AND GetAllCompanyPaymentTerm for company 548, while the same calls succeed
+     on retry). One-shot parallel calls therefore fail intermittently and the
+     lists looked permanently empty. apiPost runs calls SEQUENTIALLY via promise
+     chaining, retries rate-limit/transport failures with backoff, and resolves
+     {ok, resp} instead of throwing - so callers keep stale data on failure and
+     can tell "load failed" apart from "0 rows". */
+  function apiPost(path, payload, tries) {
+    tries = tries || 3;
+    function attempt(n) {
+      return $.ajax({
+        url: apiUrl + path, type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken }, data: JSON.stringify(payload || {}),
+      }).then(function (resp) {
+        if (resp && resp.success === false && /frequent/i.test(resp.msg || '') && n < tries) {
+          addLog(path + ' rate-limited, retry ' + n + '/' + tries + '...');
+          var dfd = $.Deferred();
+          setTimeout(function () { attempt(n + 1).then(dfd.resolve, dfd.reject); }, 1500 * n);
+          return dfd.promise();
+        }
+        return { ok: !(resp && resp.success === false), resp: resp };
+      }, function (xhr) {
+        if (n < tries && (xhr.status === 429 || xhr.status === 0 || xhr.status >= 500)) {
+          addLog(path + ' HTTP ' + xhr.status + ', retry ' + n + '/' + tries + '...');
+          var dfd2 = $.Deferred();
+          setTimeout(function () { attempt(n + 1).then(dfd2.resolve, dfd2.reject); }, 1500 * n);
+          return dfd2.promise();
+        }
+        return { ok: false, resp: null, httpStatus: xhr.status };
+      });
+    }
+    return attempt(1);
+  }
   var scopedPrereqsLoadedForCompany = null;
+  var lastBranchLoadFailed = false;
   function loadCopyToSalesPrereqs(companyID, onDone) {
     if (scopedPrereqsLoadedForCompany === companyID) { onDone(); return; }
     addLog('Loading Sales Branch / Payment Mode / Payment Term for company ' + companyID + '...');
-    $.when(
-      $.ajax({
-        url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
-        headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
-      }).then(function (resp) {
-        var data = (resp && resp.data) || [];
+    lastBranchLoadFailed = false;
+    // Sequential (not parallel) - parallel bursts are what trip the rate limit.
+    apiPost('api/SalesBranch/GetAllSalesBranch', { companyID: companyID }).then(function (r1) {
+      var data = (r1.resp && r1.resp.data) || [];
+      if (r1.ok) {
         salesBranches = data.map(function (b) { return { id: b.SB_ID, code: b.SB_Code, name: b.SB_Name, warehouseID: b.SB_DefaultWarehouse, binLocationID: b.SB_DefaultBinLocation }; });
         addLog('Loaded ' + salesBranches.length + ' sales branches for company ' + companyID);
-      }, function (xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ') for company ' + companyID); }),
-      $.ajax({
-        url: apiUrl + 'api/PaymentMode/GetAllPaymentMode', type: 'POST', cache: false, contentType: 'application/json',
-        headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: companyID, MaxID: 0 }),
-      }).then(function (resp) {
-        var data = (resp && resp.data) || [];
+      } else { lastBranchLoadFailed = true; addLog('GetAllSalesBranch FAILED for company ' + companyID + ' (kept previous list)'); }
+      return apiPost('api/PaymentMode/GetAllPaymentMode', { CompanyID: companyID, MaxID: 0 });
+    }).then(function (r2) {
+      var data = (r2.resp && r2.resp.data) || [];
+      if (r2.ok) {
         paymentModes = data.map(function (p) { return { id: p.PM_ID, code: p.PM_Code, type: p.PM_Type }; });
         addLog('Loaded ' + paymentModes.length + ' payment modes for company ' + companyID);
-      }, function (xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ') for company ' + companyID); }),
-      $.ajax({
-        url: apiUrl + 'api/CompanyPaymentTerm/GetAllCompanyPaymentTerm', type: 'POST', cache: false, contentType: 'application/json',
-        headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: companyID }),
-      }).then(function (resp) {
-        var data = (resp && resp.data) || [];
+      } else { addLog('GetAllPaymentMode FAILED for company ' + companyID + ' (kept previous list)'); }
+      return apiPost('api/CompanyPaymentTerm/GetAllCompanyPaymentTerm', { companyID: companyID });
+    }).then(function (r3) {
+      var data = (r3.resp && r3.resp.data) || [];
+      if (r3.ok) {
         companyPaymentTerms = data.map(function (t) { return { id: t.CPT_ID, active: t.CPT_Active_YN }; });
         addLog('Loaded ' + companyPaymentTerms.length + ' company payment terms for company ' + companyID);
-      }, function (xhr) { addLog('GetAllCompanyPaymentTerm failed (' + xhr.status + ') for company ' + companyID); })
-    ).always(function () {
+      } else { addLog('GetAllCompanyPaymentTerm FAILED for company ' + companyID + ' (kept previous list)'); }
+    }).always(function () {
       // Only cache successful loads - a failed/rate-limited load must retry on
       // the next click instead of permanently caching empty arrays (which made
       // every later Copy To Sales fail with the same "No Sales Branch" toast).
@@ -1778,7 +1799,12 @@
     var branchID = editingReport.salesBranchID;
     var branch = branchID ? salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0] : null;
     if (!branch) branch = salesBranches.filter(function (b) { return b.warehouseID; })[0];
-    if (!salesBranches.length) { showToast('Company ' + companyID + ' has no Sales Branch loaded (API returned 0 rows or load failed) - check Sales > Sales Branch master data, then click Copy To Sales again to retry', true); addLog('Copy To Sales blocked: salesBranches empty for company ' + companyID); return; }
+    if (!salesBranches.length) {
+      if (lastBranchLoadFailed) { showToast('Sales Branch list failed to load (server busy / rate-limited) - wait a moment and click Copy To Sales again to retry', true); }
+      else { showToast('Company ' + companyID + ' has no Sales Branch master data - create one under Sales > Sales Branch first', true); }
+      addLog('Copy To Sales blocked: salesBranches empty for company ' + companyID + ' (loadFailed=' + lastBranchLoadFailed + ')');
+      return;
+    }
     if (!branch) { showToast('Please select a Sales Branch (with a default Warehouse) in Service Header first', true); addLog('Copy To Sales blocked: ' + salesBranches.length + ' branches loaded but none selected/matched (selected=' + (branchID || 'none') + ')'); $('#d-sales-branch').focus(); return; }
     // Fail fast on IDs the server requires (the known-good tc010 reference always
     // sent real IDs for all of these). Previously missing values were sent as the
@@ -1801,7 +1827,10 @@
     if (!paymentModes.length) { showToast('No Payment Mode loaded for this company yet - try again in a moment', true); return; }
 
     var payTerm = companyPaymentTerms.filter(function (t) { return t.active; })[0] || companyPaymentTerms[0];
-    if (!payTerm) addLog('WARNING: no Company Payment Term loaded for company ' + companyID + ' - sending empty CompanyPaymentTermID');
+    // The known-good tc010 post always carried a real term ID; sending '' dies
+    // server-side ("Value cannot be null. Parameter name: source"). Block with a
+    // clear message instead - usually just a rate-limited term list, retry helps.
+    if (!payTerm) { showToast('No Company Payment Term loaded for company ' + companyID + ' - click Copy To Sales again to retry (or create an active term)', true); addLog('Copy To Sales blocked: no payment term for company ' + companyID); return; }
 
     // Build child arrays for batch/serial items (CashSalesBatch / CashSalesSN). GroupID links to SalesDTL.
     var salesBatches = [], salesSNs = [];
@@ -1880,7 +1909,7 @@
       Reference: editingReport.code || 'SVCRPT', Description: 'Copied from Service Report ' + (editingReport.code || ''), Note: '',
       PostingDate: now, DocumentDate: now, DueDate: '', DeliveryDate: now,
       CustomerID: String(custRecord.id), WarehouseID: String(branch.warehouseID), PriceLevel: '1',
-      CompanyPaymentTermID: payTerm ? String(payTerm.id) : '',
+      CompanyPaymentTermID: String(payTerm.id),
       TaxItemize: 'false', InclusiveTax: 'False', Rounding_YN: 'False', RoundingAmount: '0.0000', FooterDiscount: footerDiscount.toFixed(4),
       SalesAgentID: '', Total: total.toFixed(4), TotalPoint: '0.0000',
       SalesDTL: dtl,
