@@ -1951,15 +1951,35 @@
 
     if (!confirm('This creates a REAL posted Cash Sales document for ' + ctx.custRecord.name + ' totalling RM' + ctx.total.toFixed(2) + ' (' + mode.code + '). This cannot be undone (only reversed via a Sales Return). Continue?')) return;
 
-    // Last net: no ID field may ever go out as the literal string "undefined"
-    // (a wrong API field mapping once did exactly that for CompanyPaymentTermID
-    // and the server died with "Value cannot be null. Parameter name: source").
-    var bodyJson = JSON.stringify(ctx.body);
-    var badKey = (bodyJson.match(/"([A-Za-z]+ID)"\s*:\s*"undefined"/) || [])[1];
-    if (badKey) {
-      addLog('Copy To Sales blocked: ' + badKey + ' is undefined in request body');
-      addLog('Blocked request body: ' + bodyJson.slice(0, 2000));
-      showToast('Cannot Copy To Sales: ' + badKey + ' failed to resolve - reload and retry', true);
+    // Last net: no *ID field may ever go out empty/null/"undefined" (a wrong API
+    // field mapping once sent CompanyPaymentTermID as the literal string
+    // "undefined" and the server died with "Value cannot be null. Parameter
+    // name: source" - a generic .NET LINQ error that gives no hint which field
+    // was the culprit). Recursively scans the whole body, including nested
+    // SalesDTL/SalesBatch/SalesSN/SalesPayment arrays, and reports every
+    // offending field+path at once instead of guessing one regex pattern.
+    var OPTIONAL_ID_FIELDS = { SalesAgentID: true };
+    var badFields = [];
+    (function scan(node, path) {
+      if (Array.isArray(node)) {
+        node.forEach(function (item, i) { scan(item, path + '[' + i + ']'); });
+      } else if (node && typeof node === 'object') {
+        Object.keys(node).forEach(function (key) {
+          var val = node[key];
+          var here = path ? path + '.' + key : key;
+          if (/ID$/.test(key) && !OPTIONAL_ID_FIELDS[key]) {
+            if (val === undefined || val === null || val === '' || val === 'undefined' || val === 'null') {
+              badFields.push(here + '=' + JSON.stringify(val));
+            }
+          }
+          if (val && typeof val === 'object') scan(val, here);
+        });
+      }
+    })(ctx.body, '');
+    if (badFields.length) {
+      addLog('Copy To Sales blocked: unresolved ID field(s): ' + badFields.join(', '));
+      addLog('Blocked request body: ' + JSON.stringify(ctx.body).slice(0, 2000));
+      showToast('Cannot Copy To Sales: ' + badFields.join(', ') + ' failed to resolve - reload and retry', true);
       return;
     }
 
