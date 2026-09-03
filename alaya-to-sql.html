@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Alaya to SQL Transfer</title>
+  <title>Alaya to SQL Transfer - Module Editor Plugin</title>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,10 +33,6 @@
       background: linear-gradient(135deg, #1565c0, #1e88e5);
       display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:#fff;
     }
-    .real-banner {
-      background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0;
-      border-radius: 10px; padding: 12px 16px; font-size: 0.8rem; margin-bottom: 16px;
-    }
     button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
     button:disabled { opacity:0.45; cursor:not-allowed; }
     .btn-primary { background:#1565c0; color:#fff; }
@@ -45,8 +41,6 @@
     .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
     .btn-success { background:#16a34a; color:#fff; }
     .btn-success:hover:not(:disabled) { background:#15803d; }
-    .btn-danger { background:#dc2626; color:#fff; }
-    .btn-danger:hover:not(:disabled) { background:#b91c1c; }
     .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
 
     /* Tab bar */
@@ -88,7 +82,7 @@
     .log-panel {
       background:#1e293b; color:#e2e8f0; border-radius:10px; padding:14px 16px;
       font-family:'JetBrains Mono', 'Fira Code', monospace; font-size:0.72rem;
-      max-height:200px; overflow-y:auto; line-height:1.6;
+      max-height:300px; overflow-y:auto; line-height:1.6;
     }
     .log-panel .log-entry { margin-bottom:2px; }
     .log-panel .log-time { color:#64748b; }
@@ -96,10 +90,9 @@
     .log-panel .log-err { color:#f87171; }
     .log-panel .log-info { color:#60a5fa; }
 
-    /* Settings */
-    .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-    .settings-section { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:16px; }
-    .settings-section h3 { font-size:0.85rem; font-weight:700; color:#111827; margin-bottom:12px; }
+    /* Progress */
+    .progress-bar { background:#e5e7eb; border-radius:999px; height:8px; overflow:hidden; margin-top:10px; }
+    .progress-fill { background:#1565c0; height:100%; width:0%; transition:width 0.3s; }
   </style>
 </head>
 <body>
@@ -110,12 +103,12 @@
     <div class="hero-icon">📊</div>
     <div>
       <h1>Alaya to SQL Account Transfer</h1>
-      <div class="sub">Transfer data from Alaya POS to SQL Accounting (eStream)</div>
+      <div class="sub">Transfer data from Alaya to SQL Accounting via Backend API</div>
     </div>
   </div>
   <div class="status-row">
-    <span id="conn-badge" class="badge badge-waiting">Connecting…</span>
-    <span id="backend-badge" class="badge badge-waiting">Backend: checking…</span>
+    <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span>
+    <span id="backend-badge" class="badge badge-waiting">Backend: checking...</span>
   </div>
 </div>
 
@@ -123,8 +116,7 @@
 <div class="card">
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="transfer">Transfer</button>
-    <button class="tab-btn" data-tab="advanced">Advanced</button>
-    <button class="tab-btn" data-tab="settings">Settings</button>
+    <button class="tab-btn" data-tab="preview">Preview</button>
     <button class="tab-btn" data-tab="log">Log</button>
   </div>
 
@@ -145,7 +137,7 @@
       <div class="form-group">
         <label>SQL Account Company</label>
         <select id="sql-company">
-          <option value="">Loading companies…</option>
+          <option value="">Loading companies...</option>
         </select>
       </div>
       <div class="form-group">
@@ -181,74 +173,27 @@
 
     <div class="btn-row">
       <button id="btn-transfer" class="btn-primary">Transfer</button>
-      <button id="btn-preview" class="btn-secondary">Preview Data</button>
+      <button id="btn-load-data" class="btn-secondary">Load Alaya Data</button>
     </div>
 
     <div id="transfer-progress" style="margin-top:16px;display:none;">
-      <div style="font-size:0.82rem;color:#6b7280;margin-bottom:8px;">Transferring… <span id="progress-text"></span></div>
-      <div style="background:#e5e7eb;border-radius:999px;height:6px;overflow:hidden;">
-        <div id="progress-bar" style="background:#1565c0;height:100%;width:0%;transition:width 0.3s;"></div>
+      <div style="font-size:0.82rem;color:#6b7280;margin-bottom:8px;">Transferring... <span id="progress-text"></span></div>
+      <div class="progress-bar">
+        <div id="progress-bar" class="progress-fill"></div>
       </div>
+    </div>
+
+    <div id="transfer-results" style="margin-top:16px;display:none;">
+      <h2>Transfer Results</h2>
+      <div id="results-list"></div>
     </div>
   </div>
 
-  <!-- ── Advanced Tab ── -->
-  <div id="tab-advanced" class="tab-panel">
-    <h2>Advanced Transfer</h2>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Data Type</label>
-        <select id="adv-type">
-          <option value="customer">Customer</option>
-          <option value="vendor">Vendor</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Action</label>
-        <select id="adv-action">
-          <option value="reload">Reload Data</option>
-          <option value="transfer">Transfer Selected</option>
-        </select>
-      </div>
-    </div>
-    <div class="btn-row" style="margin-bottom:16px;">
-      <button id="btn-adv-reload" class="btn-secondary">Reload Data</button>
-      <button id="btn-adv-transfer" class="btn-primary">Transfer Selected</button>
-    </div>
-    <div id="adv-list" style="max-height:300px;overflow-y:auto;"></div>
-  </div>
-
-  <!-- ── Settings Tab ── -->
-  <div id="tab-settings" class="tab-panel">
-    <h2>Backend Configuration</h2>
-    <div class="settings-grid">
-      <div class="settings-section">
-        <h3>Backend Server</h3>
-        <div class="form-group" style="margin-bottom:10px;">
-          <label>Backend URL</label>
-          <input type="text" id="cfg-backend" value="http://localhost:3100" />
-        </div>
-        <button id="btn-test-backend" class="btn-secondary">Test Connection</button>
-      </div>
-      <div class="settings-section">
-        <h3>Alaya API</h3>
-        <div class="form-group" style="margin-bottom:10px;">
-          <label>API URL</label>
-          <input type="text" id="cfg-alaya-api" value="https://api.irsbizsuite.com.my/sit/" />
-        </div>
-        <div class="form-group" style="margin-bottom:10px;">
-          <label>Client ID</label>
-          <input type="text" id="cfg-alaya-clientid" value="qa3" />
-        </div>
-        <div class="form-group" style="margin-bottom:10px;">
-          <label>Username</label>
-          <input type="text" id="cfg-alaya-username" value="jin1" />
-        </div>
-        <button id="btn-test-alaya" class="btn-secondary">Test Alaya Connection</button>
-      </div>
-    </div>
-    <div class="btn-row" style="margin-top:16px;">
-      <button id="btn-save-settings" class="btn-primary">Save Settings</button>
+  <!-- ── Preview Tab ── -->
+  <div id="tab-preview" class="tab-panel">
+    <h2>Alaya Data Preview</h2>
+    <div id="preview-content" style="max-height:400px;overflow-y:auto;">
+      <p style="color:#6b7280;font-size:0.85rem;">Click "Load Alaya Data" to preview data from Alaya.</p>
     </div>
   </div>
 
@@ -258,29 +203,31 @@
       <button id="btn-clear-log" class="btn-secondary">Clear Log</button>
     </div>
     <div id="log-panel" class="log-panel">
-      <div class="log-entry"><span class="log-time">[--:--:--]</span> <span class="log-info">Plugin loaded. Waiting for ALAYA_INIT…</span></div>
+      <div class="log-entry"><span class="log-time">[--:--:--]</span> <span class="log-info">Plugin loaded. Waiting for ALAYA_INIT...</span></div>
     </div>
   </div>
 </div>
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
-   ALAYA TO SQL TRANSFER PLUGIN
+   ALAYA MODULE EDITOR PLUGIN - ALAYA TO SQL TRANSFER
    ═══════════════════════════════════════════════════════════════ */
 
-var hostOrigin = null;
-var alayaApiUrl = '';
-var alayaClientId = '';
-var alayaUsername = '';
-var alayaPassword = '';
-var authToken = '';
-var companyId = '';
-var companies = [];
-var pendingDcbCallbacks = {};
+// ── Config ──
+var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+var BACKEND_URL = 'http://localhost:3100';
+var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
 
-var backendUrl = localStorage.getItem('alaya2sql_backend') || 'http://localhost:3100';
-var alayaApiCfg = localStorage.getItem('alaya2sql_alayaapi') || 'https://api.irsbizsuite.com.my/sit/';
-var companyCfg = localStorage.getItem('alaya2sql_companyid') || '';
+// ── State ──
+var hostOrigin = '';
+var apiUrl = '';
+var nonce = '';
+var clientId = '';
+var username = '';
+var authToken = '';
+var companies = [];
+var alayaData = { customers: [], items: [], sales: [] };
+var pendingDcbCallbacks = {};
 
 // ── Logging ──
 function addLog(msg, cls) {
@@ -315,15 +262,38 @@ $(window).on('message', function(e) {
   if (!msg) return;
 
   if (msg.type === 'ALAYA_INIT') {
-    hostOrigin = msg.source || e.originalEvent.origin;
-    alayaApiUrl = msg.apiurl || '';
-    alayaClientId = msg.client || '';
-    alayaUsername = msg.username || '';
-    companyId = msg.companyid || companyCfg;
-    $('#conn-badge').removeClass('badge-waiting').addClass('badge-received').text('Connected');
-    addLog('ALAYA_INIT received — api=' + alayaApiUrl + ' client=' + alayaClientId + ' user=' + alayaUsername, 'log-ok');
-    postToParent('ALAYA_READY', { plugin: 'alaya-to-sql' });
-    initAuth();
+    hostOrigin = e.originalEvent.origin || '';
+    var payload = msg.data !== undefined ? msg.data : msg;
+    addLog('Received <- ALAYA_INIT');
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    
+    if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
+    if (payload && payload.nonce) nonce = payload.nonce;
+    if (payload && payload.client) clientId = payload.client;
+    if (payload && payload.username) username = payload.username;
+    
+    addLog('api=' + apiUrl + ' client=' + clientId + ' user=' + username);
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+    
+    if (apiUrl && nonce && clientId && username) requestToken();
+    
+    // Pre-load hidden memoQuery iframe
+    if (hostOrigin) {
+      window.top.postMessage({ target: hostOrigin, eval:
+        '(function(){' +
+        'if(document.getElementById("hidden-memo-frame"))return;' +
+        'var f=document.createElement("iframe");' +
+        'f.id="hidden-memo-frame";' +
+        'f.style.display="none";' +
+        'f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+        'document.body.appendChild(f);' +
+        '})();'
+      }, '*');
+      addLog('Pre-loading hidden memoQuery iframe');
+    }
+    
+    // Test backend connection
+    testBackendConnection();
   }
 
   if (msg.type === 'alaya-dcb-result' && msg.requestId) {
@@ -336,124 +306,229 @@ $(window).on('message', function(e) {
   }
 });
 
-// ── Auth ──
-function initAuth() {
-  addLog('Authenticating with Alaya API…', 'log-info');
+// ── Authentication ──
+function requestToken() {
+  addLog('POST ' + apiUrl + 'token');
   $.ajax({
-    url: alayaApiUrl + 'token',
-    type: 'POST',
-    contentType: 'application/x-www-form-urlencoded',
-    data: {
-      grant_type: 'password',
-      clientid: alayaClientId,
-      username: alayaUsername,
-      devkey: '5hL7jK3wX9',
-      nonce: 'alaya2sql'
-    },
-    success: function(r) {
+    url: apiUrl + 'token', type: 'POST', cache: false,
+    data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+    success: function (r) {
       authToken = r.token_type + ' ' + r.access_token;
-      addLog('Auth OK', 'log-ok');
-      loadCompanies();
+      addLog('Token obtained', 'log-ok');
+      loadCompaniesFromApi();
     },
-    error: function(xhr) {
-      addLog('Auth FAILED: ' + xhr.status + ' ' + (xhr.responseText||'').slice(0,200), 'log-err');
+    error: function (r) {
+      var msg = '';
+      try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch (e) { msg = r.responseText || 'Unknown'; }
+      addLog('Token failed: ' + msg, 'log-err');
     }
   });
 }
 
-// ── Load companies ──
-function loadCompanies() {
-  addLog('Loading SQL Account companies from backend…', 'log-info');
+// ── Load companies from Alaya API ──
+function loadCompaniesFromApi() {
+  if (!apiUrl || !authToken) return;
+  var endpoint = apiUrl + 'api/Company/GetAllCompany';
+  addLog('GET ' + endpoint);
   $.ajax({
-    url: backendUrl + '/api/companies',
+    url: endpoint, type: 'GET', cache: false,
+    headers: { 'Authorization': authToken },
+    success: function (resp) {
+      var data = (resp && resp.data) || [];
+      companies = data;
+      addLog('Loaded ' + data.length + ' companies from Alaya', 'log-ok');
+      loadSqlCompanies();
+    },
+    error: function (r) {
+      addLog('Load companies failed: ' + r.status, 'log-err');
+    }
+  });
+}
+
+// ── Load SQL Account companies from backend ──
+function loadSqlCompanies() {
+  addLog('Loading SQL Account companies from backend...', 'log-info');
+  $.ajax({
+    url: BACKEND_URL + '/api/companies',
     type: 'GET',
     success: function(r) {
       if (r.success && r.data) {
-        companies = r.data;
         var sel = $('#sql-company');
         sel.empty();
-        sel.append('<option value="">Select company…</option>');
+        sel.append('<option value="">Select company...</option>');
         r.data.forEach(function(c) {
-          sel.append('<option value="' + escHtml(c.code) + '">' + escHtml(c.code) + ' - ' + escHtml(c.name) + '</option>');
+          sel.append('<option value="' + escHtml(c.CODE) + '">' + escHtml(c.CODE) + ' - ' + escHtml(c.NAME) + '</option>');
         });
-        addLog('Loaded ' + r.data.length + ' companies', 'log-ok');
+        addLog('Loaded ' + r.data.length + ' SQL companies', 'log-ok');
       }
     },
     error: function(xhr) {
-      addLog('Backend unreachable: ' + backendUrl, 'log-err');
+      addLog('Backend unreachable: ' + BACKEND_URL, 'log-err');
       $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
     }
   });
 }
 
-// ── Tab switching ──
-$('.tab-btn').on('click', function() {
-  var tab = $(this).data('tab');
-  $('.tab-btn').removeClass('active');
-  $(this).addClass('active');
-  $('.tab-panel').removeClass('active');
-  $('#tab-' + tab).addClass('active');
-});
-
-// ── Settings ──
-$('#cfg-backend').val(backendUrl);
-$('#cfg-alaya-api').val(alayaApiCfg);
-$('#cfg-company-id').val(companyCfg);
-
-$('#btn-save-settings').on('click', function() {
-  backendUrl = $('#cfg-backend').val().replace(/\/+$/, '');
-  alayaApiCfg = $('#cfg-alaya-api').val();
-  companyCfg = $('#cfg-company-id').val();
-  localStorage.setItem('alaya2sql_backend', backendUrl);
-  localStorage.setItem('alaya2sql_alayaapi', alayaApiCfg);
-  localStorage.setItem('alaya2sql_companyid', companyCfg);
-  addLog('Settings saved', 'log-ok');
-  showToast('Settings saved');
-});
-
-$('#btn-test-backend').on('click', function() {
+// ── Test backend connection ──
+function testBackendConnection() {
   $.ajax({
-    url: backendUrl + '/api/health',
+    url: BACKEND_URL + '/api/health',
     type: 'GET',
     success: function(r) {
-      addLog('Backend healthy: ' + JSON.stringify(r), 'log-ok');
+      addLog('Backend healthy', 'log-ok');
       $('#backend-badge').removeClass('badge-waiting').addClass('badge-received').text('Backend: online');
-      showToast('Backend connected');
     },
     error: function(xhr) {
-      addLog('Backend test FAILED', 'log-err');
+      addLog('Backend unreachable', 'log-err');
       $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
-      showToast('Backend unreachable', true);
     }
   });
-});
+}
 
-$('#btn-test-alaya').on('click', function() {
-  var apiUrl = $('#cfg-alaya-api').val();
-  var clientId = $('#cfg-alaya-clientid').val();
-  var username = $('#cfg-alaya-username').val();
-  
-  if (!apiUrl) {
-    showToast('Please enter Alaya API URL', true);
+// ── Execute SQL via host eval bridge ──
+function executeSqlViaHost(sql) {
+  return new Promise(function (resolve, reject) {
+    if (!hostOrigin) { reject(new Error('Host origin unknown - ALAYA_INIT not received yet')); return; }
+    var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    var timer = setTimeout(function () {
+      delete pendingDcbCallbacks[requestId];
+      reject(new Error('Database callback timed out after 60s'));
+    }, 60000);
+    pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+    var evalScript =
+      '(function(){' +
+      'try{' +
+        'var sql=result.sql, reqId=result.requestId;' +
+        'function findMemoFrame(win){' +
+          'try{ if(typeof win.memoQuery==="object" && typeof win.WebForm_DoCallback==="function") return win; }catch(e){}' +
+          'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){}' +
+          'return null;' +
+        '}' +
+        'function bcast(m){' +
+          'function postAll(win){' +
+            'try{ win.postMessage(m,"*"); }catch(e){}' +
+            'try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}' +
+          '}' +
+          'postAll(window);' +
+        '}' +
+        'function runOnMemo(mf){' +
+          'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+          'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+          'var arg="RunQuery|"+JSON.stringify(hdr);' +
+          'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+          'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+          'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+        '}' +
+        'var mf=findMemoFrame(window);' +
+        'if(mf){ runOnMemo(mf); return; }' +
+        'var hidden=document.getElementById("hidden-memo-frame");' +
+        'if(hidden && hidden.contentWindow){' +
+          'try{ if(typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+        '}' +
+        'if(!hidden){' +
+          'hidden=document.createElement("iframe");' +
+          'hidden.id="hidden-memo-frame";' +
+          'hidden.style.display="none";' +
+          'hidden.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+          'document.body.appendChild(hidden);' +
+        '}' +
+        'var attempts=0;' +
+        'function poll(){' +
+          'attempts++;' +
+          'try{ if(hidden.contentWindow && typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+          'if(attempts<40){ setTimeout(poll,500); }' +
+          'else { bcast({source:"alaya-dcb-result",requestId:reqId,error:"memoQuery not available after 20s"}); }' +
+        '}' +
+        'poll();' +
+      '}catch(e){ bcast({source:"alaya-dcb-result",requestId:result.requestId,error:e.message}); }' +
+      '})();';
+    window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
+    addLog('POST eval-bridge RunQuery (sql ' + sql.length + ' chars)', 'log-info');
+  });
+}
+
+// ── Load Alaya data ──
+$('#btn-load-data').on('click', function() {
+  if (!hostOrigin) {
+    showToast('Not connected to Alaya (ALAYA_INIT pending)', true);
     return;
   }
   
-  addLog('Testing Alaya API connection...', 'log-info');
-  $.ajax({
-    url: backendUrl + '/api/alaya/test',
-    type: 'POST',
-    contentType: 'application/json',
-    data: JSON.stringify({ apiUrl: apiUrl, clientId: clientId, username: username }),
-    success: function(r) {
-      addLog('Alaya API connection successful', 'log-ok');
-      showToast('Alaya API connected');
-    },
-    error: function(xhr) {
-      addLog('Alaya API test FAILED: ' + (xhr.responseJSON?.error || xhr.statusText), 'log-err');
-      showToast('Alaya API connection failed', true);
+  addLog('Loading Alaya data...', 'log-info');
+  $(this).prop('disabled', true).text('Loading...');
+  
+  // Load customers
+  var sql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AR_CUSTOMER WHERE STATUS = 'Active' ORDER BY CODE";
+  executeSqlViaHost(sql).then(function(msg) {
+    if (msg.error) {
+      addLog('Load customers failed: ' + msg.error, 'log-err');
+      return;
     }
+    try {
+      var result = JSON.parse(msg.result);
+      if (result.success && result.results && result.results[0]) {
+        alayaData.customers = result.results[0].rows || [];
+        addLog('Loaded ' + alayaData.customers.length + ' customers from Alaya', 'log-ok');
+      }
+    } catch(e) {
+      addLog('Parse customers error: ' + e.message, 'log-err');
+    }
+    
+    // Load items
+    var itemSql = "SELECT CODE, DESCRIPTION, UOM, SELLPRICE FROM ITEMMASTER WHERE STATUS = 'Active' ORDER BY CODE";
+    return executeSqlViaHost(itemSql);
+  }).then(function(msg) {
+    if (msg.error) {
+      addLog('Load items failed: ' + msg.error, 'log-err');
+      return;
+    }
+    try {
+      var result = JSON.parse(msg.result);
+      if (result.success && result.results && result.results[0]) {
+        alayaData.items = result.results[0].rows || [];
+        addLog('Loaded ' + alayaData.items.length + ' items from Alaya', 'log-ok');
+      }
+    } catch(e) {
+      addLog('Parse items error: ' + e.message, 'log-err');
+    }
+    
+    $('#btn-load-data').prop('disabled', false).text('Load Alaya Data');
+    showToast('Alaya data loaded successfully');
+    renderPreview();
+  }).catch(function(err) {
+    addLog('Load data error: ' + err.message, 'log-err');
+    $('#btn-load-data').prop('disabled', false).text('Load Alaya Data');
   });
 });
+
+// ── Render preview ──
+function renderPreview() {
+  var html = '<h3 style="margin-bottom:10px;">Customers (' + alayaData.customers.length + ')</h3>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:20px;">';
+  html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Name</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Credit Term</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Credit Limit</th></tr></thead>';
+  html += '<tbody>';
+  alayaData.customers.slice(0, 20).forEach(function(c) {
+    html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[0] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[1] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[2] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (c[3] || 0) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  
+  html += '<h3 style="margin-bottom:10px;">Items (' + alayaData.items.length + ')</h3>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+  html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Description</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">UOM</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Sell Price</th></tr></thead>';
+  html += '<tbody>';
+  alayaData.items.slice(0, 20).forEach(function(item) {
+    html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[0] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[1] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[2] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (item[3] || 0) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  
+  $('#preview-content').html(html);
+}
 
 // ── Transfer ──
 $('#btn-transfer').on('click', function() {
@@ -483,7 +558,7 @@ $('#btn-transfer').on('click', function() {
     return;
   }
 
-  // Simulate progress
+  // Progress animation
   var progress = 0;
   var iv = setInterval(function() {
     progress = Math.min(progress + Math.random() * 15, 90);
@@ -493,7 +568,7 @@ $('#btn-transfer').on('click', function() {
 
   // Call backend
   $.ajax({
-    url: backendUrl + '/api/transfer',
+    url: BACKEND_URL + '/api/transfer',
     type: 'POST',
     contentType: 'application/json',
     data: JSON.stringify({
@@ -508,6 +583,7 @@ $('#btn-transfer').on('click', function() {
       $('#progress-text').text('100%');
       addLog('Transfer completed: ' + JSON.stringify(r), 'log-ok');
       showToast('Transfer completed');
+      showTransferResults(r.data);
       setTimeout(function() { $('#transfer-progress').hide(); }, 2000);
       $('#btn-transfer').prop('disabled', false);
     },
@@ -522,6 +598,32 @@ $('#btn-transfer').on('click', function() {
   });
 });
 
+// ── Show transfer results ──
+function showTransferResults(results) {
+  var html = '';
+  results.forEach(function(r) {
+    var statusClass = r.success ? 'done' : 'error';
+    var statusText = r.success ? 'OK' : 'Failed';
+    html += '<div class="transfer-item">';
+    html += '<div class="info"><div class="name">' + escHtml(r.type) + '</div>';
+    html += '<div class="detail">' + (r.message || r.count || '') + '</div></div>';
+    html += '<div class="status ' + statusClass + '">' + statusText + '</div>';
+    html += '</div>';
+  });
+  $('#results-list').html(html);
+  $('#transfer-results').show();
+}
+
+// ── Tab switching ──
+$('.tab-btn').on('click', function() {
+  var tab = $(this).data('tab');
+  $('.tab-btn').removeClass('active');
+  $(this).addClass('active');
+  $('.tab-panel').removeClass('active');
+  $('#tab-' + tab).addClass('active');
+});
+
+// ── Clear log ──
 $('#btn-clear-log').on('click', function() {
   $('#log-panel').empty();
   addLog('Log cleared', 'log-info');
@@ -532,7 +634,7 @@ var today = new Date().toISOString().slice(0, 10);
 $('#from-date').val(today);
 $('#to-date').val(today);
 
-addLog('Plugin initialized', 'log-info');
+addLog('Plugin initialized - listening for ALAYA_INIT', 'log-info');
 </script>
 </body>
 </html>
