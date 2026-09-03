@@ -2269,6 +2269,7 @@
   function saveDetailAndPersist() {
     if (!$('#d-date').val()) { showToast('Date is required', true); return; }
     if (!$('#d-cust-code').val().trim()) { showToast('Customer Account Code is required', true); return; }
+    if (!$('#d-sales-branch').val()) { showToast('Please select a Sales Branch before saving', true); return; }
     editingReport.date = $('#d-date').val();
     editingReport.expiry = $('#d-expiry').val();
     editingReport.status = $('#d-status').val();
