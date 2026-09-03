@@ -297,7 +297,10 @@
       </div>
       <div class="form-group">
         <label>Default.DCF Path</label>
-        <input type="text" id="s-dcf-path" placeholder="C:\eStream\SQLAccounting\Share\Default.DCF" />
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="s-dcf-path" placeholder="C:\eStream\SQLAccounting\Share\Default.DCF" style="flex:1;min-width:0;" />
+          <button id="btn-browse-dcf" class="btn-secondary" style="flex-shrink:0;">Browse...</button>
+        </div>
       </div>
     </div>
     <div class="form-row">
@@ -2117,6 +2120,72 @@ $('#btn-clear-log').on('click', function() {
   $('#log-panel').empty();
   addLog('Log cleared', 'log-info');
 });
+
+// ΓöÇΓöÇ DCF file browser (server-side paths via backend) ΓöÇΓöÇ
+function openDcfBrowser() {
+  $('#dcf-browser-overlay').remove();
+  var ov = $('<div id="dcf-browser-overlay">').css({
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(0,0,0,0.4)', 'z-index': 10000,
+    display: 'flex', 'align-items': 'center', 'justify-content': 'center'
+  });
+  var box = $('<div>').css({ background: '#fff', 'border-radius': '12px', padding: '20px',
+    width: '480px', 'max-width': '90vw', 'max-height': '70vh', display: 'flex',
+    'flex-direction': 'column', 'box-shadow': '0 8px 30px rgba(0,0,0,0.25)' });
+  box.append('<h2 style="margin-bottom:4px;">Select Default.DCF</h2>');
+  box.append('<div class="sub">Browsing files on the backend machine (where SQL Account lives).</div>');
+  var curPath = $('<div style="font-size:0.75rem;color:#6b7280;margin-bottom:8px;word-break:break-all;">').text('');
+  var list = $('<div>').css({ overflow: 'auto', border: '1px solid #e5e7eb', 'border-radius': '8px',
+    'min-height': '200px', 'margin-bottom': '12px' });
+  var btnRow = $('<div class="btn-row">').css({ 'justify-content': 'flex-end' });
+  btnRow.append('<button id="dcf-cancel" class="btn-secondary">Cancel</button>');
+  box.append(curPath).append(list).append(btnRow);
+  ov.append(box).appendTo('body');
+
+  function loadDir(path) {
+    list.html('<div style="padding:12px;color:#6b7280;font-size:0.82rem;">Loading...</div>');
+    $.ajax({
+      url: BACKEND_URL + '/api/browse', type: 'GET', cache: false,
+      data: { path: path || '', ext: '.DCF' },
+      success: function(r) {
+        if (!r.success) { list.html('<div style="padding:12px;color:#991b1b;">' + escHtml(r.error || 'failed') + '</div>'); return; }
+        curPath.text(r.path);
+        list.empty();
+        function row(icon, name, cb) {
+          var d = $('<div>').css({ padding: '8px 12px', 'border-bottom': '1px solid #f3f4f6',
+            cursor: 'pointer', 'font-size': '0.82rem' }).text(icon + ' ' + name)
+            .hover(function() { $(this).css('background', '#f3f4f6'); },
+                   function() { $(this).css('background', ''); })
+            .on('click', cb);
+          list.append(d);
+        }
+        if (r.parent) row('⬆', '.. (parent)', function() { loadDir(r.parent); });
+        if (!r.dirs.length && !r.files.length) {
+          list.append('<div style="padding:12px;color:#6b7280;">Empty folder.</div>');
+        }
+        r.dirs.forEach(function(dn) {
+          row('📁', dn, function() { loadDir(r.path + '\\' + dn); });
+        });
+        r.files.forEach(function(fn) {
+          row('📄', fn, function() {
+            $('#s-dcf-path').val(r.path + '\\' + fn);
+            $('#dcf-browser-overlay').remove();
+            addLog('DCF selected: ' + r.path + '\\' + fn, 'log-ok');
+          });
+        });
+      },
+      error: function(xhr) {
+        list.html('<div style="padding:12px;color:#991b1b;">Backend unreachable.</div>');
+      }
+    });
+  }
+  $('#dcf-cancel').on('click', function() { ov.remove(); });
+  ov.on('click', function(e) { if (e.target === ov[0]) ov.remove(); });
+  var start = $('#s-dcf-path').val() || '';
+  var startDir = start.replace(/\\[^\\]*$/, '');
+  loadDir(startDir || 'C:\\eStream');
+}
+$('#btn-browse-dcf').on('click', function() { openDcfBrowser(); });
 
 // ΓöÇΓöÇ Save settings ΓöÇΓöÇ
 $('#btn-save-settings').on('click', function() {
