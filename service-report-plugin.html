@@ -1780,15 +1780,28 @@
     if (!branch) branch = salesBranches.filter(function (b) { return b.warehouseID; })[0];
     if (!salesBranches.length) { showToast('Company ' + companyID + ' has no Sales Branch loaded (API returned 0 rows or load failed) - check Sales > Sales Branch master data, then click Copy To Sales again to retry', true); addLog('Copy To Sales blocked: salesBranches empty for company ' + companyID); return; }
     if (!branch) { showToast('Please select a Sales Branch (with a default Warehouse) in Service Header first', true); addLog('Copy To Sales blocked: ' + salesBranches.length + ' branches loaded but none selected/matched (selected=' + (branchID || 'none') + ')'); $('#d-sales-branch').focus(); return; }
+    // Fail fast on IDs the server requires (the known-good tc010 reference always
+    // sent real IDs for all of these). Previously missing values were sent as the
+    // literal strings "null"/"" and died server-side with cryptic errors like
+    // "Value cannot be null. Parameter name: source".
+    var headerWhID = editingReport.warehouseID || branch.warehouseID;
+    if (!headerWhID) { showToast('Please select a Warehouse in Service Header first', true); $('#d-warehouse').focus(); return; }
+    var badLine = null;
     dtl.forEach(function (d, idx) {
       var a = lines[idx];
-      d.WarehouseID = String(editingReport.warehouseID || branch.warehouseID);
-      d.BinLocationID = String((a && a.binLocationID) || branch.binLocationID);
+      var im = a && items.filter(function (x) { return x.code === a.item; })[0];
+      if (im && !im.uomID) badLine = a.item + ' (missing UOM mapping - re-select the item)';
+      var lineBinID = (a && a.binLocationID) || branch.binLocationID;
+      if (!badLine && !lineBinID) badLine = (a ? a.item : 'line ' + (idx + 1)) + ' (no Bin Location - select one in its Action Taken row)';
+      d.WarehouseID = String(headerWhID);
+      d.BinLocationID = String(lineBinID || '');
     });
+    if (badLine) { showToast('Cannot Copy To Sales: ' + badLine, true); renderActionTable(); return; }
 
     if (!paymentModes.length) { showToast('No Payment Mode loaded for this company yet - try again in a moment', true); return; }
 
     var payTerm = companyPaymentTerms.filter(function (t) { return t.active; })[0] || companyPaymentTerms[0];
+    if (!payTerm) addLog('WARNING: no Company Payment Term loaded for company ' + companyID + ' - sending empty CompanyPaymentTermID');
 
     // Build child arrays for batch/serial items (CashSalesBatch / CashSalesSN). GroupID links to SalesDTL.
     var salesBatches = [], salesSNs = [];
@@ -1796,8 +1809,8 @@
       var im2 = items.filter(function (x) { return x.code === a.item; })[0];
       if (!im2) return;
       var grp = lineGroupIds[idx];
-      var lineBinID = String(a.binLocationID || branch.binLocationID);
-      var lineWhID = String(editingReport.warehouseID || branch.warehouseID);
+      var lineBinID = String(a.binLocationID || branch.binLocationID || '');
+      var lineWhID = String(editingReport.warehouseID || branch.warehouseID || '');
       // Multiple batches can fund one Action Taken line - emit one CashSalesBatch
       // per batch, all sharing the same GroupID so they sum up to the line's Qty.
       var lineBatches = (a.batches && a.batches.length) ? a.batches : (a.batchNo ? [{ batchNo: a.batchNo, qty: a.qty }] : []);
@@ -1921,7 +1934,8 @@
           $('#cs-success-docno').text(docNo);
           $('#cs-success-modal').addClass('show');
         } else {
-          addLog('Cash Sales post FAILED: ' + JSON.stringify(resp).slice(0, 300));
+          addLog('Cash Sales post FAILED: ' + JSON.stringify(resp).slice(0, 1000));
+          addLog('Failed request body: ' + JSON.stringify(ctx.body).slice(0, 2000));
           showToast('Copy to Sales failed: ' + ((resp && resp.msg) || 'unknown error'), true);
         }
       },
