@@ -1377,6 +1377,170 @@ function renderPreview() {
   $('#preview-content').html(html);
 }
 
+// ══════════════════════════════════════════════════════════════
+// Source docs from Alaya (proven endpoints, same as desktop app)
+// ══════════════════════════════════════════════════════════════
+var DOC_ENDPOINTS = {
+  cashsales: 'api/CashSales/GetCashSalesByDateRange',
+  invoice: 'api/SalesInvoice/GetSalesInvoiceByDateRange',
+  salesreturn: 'api/SalesReturn/GetSalesReturnByDateRange',
+  cashpurchases: 'api/CashPurchase/GetCashPurchasebyDateRange',
+  vendorinvoice: 'api/PurchaseInvoice/GetPurchaseInvoiceByDateRange',
+  purchasereturn: 'api/PurchaseReturn/GetPurchaseReturnByDateRange'
+};
+
+// Case-insensitive field picker - resilient to unknown response shapes
+function pick(obj, keys) {
+  if (!obj) return '';
+  var lower = {};
+  Object.keys(obj).forEach(function(k) { lower[k.toLowerCase()] = obj[k]; });
+  for (var i = 0; i < keys.length; i++) {
+    var v = lower[keys[i].toLowerCase()];
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return '';
+}
+
+function findFirstArray(obj) {
+  if (!obj || typeof obj !== 'object') return [];
+  var keys = Object.keys(obj);
+  for (var i = 0; i < keys.length; i++) {
+    if (Array.isArray(obj[keys[i]])) return obj[keys[i]];
+  }
+  return [];
+}
+
+function normItem(raw) {
+  var qty = parseFloat(pick(raw, ['QTY', 'Quantity'])) || 0;
+  var price = parseFloat(pick(raw, ['UNITPRICE', 'UnitPrice', 'Price', 'Rate'])) || 0;
+  var amt = parseFloat(pick(raw, ['AMOUNT', 'Amount', 'LineAmt'])) || qty * price;
+  return {
+    itemcode: pick(raw, ['ITEMCODE', 'ItemCode', 'Item_Code', 'StockCode']),
+    qty: qty, uom: pick(raw, ['UOM', 'Uom']),
+    unitprice: price, amount: amt,
+    account: pick(raw, ['ACCOUNT', 'Account', 'SalesAccount']),
+    description: pick(raw, ['DESCRIPTION', 'Description', 'ItemDescription', 'DESC'])
+  };
+}
+
+function normSalesDoc(raw) {
+  return {
+    docdate: (pick(raw, ['DocDate', 'CSH_DocDate', 'SIH_DocDate', 'SRH_DocDate', 'Date', 'TxDate']) || '').slice(0, 10),
+    custcode: pick(raw, ['CustCode', 'CSH_CustomerCode', 'SIH_CustomerCode', 'SRH_CustomerCode', 'CustomerCode', 'Code', 'AccountCode']),
+    custname: pick(raw, ['CustName', 'CustomerName', 'CompanyName', 'Name']),
+    branch: pick(raw, ['Branch', 'CSH_SalesBranchCode', 'SIH_SalesBranchCode', 'SRH_SalesBranchCode', 'SalesBranchCode', 'BranchCode']),
+    paymode: pick(raw, ['PayMode', 'PaymentMode', 'CSH_PaymentMode', 'SIH_PaymentMode']),
+    description: pick(raw, ['Description', 'CSH_Description', 'SIH_Description', 'Remark', 'Remarks']),
+    rounding: parseFloat(pick(raw, ['Rounding', 'RoundingAmt'])) || 0,
+    total: parseFloat(pick(raw, ['Total', 'DocAmt', 'CSH_DocAmt', 'SIH_DocAmt', 'Amount'])) || 0,
+    items: findFirstArray(raw).map(normItem)
+  };
+}
+
+function normPurchaseDoc(raw) {
+  return {
+    docdate: (pick(raw, ['DocDate', 'CPH_DocDate', 'PIH_DocDate', 'PRH_DocDate', 'Date', 'InvoiceDate']) || '').slice(0, 10),
+    suppcode: pick(raw, ['SuppCode', 'SupplierCode', 'CPH_SupplierCode', 'PIH_SupplierCode', 'PRH_SupplierCode', 'VendorCode', 'Code', 'AccountCode']),
+    suppname: pick(raw, ['SuppName', 'SupplierName', 'CompanyName', 'Name']),
+    division: pick(raw, ['Division', 'PurchaseDivision', 'DivisionCode']),
+    description: pick(raw, ['Description', 'Remark', 'Remarks']),
+    rounding: parseFloat(pick(raw, ['Rounding', 'RoundingAmt'])) || 0,
+    total: parseFloat(pick(raw, ['Total', 'DocAmt', 'Amount'])) || 0,
+    items: findFirstArray(raw).map(normItem)
+  };
+}
+
+function fetchDocType(type, endpoint, cid, from, to, cb) {
+  var body = { CompanyID: cid, DateFrom: from, DateTo: to };
+  addLog('POST ' + endpoint + ' ' + JSON.stringify(body));
+  function handle(resp, rawMode) {
+    var arr = (resp && resp.data) || resp.Obj || resp.Result || [];
+    if (!Array.isArray(arr)) arr = arr ? [arr] : [];
+    addLog(type + ': ' + arr.length + ' docs' + (rawMode ? ' (single-quote fallback)' : ''));
+    if (arr.length) {
+      try { addLog(type + ' sample: ' + JSON.stringify(arr[0]).slice(0, 400), 'log-info'); } catch(e) {}
+    }
+    var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice' || type === 'purchasereturn');
+    cb(arr.map(isPurch ? normPurchaseDoc : normSalesDoc));
+  }
+  $.ajax({
+    url: apiUrl + endpoint, type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify(body),
+    success: function(resp) { handle(resp, false); },
+    error: function(xhr) {
+      // Desktop builds bodies with single quotes - retry that way on 400
+      if (xhr.status === 400) {
+        var sq = "{'CompanyID':'" + cid + "','DateFrom':'" + from + "','DateTo':'" + to + "'}";
+        addLog(type + ': standard JSON rejected, retry single-quote body', 'log-info');
+        $.ajax({
+          url: apiUrl + endpoint, type: 'POST', cache: false, contentType: 'application/json',
+          headers: { 'Authorization': authToken }, data: sq,
+          success: function(resp2) { handle(resp2, true); },
+          error: function(xhr2) { addLog(type + ' fetch failed (' + xhr2.status + ')', 'log-err'); cb([]); }
+        });
+      } else {
+        addLog(type + ' fetch failed (' + xhr.status + ')', 'log-err');
+        cb([]);
+      }
+    }
+  });
+}
+
+// Payments have no REST endpoint (desktop reads PaymentHDR/VendorPaymentHDR via SQL);
+// try the same tables through the host SQL bridge, skip gracefully if denied.
+function fetchPaymentsViaBridge(isVendor, from, to, cb) {
+  function fmt(d) { return d.slice(0,4) + '.' + d.slice(5,7) + '.' + d.slice(8,10); }
+  var hdr = isVendor ? 'VendorPaymentHDR' : 'PaymentHDR';
+  var dtCol = isVendor ? 'VPH_UpdDate' : 'PH_UpdDate';
+  var noCol = isVendor ? 'VPH_DocNo' : 'PH_DocNo';
+  var like = isVendor ? 'PP%' : 'OR%';
+  var sql = 'SELECT * FROM ' + hdr + ' WHERE Convert(nvarchar,' + dtCol + ',102) Between \'' +
+            fmt(from) + '\' And \'' + fmt(to) + '\' AND ' + noCol + ' Like \'' + like + '\'';
+  executeSqlViaHost(sql).then(function(msg) {
+    if (msg.error) throw new Error(msg.error);
+    var result = JSON.parse(msg.result);
+    var rows = (result.success && result.results && result.results[0] && result.results[0].rows) ? result.results[0].rows : [];
+    addLog((isVendor ? 'vendor' : 'customer') + ' payments via bridge: ' + rows.length + ' rows (columns unknown, logged for calibration)', 'log-info');
+    cb([{ _raw_bridge_rows: rows.length, _note: 'column mapping pending calibration, see log' }]);
+  }).catch(function(err) {
+    addLog('Payment bridge query failed (' + err.message + ') - payments skipped', 'log-warn');
+    cb([]);
+  });
+}
+
+// Sequential fetch (avoids API rate limit) for all selected doc types
+function fetchAllSourceDocs(transfers, from, to, cid, done) {
+  var out = {};
+  var steps = [];
+  if (transfers.indexOf('cashsales') >= 0) steps.push({ kind: 'rest', type: 'cashsales', ep: DOC_ENDPOINTS.cashsales });
+  if (transfers.indexOf('invoice') >= 0) steps.push({ kind: 'rest', type: 'invoice', ep: DOC_ENDPOINTS.invoice });
+  if (transfers.indexOf('creditnote') >= 0) {
+    var advVendor = ($('input[name="adv-type"]:checked').val() === 'vendor');
+    steps.push({ kind: 'rest', type: 'creditnote', ep: advVendor ? DOC_ENDPOINTS.purchasereturn : DOC_ENDPOINTS.salesreturn });
+  }
+  if (transfers.indexOf('cashpurchases') >= 0) steps.push({ kind: 'rest', type: 'cashpurchases', ep: DOC_ENDPOINTS.cashpurchases });
+  if (transfers.indexOf('vendorinvoice') >= 0) steps.push({ kind: 'rest', type: 'vendorinvoice', ep: DOC_ENDPOINTS.vendorinvoice });
+  if (transfers.indexOf('payment') >= 0) steps.push({ kind: 'pay', vendor: false });
+  if (settings.tCashpurchpay) steps.push({ kind: 'pay', vendor: true });
+  var i = 0;
+  function next() {
+    if (i >= steps.length) { done(out); return; }
+    var s = steps[i++];
+    if (s.kind === 'rest') {
+      fetchDocType(s.type, s.ep, cid, from, to, function(docs) {
+        out[s.type] = docs;
+        setTimeout(next, 300);
+      });
+    } else {
+      fetchPaymentsViaBridge(s.vendor, from, to, function(rows) {
+        out[s.vendor ? 'vendorpayment' : 'payment'] = rows;
+        setTimeout(next, 300);
+      });
+    }
+  }
+  next();
+}
+
 // ΓöÇΓöÇ Transfer ΓöÇΓöÇ
 $('#btn-transfer').on('click', function() {
   var from = $('#from-date').val();
@@ -1434,6 +1598,9 @@ $('#btn-transfer').on('click', function() {
     $('#btn-transfer').prop('disabled', false);
     return;
   }
+  addLog('Fetching source docs from Alaya for company ' + alayaCid + '...', 'log-info');
+  $('#progress-text').text('fetching docs...');
+  fetchAllSourceDocs(transfers, from, to, alayaCid, function(srcDocs) {
   $.ajax({
     url: BACKEND_URL + '/api/transfer',
     type: 'POST',
@@ -1468,7 +1635,7 @@ $('#btn-transfer').on('click', function() {
       paymodes: maps.paymodes,
       branches: maps.branches,
       divisions: maps.divisions,
-      docs: { customer: custDocs, vendor: vendDocs }
+      docs: $.extend({ customer: custDocs, vendor: vendDocs }, srcDocs)
     }),
     success: function(r) {
       clearInterval(iv);
@@ -1489,6 +1656,7 @@ $('#btn-transfer').on('click', function() {
       $('#btn-transfer').prop('disabled', false);
     }
   });
+  }); // end fetchAllSourceDocs
 });
 
 // ΓöÇΓöÇ Show transfer results ΓöÇΓöÇ
