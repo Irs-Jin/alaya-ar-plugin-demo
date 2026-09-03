@@ -1777,22 +1777,31 @@
       // per batch, all sharing the same GroupID so they sum up to the line's Qty.
       var lineBatches = (a.batches && a.batches.length) ? a.batches : (a.batchNo ? [{ batchNo: a.batchNo, qty: a.qty }] : []);
       if (im2.batchControl && lineBatches.length) {
-        lineBatches.forEach(function (b) {
+        var lineBatchRows = lineBatches.map(function (b) {
           var q = (typeof b.qty === 'number' ? b.qty : parseFloat(b.qty) || 0).toFixed(4);
-          salesBatches.push({
+          return {
             GroupID: grp, ItemID: String(im2.id), BatchNo: b.batchNo, Qty: q, BaseQty: q,
             BinLocationID: lineBinID, WarehouseID: lineWhID,
             CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: grp
-          });
+          };
         });
+        salesBatches = salesBatches.concat(lineBatchRows);
+        // Also nest under the DTL line itself - some of these APIs bind
+        // parent/child collections per-item rather than as sibling top-level
+        // arrays, so attach under every plausible property name here too.
+        var d = dtl[idx];
+        d.CashSalesBatch = lineBatchRows; d.SalesBatch = lineBatchRows; d.Batch = lineBatchRows; d.BatchDetail = lineBatchRows;
       }
       if (im2.serialControl && a.serialNos) {
-        a.serialNos.forEach(function (sn) {
-          salesSNs.push({
+        var lineSNRows = a.serialNos.map(function (sn) {
+          return {
             GroupID: grp, ItemID: String(im2.id), SerialNo: sn, BatchNo: (lineBatches[0] && lineBatches[0].batchNo) || '',
             CSSN_SerialNo: sn, CSSN_BatchNo: (lineBatches[0] && lineBatches[0].batchNo) || '', BinLocationID: lineBinID
-          });
+          };
         });
+        salesSNs = salesSNs.concat(lineSNRows);
+        var d2 = dtl[idx];
+        d2.CashSalesSN = lineSNRows; d2.SalesSN = lineSNRows; d2.SN = lineSNRows; d2.SNDetail = lineSNRows;
       }
     });
 
