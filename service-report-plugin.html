@@ -1815,6 +1815,31 @@
     // "Value cannot be null. Parameter name: source".
     var headerWhID = editingReport.warehouseID || branch.warehouseID;
     if (!headerWhID) { showToast('Please select a Warehouse in Service Header first', true); $('#d-warehouse').focus(); return; }
+    // A CompanyItem can legitimately exist (i.e. resolve fine as an item) with
+    // ZERO ItemWarehouse rows for this company/warehouse - never actually
+    // received/stocked. PostCashSales can't handle that and dies server-side
+    // with an opaque "Value cannot be null. Parameter name: source" (confirmed
+    // live: item 'A000001' / IM_ID 115041 is a valid CompanyItem for company 548
+    // but has no ItemWarehouse row at all). Check up front and name the item.
+    var checkIds = [];
+    dtl.forEach(function (d) { if (checkIds.indexOf(d.ItemID) < 0) checkIds.push(d.ItemID); });
+    qrySql("SELECT DISTINCT IW_ItemID FROM ItemWarehouse WHERE IW_CompanyID=" + parseInt(companyID,10) + " AND IW_WarehouseID=" + parseInt(headerWhID,10) + " AND IW_ItemID IN (" + checkIds.join(',') + ")", checkIds.length).then(function (resp) {
+      var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+      var foundIds = rows.map(function (r) { return String(r[0]); });
+      var missingCodes = [];
+      dtl.forEach(function (d, idx) { if (foundIds.indexOf(String(d.ItemID)) < 0) missingCodes.push(lines[idx].item); });
+      if (missingCodes.length) {
+        showToast('Cannot Copy To Sales: ' + missingCodes.join(', ') + ' has no warehouse stock set up for this company/warehouse - set it up in Alaya\'s Item Warehouse settings first', true);
+        addLog('Copy To Sales blocked: no ItemWarehouse row for ' + missingCodes.join(', ') + ' (company ' + companyID + ', warehouse ' + headerWhID + ')');
+        return;
+      }
+      continueCopyToCashSales();
+    }).fail(function (e) {
+      addLog('ItemWarehouse pre-flight check failed: ' + (e && e.statusText || e) + ' - proceeding anyway');
+      continueCopyToCashSales();
+    });
+    return;
+    function continueCopyToCashSales() {
     var badLine = null;
     dtl.forEach(function (d, idx) {
       var a = lines[idx];
@@ -1934,6 +1959,7 @@
     if (defaultMode) $sel.val(defaultMode.id);
     $('#paymode-reference').val('');
     $('#paymode-modal').addClass('show');
+    }
   }
   var pendingCashSales = null;
   function closePaymodeModal() { $('#paymode-modal').removeClass('show'); pendingCashSales = null; }
@@ -2326,14 +2352,15 @@
           addLog('Item ' + code + ' not in company list, fetching from ItemMaster (scoped to company ' + fallbackCompId + ')...');
           // ItemMaster/ItemUOM only carry ClientID, not CompanyID - the same IM_Code
           // genuinely repeats across many different companies under the same qa3
-          // client (confirmed live: 'A000001' resolves to 4 different IM_IDs, none
-          // of them actually belonging to company 548). An unscoped TOP 1 silently
-          // picked an arbitrary one, saving a row for an item that was never valid
-          // for this company - Copy To Sales then failed server-side with an opaque
-          // "Value cannot be null. Parameter name: source" once that bogus ItemID/
-          // ItemUOMID hit PostCashSales. Join through ItemWarehouse (which DOES
-          // carry CompanyID) to get the one actually belonging to this company.
-          qrySql("SELECT TOP 1 im.IM_ID, im.IM_Code, im.IM_Description, im.IM_BaseUOM, im.IM_SerializeControl_YN, im.IM_BatchControl_YN FROM ItemMaster im INNER JOIN ItemWarehouse iw ON iw.IW_ItemID=im.IM_ID WHERE LTRIM(RTRIM(im.IM_Code))='" + esc + "' AND iw.IW_CompanyID=" + parseInt(fallbackCompId,10), 5).then(function (resp) {
+          // client (confirmed live: 'A000001' resolves to 4 different IM_IDs). An
+          // unscoped TOP 1 could silently pick the wrong company's item. CompanyItem
+          // (CI_ItemID/CI_CompanyID) is the real company-scoping table - matches how
+          // the primary company-scoped item list itself resolves items (confirmed
+          // live: CompanyItem has a row for IM_ID 115041 + company 548, even though
+          // that item has ZERO ItemWarehouse rows for company 548 - i.e. a company
+          // item can legitimately exist with no warehouse stock set up yet, so
+          // ItemWarehouse is the wrong table to scope on here).
+          qrySql("SELECT TOP 1 im.IM_ID, im.IM_Code, im.IM_Description, im.IM_BaseUOM, im.IM_SerializeControl_YN, im.IM_BatchControl_YN FROM ItemMaster im INNER JOIN CompanyItem ci ON ci.CI_ItemID=im.IM_ID WHERE LTRIM(RTRIM(im.IM_Code))='" + esc + "' AND ci.CI_CompanyID=" + parseInt(fallbackCompId,10), 5).then(function (resp) {
             var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
             if (!r) { showToast('Item ' + code + ' not found for this company', true); return; }
             var fetched = { id: r[0], code: String(r[1]).trim(), desc: r[2] || '', uom: '', uomID: r[3], typeID: 1, batchControl: !!r[5], serialControl: !!r[4], price: 0 };
