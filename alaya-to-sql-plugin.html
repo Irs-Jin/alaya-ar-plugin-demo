@@ -56,11 +56,12 @@
 
     /* Form */
     .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
-    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-row > * { min-width:0; }
+    .form-group { display:flex; flex-direction:column; gap:4px; min-width:0; }
     .form-group label { font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
     .form-group input, .form-group select {
       border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.85rem; color:#111827; outline:none;
-      font-family:inherit; transition:border-color 0.15s;
+      font-family:inherit; transition:border-color 0.15s; width:100%; max-width:100%;
     }
     .form-group input:focus, .form-group select:focus { border-color:#1565c0; box-shadow:0 0 0 3px rgba(21,101,192,0.1); }
 
@@ -154,7 +155,7 @@
 <div class="card">
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="transfer">Transfer</button>
-    <button class="tab-btn" data-tab="preview">Preview</button>
+    <button class="tab-btn" data-tab="preview">Advanced</button>
     <button class="tab-btn" data-tab="settings">Settings</button>
     <button class="tab-btn" data-tab="log">Log</button>
   </div>
@@ -231,9 +232,9 @@
     </div>
   </div>
 
-  <!-- ΓöÇΓöÇ Preview Tab (Advanced) ΓöÇΓöÇ -->
+  <!-- ΓöÇΓöÇ Advanced Tab ΓöÇΓöÇ -->
   <div id="tab-preview" class="tab-panel">
-    <h2>Alaya Data Preview (Advanced)</h2>
+    <h2>Advanced - Document Selection</h2>
     <div class="form-row" style="align-items:flex-end;">
       <div class="form-group">
         <label>Party Type</label>
@@ -1409,13 +1410,21 @@ function executeSqlViaHost(sql) {
 
 // ΓöÇΓöÇ Load Alaya data (company-scoped via REST when possible) ΓöÇΓöÇ
 function loadScopedViaRest(cid, done) {
-  var pending = 2;
-  function oneDone() { if (--pending === 0) done(); }
+  var pending = 3, finished = false;
+  function oneDone() { if (--pending === 0 && !finished) { finished = true; done(); } }
+  function setVendors(data, scoped) {
+    alayaData.vendorRaw = data;
+    alayaData.vendors = data.map(function(v) {
+      return [v.VE_AccountCode || v.VE_Code || '', v.VE_Name || '', '', 0];
+    }).filter(function(r) { return r[0]; });
+    addLog('Loaded ' + alayaData.vendors.length + ' vendors' + (scoped ? ' for company ' + cid + ' (REST, scoped)' : ' (REST, unscoped fallback)'), 'log-ok');
+  }
   $.ajax({
     url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
     headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
     success: function(resp) {
       var data = (resp && resp.data) || [];
+      alayaData.customerRaw = data;
       alayaData.customers = data.map(function(c) {
         return [c.Cust_AccountCode || '', c.Cust_NAME || '', '', 0];
       }).filter(function(r) { return r[0]; });
@@ -1423,6 +1432,26 @@ function loadScopedViaRest(cid, done) {
     },
     error: function(xhr) { addLog('GetAllCustomer failed (' + xhr.status + ') for company ' + cid, 'log-err'); },
     complete: oneDone
+  });
+  $.ajax({
+    url: apiUrl + 'api/Vendor/GetAllVendor', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      if (!data.length) {
+        // retry without company filter
+        $.ajax({
+          url: apiUrl + 'api/Vendor/GetAllVendor', type: 'POST', cache: false, contentType: 'application/json',
+          headers: { 'Authorization': authToken }, data: '{}',
+          success: function(resp2) { setVendors((resp2 && resp2.data) || [], false); },
+          error: function() { addLog('GetAllVendor failed, vendors via bridge only', 'log-warn'); },
+          complete: oneDone
+        });
+        return;
+      }
+      setVendors(data, true);
+    },
+    error: function(xhr) { addLog('GetAllVendor failed (' + xhr.status + ') - vendors via bridge only', 'log-warn'); oneDone(); }
   });
   $.ajax({
     url: apiUrl + 'api/Item/GetAllItemMasterByCompanyID', type: 'POST', cache: false, contentType: 'application/json',
@@ -1733,15 +1762,16 @@ function normPay(raw) {
 }
 
 function normItem(raw) {
-  var qty = parseFloat(pick(raw, ['QTY', 'Quantity'])) || 0;
-  var price = parseFloat(pick(raw, ['UNITPRICE', 'UnitPrice', 'Price', 'Rate'])) || 0;
-  var amt = parseFloat(pick(raw, ['AMOUNT', 'Amount', 'LineAmt'])) || qty * price;
+  var qty = parseFloat(pick(raw, ['QTY', 'Quantity', 'CSD_Qty', 'SID_Qty', 'SRD_Qty', 'PID_Qty', 'CPD_Qty', 'PRD_Qty'])) || 0;
+  var price = parseFloat(pick(raw, ['UNITPRICE', 'UnitPrice', 'Price', 'Rate', 'CSD_UnitPrice', 'SID_UnitPrice', 'SRD_UnitPrice', 'PID_UnitPrice', 'CPD_UnitPrice', 'PRD_UnitPrice'])) || 0;
+  var amt = parseFloat(pick(raw, ['AMOUNT', 'Amount', 'LineAmt', 'CSD_Total', 'SID_Total', 'SRD_Total', 'PID_Total', 'CPD_Total', 'PRD_Total', 'CSD_SubTotal', 'SID_SubTotal'])) || qty * price;
   return {
-    itemcode: pick(raw, ['ITEMCODE', 'ItemCode', 'Item_Code', 'StockCode']),
-    qty: qty, uom: pick(raw, ['UOM', 'Uom']),
+    itemcode: pick(raw, ['ITEMCODE', 'ItemCode', 'Item_Code', 'StockCode', 'CSD_ItemCode', 'SID_ItemCode', 'SRD_ItemCode', 'PID_ItemCode', 'CPD_ItemCode', 'PRD_ItemCode']),
+    qty: qty, uom: pick(raw, ['UOM', 'Uom', 'CSD_UOMCode', 'SID_UOMCode', 'PID_ItemUOMCode', 'CPD_ItemUOMCode']),
     unitprice: price, amount: amt,
     account: pick(raw, ['ACCOUNT', 'Account', 'SalesAccount']),
-    description: pick(raw, ['DESCRIPTION', 'Description', 'ItemDescription', 'DESC'])
+    description: pick(raw, ['DESCRIPTION', 'Description', 'ItemDescription', 'DESC', 'CSD_ItemDescription', 'SID_ItemDescription', 'SRD_ItemDescription', 'PID_ItemDescription', 'CPD_ItemDescription', 'PRD_ItemDescription']),
+    _raw: raw
   };
 }
 
@@ -1759,7 +1789,8 @@ function normSalesDoc(raw) {
     total: parseFloat(pick(raw, ['Total', 'DocAmt', 'CSH_Total', 'SIH_Total', 'SRH_Total', 'CSH_DocAmt', 'Amount'])) || 0,
     items: split.items.map(normItem),
     payments: split.payments.map(normPay),
-    _ticked: true
+    _ticked: true,
+    _raw: raw
   };
   if (!doc.paymode && doc.payments.length) doc.paymode = doc.payments[0].mode || '';
   return doc;
@@ -1778,7 +1809,8 @@ function normPurchaseDoc(raw) {
     total: parseFloat(pick(raw, ['Total', 'DocAmt', 'CPH_Total', 'PIH_Total', 'Amount'])) || 0,
     items: split.items.map(normItem),
     payments: split.payments.map(normPay),
-    _ticked: true
+    _ticked: true,
+    _raw: raw
   };
 }
 
@@ -1819,21 +1851,30 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
 }
 
 // Payments have no REST endpoint (desktop reads PaymentHDR/VendorPaymentHDR via SQL);
-// try the same tables through the host SQL bridge, skip gracefully if denied.
+// try the same tables through the host SQL bridge with explicit columns.
 function fetchPaymentsViaBridge(isVendor, from, to, cb) {
   function fmt(d) { return d.slice(0,4) + '.' + d.slice(5,7) + '.' + d.slice(8,10); }
-  var hdr = isVendor ? 'VendorPaymentHDR' : 'PaymentHDR';
-  var dtCol = isVendor ? 'VPH_UpdDate' : 'PH_UpdDate';
-  var noCol = isVendor ? 'VPH_DocNo' : 'PH_DocNo';
-  var like = isVendor ? 'PP%' : 'OR%';
-  var sql = 'SELECT * FROM ' + hdr + ' WHERE Convert(nvarchar,' + dtCol + ',102) Between \'' +
-            fmt(from) + '\' And \'' + fmt(to) + '\' AND ' + noCol + ' Like \'' + like + '\'';
+  var sql = isVendor
+    ? 'SELECT VPH_AcctCode, VPH_DocNo, VPH_UpdDate FROM VendorPaymentHDR Where Convert(nvarchar,VPH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND VPH_DocNo Like \'PP%\''
+    : 'SELECT PH_AcctCode, PH_DocNo, PH_DocAmt, PH_Remark, PH_Reference, PH_Mode, PH_UpdDate FROM PaymentHDR Where Convert(nvarchar,PH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND PH_DocNo Like \'OR%\'';
   executeSqlViaHost(sql).then(function(msg) {
     if (msg.error) throw new Error(msg.error);
     var result = JSON.parse(msg.result);
     var rows = (result.success && result.results && result.results[0] && result.results[0].rows) ? result.results[0].rows : [];
-    addLog((isVendor ? 'vendor' : 'customer') + ' payments via bridge: ' + rows.length + ' rows (columns unknown, logged for calibration)', 'log-info');
-    cb([{ _raw_bridge_rows: rows.length, _note: 'column mapping pending calibration, see log' }]);
+    var docs = rows.map(function(r) {
+      if (isVendor) {
+        return { docno: r[1] || '', suppcode: r[0] || '',
+                 docdate: String(r[2] || '').slice(0, 10),
+                 _raw: { VPH_AcctCode: r[0], VPH_DocNo: r[1], VPH_UpdDate: r[2] } };
+      }
+      return { docno: r[1] || '', custcode: r[0] || '', amount: r[2] || 0,
+               description: r[4] || r[3] || '', chequeno: '',
+               docdate: String(r[6] || '').slice(0, 10),
+               _raw: { PH_AcctCode: r[0], PH_DocNo: r[1], PH_DocAmt: r[2],
+                       PH_Remark: r[3], PH_Reference: r[4], PH_Mode: r[5], PH_UpdDate: r[6] } };
+    }).filter(function(d) { return d.docno; });
+    addLog((isVendor ? 'vendor' : 'customer') + ' payments via bridge: ' + docs.length + ' docs', 'log-ok');
+    cb(docs);
   }).catch(function(err) {
     addLog('Payment bridge query failed (' + err.message + ') - payments skipped', 'log-warn');
     cb([]);
@@ -1923,13 +1964,28 @@ $('#btn-transfer').on('click', function() {
 
   // Call backend (mappings included; backend may ignore unknown fields for now)
   var maps = collectMappingsFromUI();
-  // Master-data docs come from the Preview data loaded via the SQL bridge
+  // Master-data docs come from the Preview data; attach raw API rows (CC_/CV_ ref fields)
+  function rawByCode(rawArr, code, keys) {
+    if (!rawArr) return null;
+    for (var i = 0; i < rawArr.length; i++) {
+      var r = rawArr[i];
+      for (var k = 0; k < keys.length; k++) {
+        if (String(r[keys[k]] || '') === code) return r;
+      }
+    }
+    return null;
+  }
   var custDocs = (alayaData.customers || []).map(function(c) {
-    return { code: c[0] || '', name: c[1] || '', creditterm: c[2] || '', creditlimit: c[3] || 0 };
+    var code = c[0] || '';
+    return { code: code, name: c[1] || '', creditterm: c[2] || '', creditlimit: c[3] || 0,
+             _raw: rawByCode(alayaData.customerRaw, code, ['Cust_AccountCode']) };
   }).filter(function(d) { return d.code; });
   var vendDocs = (alayaData.vendors || []).map(function(v) {
-    return { code: v[0] || '', name: v[1] || '', creditterm: v[2] || '', creditlimit: v[3] || 0 };
+    var code = v[0] || '';
+    return { code: code, name: v[1] || '', creditterm: v[2] || '', creditlimit: v[3] || 0,
+             _raw: rawByCode(alayaData.vendorRaw, code, ['VE_AccountCode', 'VE_Code']) };
   }).filter(function(d) { return d.code; });
+  if (settings.tCashpurchpay && transfers.indexOf('vendorpayment') < 0) transfers.push('vendorpayment');
   if ((transfers.indexOf('customer') >= 0 && !custDocs.length) ||
       (transfers.indexOf('vendor') >= 0 && !vendDocs.length)) {
     showToast('Load Alaya Data first (Preview) before transferring master data', true);
@@ -1987,7 +2043,8 @@ $('#btn-transfer').on('click', function() {
       paymodes: maps.paymodes,
       branches: maps.branches,
       divisions: maps.divisions,
-      docs: $.extend({ customer: custDocs, vendor: vendDocs }, srcDocs)
+      docs: $.extend({ customer: custDocs, vendor: vendDocs,
+        creditnoteSide: $('input[name="adv-type"]:checked').val() || 'customer' }, srcDocs)
     }),
     success: function(r) {
       clearInterval(iv);
