@@ -848,6 +848,7 @@ function requestToken() {
     success: function (r) {
       authToken = r.token_type + ' ' + r.access_token;
       addLog('Token obtained', 'log-ok');
+      extractJwtHints(authToken);
       loadCompaniesFromApi();
     },
     error: function (r) {
@@ -877,6 +878,7 @@ function loadCompaniesFromApi() {
       companies = data;
       hideCompanyRetry();
       addLog('Loaded ' + data.length + ' companies from Alaya', 'log-ok');
+      try { addLog('Company raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
       var sel = $('#alaya-company-select');
       sel.empty();
       if (!data.length) sel.append('<option value="">No companies found</option>');
@@ -884,8 +886,12 @@ function loadCompaniesFromApi() {
         var id = c.CO_ID, code = String(c.CO_Code || '').trim();
         sel.append('<option value="' + id + '">' + escHtml(code) + ' - ' + escHtml(c.CO_Name || '') + '</option>');
       });
-      var savedId = (settings && settings.alayaCompanyId) || defaultSettings.alayaCompanyId;
-      if (savedId && sel.find('option[value="' + savedId + '"]').length) sel.val(String(savedId));
+      var picked = pickDefaultCompany(data);
+      if (picked) {
+        sel.val(String(picked));
+        settings.alayaCompanyId = picked;
+        addLog('Default company auto-selected: ' + sel.find('option:selected').text(), 'log-ok');
+      }
       loadSqlCompanies();
     },
     error: function (r) {
@@ -905,6 +911,71 @@ function showCompanyRetry(msg) {
   }
 }
 function hideCompanyRetry() { $('#btn-retry-company').remove(); }
+
+// Default-company resolution order:
+// 1. saved setting (user picked before)  2. API default flag
+// 3. JWT access-token company claims      4. code match  5. first
+var jwtCompanyHints = { ids: [], codes: [] };
+function pickDefaultCompany(list) {
+  function hasId(id) { return list.some(function(c) { return String(c.CO_ID) === String(id); }); }
+  var savedId = (settings && settings.alayaCompanyId) || defaultSettings.alayaCompanyId;
+  if (savedId && hasId(savedId)) return savedId;
+  var flagKeys = ['IsDefault', 'isDefault', 'Default', 'CO_Default', 'CO_IsDefault',
+                  'CO_Default_YN', 'DefaultCompany', 'CO_DefaultCompany'];
+  for (var i = 0; i < list.length; i++) {
+    for (var j = 0; j < flagKeys.length; j++) {
+      var v = list[i][flagKeys[j]];
+      if (v === true || v === 1 || v === '1' || v === 'Y' || v === 'y') return list[i].CO_ID;
+    }
+  }
+  for (var k = 0; k < jwtCompanyHints.ids.length; k++) {
+    if (hasId(jwtCompanyHints.ids[k])) return jwtCompanyHints.ids[k];
+  }
+  for (var m = 0; m < jwtCompanyHints.codes.length; m++) {
+    var hit = null;
+    list.forEach(function(c) {
+      if (String(c.CO_Code || '').trim().toUpperCase() === String(jwtCompanyHints.codes[m]).toUpperCase()) hit = c.CO_ID;
+    });
+    if (hit) return hit;
+  }
+  var wantCode = String((settings && settings.alayaCompany) || defaultSettings.alayaCompany || '').trim().toUpperCase();
+  if (wantCode) {
+    var hit2 = null;
+    list.forEach(function(c) {
+      if (String(c.CO_Code || '').trim().toUpperCase() === wantCode) hit2 = c.CO_ID;
+    });
+    if (hit2) return hit2;
+  }
+  return list.length ? list[0].CO_ID : 0;
+}
+
+function extractJwtHints(token) {
+  jwtCompanyHints = { ids: [], codes: [] };
+  try {
+    var parts = String(token || '').split(' ');
+    var jwt = parts.length > 1 ? parts[1] : parts[0];
+    var payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    addLog('Token claims: ' + Object.keys(payload).join(', '), 'log-info');
+    Object.keys(payload).forEach(function(k) {
+      var v = payload[k];
+      if (/compan/i.test(k)) {
+        if (typeof v === 'number') jwtCompanyHints.ids.push(v);
+        else if (typeof v === 'string' && v) {
+          if (/^\d+$/.test(v)) jwtCompanyHints.ids.push(parseInt(v, 10));
+          else jwtCompanyHints.codes.push(v);
+        } else if (Array.isArray(v)) {
+          v.forEach(function(x) {
+            if (typeof x === 'number') jwtCompanyHints.ids.push(x);
+            else if (typeof x === 'string' && x) jwtCompanyHints.codes.push(x);
+          });
+        }
+      }
+    });
+    if (jwtCompanyHints.ids.length || jwtCompanyHints.codes.length) {
+      addLog('Token company hints: ' + JSON.stringify(jwtCompanyHints), 'log-ok');
+    }
+  } catch(e) { /* opaque token - skip */ }
+}
 
 // ΓöÇΓöÇ Load SQL Account companies from backend ΓöÇΓöÇ
 function loadSqlCompanies() {
