@@ -1788,8 +1788,25 @@
     });
 
     var subTotal = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
-    var footerDiscount = parseFloat(editingReport.footerDiscount) || 0;
-    var total = Math.max(0, subTotal - footerDiscount);
+    var footerDiscount = Math.min(parseFloat(editingReport.footerDiscount) || 0, subTotal);
+    // PostCashSales requires header Total === SUM(SalesDTL.Total) + RoundingAmount
+    // exactly (confirmed live: "Total not equal all item's (Total) + RoundingAmount"),
+    // so a footer discount has to be allocated down into each line's own Total -
+    // it can't just be subtracted from the header while lines keep their full amount.
+    // Allocate proportionally to each line's share of the subtotal, with the last
+    // line absorbing the rounding remainder so the sum ties out exactly.
+    if (footerDiscount > 0 && subTotal > 0) {
+      var allocated = 0;
+      dtl.forEach(function (d, idx) {
+        var orig = parseFloat(d.Total);
+        var isLast = idx === dtl.length - 1;
+        var share = isLast ? (footerDiscount - allocated) : Math.round((orig / subTotal) * footerDiscount * 10000) / 10000;
+        allocated += share;
+        var net = Math.max(0, orig - share).toFixed(4);
+        d.Total = net; d.TaxableAmt = net; d.TaxableExcFooterDisc = net; d.ItemFooterDiscount = share.toFixed(6);
+      });
+    }
+    var total = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
     var now = fmtCashSalesDate(new Date());
     var body = {
       CompanyID: String(companyID), BranchID: String(branch.id), DocumentNo: '',
