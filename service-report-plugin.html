@@ -2322,10 +2322,20 @@
           if (match) { applyItemToRow(i, match); return; }
           // Fallback: item not in company-filtered list (e.g., batch item not assigned to JIN6 CompanyItem) - fetch directly from ItemMaster
           var esc = code.replace(/'/g, "''");
-          addLog('Item ' + code + ' not in company list, fetching from ItemMaster...');
-          qrySql("SELECT TOP 1 IM_ID, IM_Code, IM_Description, IM_BaseUOM, IM_SerializeControl_YN, IM_BatchControl_YN FROM ItemMaster WHERE LTRIM(RTRIM(IM_Code))='" + esc + "'", 5).then(function (resp) {
+          var fallbackCompId = currentFilterCompanyID();
+          addLog('Item ' + code + ' not in company list, fetching from ItemMaster (scoped to company ' + fallbackCompId + ')...');
+          // ItemMaster/ItemUOM only carry ClientID, not CompanyID - the same IM_Code
+          // genuinely repeats across many different companies under the same qa3
+          // client (confirmed live: 'A000001' resolves to 4 different IM_IDs, none
+          // of them actually belonging to company 548). An unscoped TOP 1 silently
+          // picked an arbitrary one, saving a row for an item that was never valid
+          // for this company - Copy To Sales then failed server-side with an opaque
+          // "Value cannot be null. Parameter name: source" once that bogus ItemID/
+          // ItemUOMID hit PostCashSales. Join through ItemWarehouse (which DOES
+          // carry CompanyID) to get the one actually belonging to this company.
+          qrySql("SELECT TOP 1 im.IM_ID, im.IM_Code, im.IM_Description, im.IM_BaseUOM, im.IM_SerializeControl_YN, im.IM_BatchControl_YN FROM ItemMaster im INNER JOIN ItemWarehouse iw ON iw.IW_ItemID=im.IM_ID WHERE LTRIM(RTRIM(im.IM_Code))='" + esc + "' AND iw.IW_CompanyID=" + parseInt(fallbackCompId,10), 5).then(function (resp) {
             var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
-            if (!r) { showToast('Item not found: ' + code, true); return; }
+            if (!r) { showToast('Item ' + code + ' not found for this company', true); return; }
             var fetched = { id: r[0], code: String(r[1]).trim(), desc: r[2] || '', uom: '', uomID: r[3], typeID: 1, batchControl: !!r[5], serialControl: !!r[4], price: 0 };
             // Resolve UOM code if possible
             if (r[3]) {
