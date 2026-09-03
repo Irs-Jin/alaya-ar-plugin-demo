@@ -29,10 +29,10 @@
     .hero-card { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
     .hero-title-row { display:flex; align-items:center; gap:12px; }
     .hero-icon {
-      flex-shrink:0; width:42px; height:42px; border-radius:11px;
-      overflow:hidden; display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; height:44px; max-width:230px; border-radius:8px;
+      overflow:hidden; display:flex; align-items:center; justify-content:center; background:#fff;
     }
-    .hero-icon img { width:100%; height:100%; object-fit:cover; }
+    .hero-icon img { height:100%; width:auto; max-width:100%; object-fit:contain; }
     button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
     button:disabled { opacity:0.45; cursor:not-allowed; }
     .btn-primary { background:#1565c0; color:#fff; }
@@ -139,7 +139,7 @@
 <!-- ΓòÉΓòÉΓòÉ HERO ΓòÉΓòÉΓòÉ -->
 <div class="card hero-card">
   <div class="hero-title-row">
-    <div class="hero-icon"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwohu2a14wJ2VCdknSG1n4Fz1hqtCK9BRQFh5WlXxrnA&s" alt="Logo"></div>
+    <div class="hero-icon"><img src="https://irs-jin.github.io/alaya-ar-plugin-demo/alaya-sql-logo.png" alt="Alaya to SQL Account"></div>
     <div>
       <h1>Alaya to SQL Account Transfer</h1>
       <div class="sub">Transfer data from Alaya POS to SQL Account via Backend API</div>
