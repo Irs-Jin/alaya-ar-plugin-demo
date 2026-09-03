@@ -195,8 +195,8 @@
       <div class="form-group">
         <label>Transfer Method</label>
         <select id="transfer-method">
-          <option value="itemize">By Item</option>
           <option value="summary">Summary</option>
+          <option value="itemize">By Item</option>
         </select>
       </div>
       <div class="form-group">
@@ -251,13 +251,24 @@
         </div>
       </div>
       <div class="form-group">
+        <label>Doc Type</label>
+        <select id="adv-preview-doctype">
+          <option value="CASH SALES">CASH SALES</option>
+          <option value="INVOICE">INVOICE</option>
+          <option value="CREDIT NOTE">CREDIT NOTE</option>
+          <option value="PAYMENT">PAYMENT</option>
+          <option value="CASH PURCHASES">CASH PURCHASES</option>
+          <option value="VENDOR INVOICE">VENDOR INVOICE</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>&nbsp;</label>
         <div class="btn-row">
           <button id="btn-adv-reload" class="btn-secondary">Reload Data</button>
         </div>
       </div>
     </div>
-    <div style="font-size:0.75rem;color:#6b7280;margin-bottom:10px;">Doc type follows the "Doc Type (for Preview / Advanced)" selection on the Transfer tab. Tick rows to transfer; unticked rows are skipped.</div>
+    <div style="font-size:0.75rem;color:#6b7280;margin-bottom:10px;">Tick rows to transfer; unticked rows are skipped.</div>
     <div id="adv-doc-grid" style="margin-bottom:16px;">
       <p style="color:#6b7280;font-size:0.85rem;">Click "Reload Data" to load documents.</p>
     </div>
@@ -345,8 +356,8 @@
       <div class="form-group">
         <label>Cash Sales Method</label>
         <select id="s-cashsales-method">
-          <option value="itemize">Itemize</option>
           <option value="summary">Summary</option>
+          <option value="itemize">Itemize</option>
         </select>
       </div>
       <div class="form-group">
@@ -548,7 +559,7 @@ var defaultSettings = {
   backendUrl: 'http://localhost:3100',
   alayaCompany: 'qa3',
   alayaCompanyId: 0,
-  cashsalesMethod: 'itemize',
+  cashsalesMethod: 'summary',
   cashsalesPrefix: '',
   acCashsales: '500-000',
   acCashrounding: '500-000',
@@ -577,7 +588,8 @@ var defaultSettings = {
   branches: [],
   divisions: [],
   advType: 'customer',
-  advDoc: 'CASH SALES'
+  advDoc: 'CASH SALES',
+  advPreviewDoc: 'CASH SALES'
 };
 
 // ΓöÇΓöÇ State ΓöÇΓöÇ
@@ -602,7 +614,7 @@ function packRows(s) {
   rows.push(['GENERAL', JSON.stringify({
     bu: s.backendUrl, ac: s.alayaCompany, aid: s.alayaCompanyId,
     cm: s.cashsalesMethod, cp: s.cashsalesPrefix,
-    pb: B(s.pmByBranch), at: s.advType, ad: s.advDoc
+    pb: B(s.pmByBranch), at: s.advType, ad: s.advDoc, apd: s.advPreviewDoc
   })]);
   rows.push(['CUSTOMER', JSON.stringify({
     cs: s.acCashsales, cr: s.acCashrounding, is: s.acCreditsales,
@@ -640,7 +652,7 @@ function unpackRows(rowArr) {
         var g = JSON.parse(val);
         s.backendUrl = g.bu; s.alayaCompany = g.ac; s.alayaCompanyId = g.aid;
         s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp;
-        s.pmByBranch = flag(g.pb); s.advType = g.at; s.advDoc = g.ad;
+        s.pmByBranch = flag(g.pb); s.advType = g.at; s.advDoc = g.ad; s.advPreviewDoc = g.apd;
       } else if (code === 'CUSTOMER') {
         var c = JSON.parse(val);
         s.acCashsales = c.cs; s.acCashrounding = c.cr; s.acCreditsales = c.is;
@@ -752,6 +764,7 @@ function applySettings() {
   $('#s-t-vendorinv').prop('checked', s.tVendorinv);
   $('input[name="adv-type"][value="' + (s.advType || 'customer') + '"]').prop('checked', true);
   $('#adv-doc-type').val(s.advDoc || 'CASH SALES');
+  $('#adv-preview-doctype').val(s.advPreviewDoc || 'CASH SALES');
   if (s.alayaCompanyId) $('#alaya-company-select').val(String(s.alayaCompanyId));
   BACKEND_URL = s.backendUrl;
   renderPaymodeTable(s.paymodes || []);
@@ -794,7 +807,8 @@ function saveSettings() {
     branches: maps.branches,
     divisions: maps.divisions,
     advType: $('input[name="adv-type"]:checked').val() || 'customer',
-    advDoc: $('#adv-doc-type').val() || 'CASH SALES'
+    advDoc: $('#adv-doc-type').val() || 'CASH SALES',
+    advPreviewDoc: $('#adv-preview-doctype').val() || 'CASH SALES'
   };
   BACKEND_URL = settings.backendUrl;
 
@@ -1451,48 +1465,48 @@ $('#btn-refresh-divisions').on('click', function() {
   if (!cid) { showToast('Select an Alaya company first', true); return; }
   if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
   var btn = $(this).prop('disabled', true).text('Loading...');
-  // Desktop has no dedicated division URL; it likely uses the generic
-  // SyncData/SyncByTable. Probe body variants in sequence.
-  var bodies = [
-    { CompanyID: cid, TableName: 'PurchaseDivision' },
-    { CompanyID: cid, Table: 'PurchaseDivision' },
-    { companyID: cid, tableName: 'PurchaseDivision' }
-  ];
-  var bi = 0;
-  function tryNext() {
-    if (bi >= bodies.length) {
-      addLog('GetAllPurchaseDivision/SyncByTable all failed - add divisions manually', 'log-warn');
+  // Ground truth (decompiled Link_Alaya_To_SQL/c_Account.cs GetAllPurchaseDivision):
+  // POST api/SyncData/SyncByTable with Table:'PurchaseGroup' (NOT 'PurchaseDivision')
+  // plus ClientID/CompName/BranchID/UserID/Password. The plugin never holds the user's
+  // plaintext password (see HANDOFF-NEW-PLUGIN-PROMPT.md security rule) - Password is
+  // sent empty and we rely on the Authorization bearer token for real auth. If this
+  // endpoint turns out to hard-require Password server-side, it'll 401 and fall through
+  // to the "add manually" message below same as before.
+  var co = companies.filter(function(c) { return String(c.CO_ID) === String(cid); })[0];
+  var body = {
+    ClientID: clientId, CompName: (co && co.CO_Name) || '', BranchID: 'NA',
+    UserID: username, Password: '', Table: 'PurchaseGroup', MaxID: '0', PageSize: '100'
+  };
+  addLog('POST api/SyncData/SyncByTable ' + JSON.stringify(body));
+  $.ajax({
+    url: apiUrl + 'api/SyncData/SyncByTable', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify(body),
+    success: function(resp) {
+      var data = (resp && (resp.data || resp.Obj || resp.Result)) || [];
+      if (!Array.isArray(data)) data = data ? [data] : [];
+      try { addLog('Division raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
+      if (!data.length) {
+        addLog('SyncByTable/PurchaseGroup returned no rows - add divisions manually', 'log-warn');
+        showToast('No divisions returned, add manually', true);
+        btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+        return;
+      }
+      var saved = {};
+      (settings.divisions || []).forEach(function(d) { saved[d.code] = d.itemGroup; });
+      renderDivisionTable(data.map(function(d) {
+        var code = (typeof d === 'string') ? d : String(pick(d, ['Code', 'PG_Code', 'DivisionCode', 'PD_Code', 'Name']) || '').trim();
+        return { code: code, itemGroup: !!saved[code] };
+      }).filter(function(r) { return r.code; }));
+      addLog('Refresh Done. ' + data.length + ' purchase divisions (remember to Save)', 'log-ok');
+      showToast('Refresh Done.');
+      btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+    },
+    error: function(xhr) {
+      addLog('SyncByTable/PurchaseGroup failed (' + xhr.status + ') - add divisions manually', 'log-warn');
       showToast('API not available, add manually', true);
       btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
-      return;
     }
-    var body = bodies[bi++];
-    addLog('POST api/SyncData/SyncByTable ' + JSON.stringify(body));
-    $.ajax({
-      url: apiUrl + 'api/SyncData/SyncByTable', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify(body),
-      success: function(resp) {
-        var data = (resp && (resp.data || resp.Obj || resp.Result)) || [];
-        if (!Array.isArray(data)) data = data ? [data] : [];
-        try { addLog('Division raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
-        if (!data.length) { tryNext(); return; }
-        var saved = {};
-        (settings.divisions || []).forEach(function(d) { saved[d.code] = d.itemGroup; });
-        renderDivisionTable(data.map(function(d) {
-          var code = (typeof d === 'string') ? d : String(pick(d, ['Code', 'DivisionCode', 'PD_Code', 'Name']) || '').trim();
-          return { code: code, itemGroup: !!saved[code] };
-        }).filter(function(r) { return r.code; }));
-        addLog('Refresh Done. ' + data.length + ' purchase divisions (remember to Save)', 'log-ok');
-        showToast('Refresh Done.');
-        btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
-      },
-      error: function(xhr) {
-        addLog('SyncByTable variant failed (' + xhr.status + '), trying next...', 'log-info');
-        tryNext();
-      }
-    });
-  }
-  tryNext();
+  });
 });
 
 $('#btn-add-division').on('click', function() { appendDivisionRow('', false); });
@@ -1729,7 +1743,7 @@ $('#btn-load-data').on('click', function() {
 
 // ΓöÇΓöÇ Advanced doc grid (desktop Advanced dialog port) ΓöÇΓöÇ
 function advDocTypeToTransfer() {
-  var d = $('#adv-doc-type').val() || 'CASH SALES';
+  var d = $('#adv-preview-doctype').val() || 'CASH SALES';
   var map = { 'CASH SALES': 'cashsales', 'INVOICE': 'invoice', 'CREDIT NOTE': 'creditnote',
               'PAYMENT': 'payment', 'CASH PURCHASES': 'cashpurchases', 'VENDOR INVOICE': 'vendorinvoice' };
   return map[d] || 'cashsales';
@@ -1790,7 +1804,7 @@ function loadAdvDocs() {
   var from = $('#from-date').val(), to = $('#to-date').val();
   if (!from || !to) { showToast('Please select date range on the Transfer tab', true); return; }
   settings.advType = $('input[name="adv-type"]:checked').val() || 'customer';
-  settings.advDoc = $('#adv-doc-type').val() || 'CASH SALES';
+  settings.advPreviewDoc = $('#adv-preview-doctype').val() || 'CASH SALES';
   addLog('Advanced reload: ' + type + ' ' + from + ' ~ ' + to + ' company ' + cid, 'log-info');
   $('#adv-doc-grid').html('<p style="color:#6b7280;font-size:0.85rem;">Loading...</p>');
   fetchAllSourceDocs([type], from, to, cid, function(out) {
@@ -1811,7 +1825,7 @@ $('input[name="adv-type"]').on('change', function() {
 // ΓöÇΓöÇ Render preview ΓöÇΓöÇ
 function renderPreview() {
   var advType = $('input[name="adv-type"]:checked').val() || 'customer';
-  var advDoc = $('#adv-doc-type').val() || 'CASH SALES';
+  var advDoc = $('#adv-preview-doctype').val() || 'CASH SALES';
   var html = '<div style="font-size:0.8rem;color:#6b7280;margin-bottom:12px;">Type: <b>' + escHtml(advType) + '</b> | Doc: <b>' + escHtml(advDoc) + '</b></div>';
   if (advType === 'vendor' && alayaData.vendors.length) {
     html += '<h3 style="margin-bottom:10px;">Vendors (' + alayaData.vendors.length + ')</h3>';
@@ -2008,11 +2022,27 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
 
 // Payments have no REST endpoint (desktop reads PaymentHDR/VendorPaymentHDR via SQL);
 // try the same tables through the host SQL bridge with explicit columns.
+//
+// Also pulls the invoice-level knockoff detail (PaymentDTL / VendorPaymentDTL+GoodReceiveHDR
+// - same tables + join the desktop tool's TransferCustomerPayment/TransferVendorPayment read
+// via oConnSQL_IRS) so the backend can actually apply each payment against the invoice(s) it
+// paid, instead of posting an unapplied lump sum. Attached per-doc as `_raw_bridge_rows`:
+// [{ invno, amt }, ...] - invno is the Sales/Purchase Invoice DocNo to knock off against.
 function fetchPaymentsViaBridge(isVendor, from, to, cb) {
   function fmt(d) { return d.slice(0,4) + '.' + d.slice(5,7) + '.' + d.slice(8,10); }
   var sql = isVendor
     ? 'SELECT VPH_AcctCode, VPH_DocNo, VPH_UpdDate FROM VendorPaymentHDR Where Convert(nvarchar,VPH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND VPH_DocNo Like \'PP%\''
     : 'SELECT PH_AcctCode, PH_DocNo, PH_DocAmt, PH_Remark, PH_Reference, PH_Mode, PH_UpdDate FROM PaymentHDR Where Convert(nvarchar,PH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND PH_DocNo Like \'OR%\'';
+  var detailSql = isVendor
+    ? 'SELECT VPD.VPD_DocNo, GRH.GRH_Reference, VPD.VPD_Payment FROM VendorPaymentDTL VPD ' +
+      'INNER JOIN GoodReceiveHDR GRH ON VPD.VPD_InvNo = GRH.GRH_DocNo ' +
+      'INNER JOIN VendorPaymentHDR VPH ON VPD.VPD_DocNo = VPH.VPH_DocNo ' +
+      'WHERE VPD.VPD_Payment > 0 AND Convert(nvarchar,VPH.VPH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND VPH.VPH_DocNo Like \'PP%\' ' +
+      'ORDER BY VPD.VPD_DocNo, VPD.Link_Key'
+    : 'SELECT PD.PD_DocNo, PD.PD_INVNO, PD.PD_Payment FROM PaymentDTL PD ' +
+      'INNER JOIN PaymentHDR PH ON PD.PD_DocNo = PH.PH_DocNo ' +
+      'WHERE Convert(nvarchar,PH.PH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND PH.PH_DocNo Like \'OR%\' ' +
+      'ORDER BY PD.PD_DocNo, PD.Link_Key';
   executeSqlViaHost(sql).then(function(msg) {
     if (msg.error) throw new Error(msg.error);
     var result = JSON.parse(msg.result);
@@ -2030,7 +2060,25 @@ function fetchPaymentsViaBridge(isVendor, from, to, cb) {
                        PH_Remark: r[3], PH_Reference: r[4], PH_Mode: r[5], PH_UpdDate: r[6] } };
     }).filter(function(d) { return d.docno; });
     addLog((isVendor ? 'vendor' : 'customer') + ' payments via bridge: ' + docs.length + ' docs', 'log-ok');
-    cb(docs);
+    if (!docs.length) { cb(docs); return; }
+    executeSqlViaHost(detailSql).then(function(dmsg) {
+      if (dmsg.error) throw new Error(dmsg.error);
+      var dresult = JSON.parse(dmsg.result);
+      var drows = (dresult.success && dresult.results && dresult.results[0] && dresult.results[0].rows) ? dresult.results[0].rows : [];
+      var byDocNo = {};
+      drows.forEach(function(r) {
+        var docno = r[0] || '';
+        if (!docno) return;
+        (byDocNo[docno] = byDocNo[docno] || []).push({ invno: r[1] || '', amt: r[2] || 0 });
+      });
+      docs.forEach(function(d) { d._raw_bridge_rows = byDocNo[d.docno] || []; });
+      var withRows = docs.filter(function(d) { return d._raw_bridge_rows.length; }).length;
+      addLog((isVendor ? 'vendor' : 'customer') + ' payment knockoff detail: ' + withRows + '/' + docs.length + ' docs have invoice lines', 'log-ok');
+      cb(docs);
+    }).catch(function(err) {
+      addLog('Payment knockoff detail query failed (' + err.message + ') - posting payments unapplied', 'log-warn');
+      cb(docs);
+    });
   }).catch(function(err) {
     addLog('Payment bridge query failed (' + err.message + ') - payments skipped', 'log-warn');
     cb([]);
