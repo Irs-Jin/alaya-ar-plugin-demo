@@ -1779,10 +1779,13 @@
       if (im2.batchControl && lineBatches.length) {
         var lineBatchRows = lineBatches.map(function (b) {
           var q = (typeof b.qty === 'number' ? b.qty : parseFloat(b.qty) || 0).toFixed(4);
+          // ExpiryDate is required per batch ("Invalid expiry date for item ID") -
+          // carried from the batch picker's own ItemBatch.IB_ExpiryDate lookup.
+          var expStr = b.expiryDate ? fmtCashSalesDate(new Date(b.expiryDate)) : '';
           return {
             GroupID: grp, ItemID: String(im2.id), BatchNo: b.batchNo, Qty: q, BaseQty: q,
-            BinLocationID: lineBinID, WarehouseID: lineWhID,
-            CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: grp
+            BinLocationID: lineBinID, WarehouseID: lineWhID, ExpiryDate: expStr,
+            CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: grp, CSB_ExpiryDate: expStr
           };
         });
         salesBatches = salesBatches.concat(lineBatchRows);
@@ -2078,6 +2081,7 @@
             .attr('max', qtyAvail).val('').prop('disabled', true);
           var $tr = $('<tr>')
             .attr('data-bin-id', r[3] || '')
+            .attr('data-expiry', exp || '')
             .append($('<td>').append($check))
             .append($('<td>').text(batchNo))
             .append($('<td>').text(qtyAvail))
@@ -2147,7 +2151,8 @@
       var bNo = $tr.find('td').eq(1).text();
       var qty = parseFloat($tr.find('.batch-row-qty').val()) || 0;
       var binID = parseInt($tr.attr('data-bin-id'), 10);
-      if (qty > 0) { batches.push({ batchNo: bNo, qty: qty }); if (binID) binIDs.push(binID); }
+      var expiry = $tr.attr('data-expiry') || '';
+      if (qty > 0) { batches.push({ batchNo: bNo, qty: qty, expiryDate: expiry }); if (binID) binIDs.push(binID); }
     });
     var manualNo = $.trim($('#batch-input-manual').val());
     if (!batches.length && manualNo) batches.push({ batchNo: manualNo, qty: parseFloat($('#batch-qty').val()) || row.qty || 0 });
