@@ -481,7 +481,7 @@
     </div>
     <div class="picker-table-wrap" style="max-height:280px;">
       <table class="picker-table" id="package-table">
-        <thead><tr><th style="width:140px;">Batch/Serial</th><th>Item Code</th><th>Description</th><th style="width:70px;">UOM</th><th style="width:80px;">Qty</th><th style="width:100px;">Price</th></tr></thead>
+        <thead><tr><th style="width:40px;"></th><th style="width:140px;">Batch/Serial</th><th>Item Code</th><th>Description</th><th style="width:70px;">UOM</th><th style="width:80px;">Qty</th><th style="width:100px;">Price</th></tr></thead>
         <tbody id="package-tbody"></tbody>
       </table>
     </div>
@@ -2514,8 +2514,13 @@
     (row.packageComponents || []).forEach(function (c, ci) {
       total += (c.qty || 0) * (c.price || 0);
       var $tr = $('<tr>');
-      // Batch/Serial edit icon leads the row - matches native's layout (icon
-      // column on the left, before Item Code).
+      // Delete + Batch/Serial edit icons lead the row - matches native's layout
+      // (icon columns on the left, before Item Code). Delete removes just this
+      // component from THIS package instance, matching native's per-line trash icon.
+      $tr.append($('<td>').append($('<button class="btn-secondary btn-sm" type="button" title="Remove component">').html('&#128465;').on('click', function () {
+        row.packageComponents.splice(ci, 1);
+        renderPackageTable();
+      })));
       var need = c.batchControl || c.serialControl;
       if (need) {
         var label = (c.batches && c.batches.length) ? 'B:' + c.batches.map(function (b) { return b.batchNo + '(' + b.qty + ')'; }).join('+') :
