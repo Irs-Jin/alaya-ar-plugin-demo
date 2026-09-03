@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alaya to SQL Transfer</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5; color: #1a1a1a; min-height: 100vh; padding: 24px 20px; line-height: 1.5;
+    }
+    .card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06); padding: 24px 28px; max-width: 1280px; margin: 0 auto 16px auto;
+    }
+    h1 { font-size: 1.3rem; font-weight: 800; color: #111827; }
+    h2 { font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 12px; }
+    .sub { font-size: 0.82rem; color: #6b7280; margin-bottom: 14px; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    .badge-fail { background:#fee2e2; color:#991b1b; }
+    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#6b7280; }
+    .hero-card { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .hero-title-row { display:flex; align-items:center; gap:12px; }
+    .hero-icon {
+      flex-shrink:0; width:42px; height:42px; border-radius:11px;
+      background: linear-gradient(135deg, #1565c0, #1e88e5);
+      display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:#fff;
+    }
+    .real-banner {
+      background: #f0fdf4; color: #14532d; border: 1px solid #bbf7d0;
+      border-radius: 10px; padding: 12px 16px; font-size: 0.8rem; margin-bottom: 16px;
+    }
+    button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .btn-primary { background:#1565c0; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#0d47a1; }
+    .btn-secondary { background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
+    .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
+    .btn-success { background:#16a34a; color:#fff; }
+    .btn-success:hover:not(:disabled) { background:#15803d; }
+    .btn-danger { background:#dc2626; color:#fff; }
+    .btn-danger:hover:not(:disabled) { background:#b91c1c; }
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
+
+    /* Tab bar */
+    .tab-bar { display:flex; gap:2px; border-bottom:2px solid #e5e7eb; margin-bottom:20px; }
+    .tab-btn {
+      padding:10px 18px; background:transparent; border:none; border-bottom:2px solid transparent;
+      margin-bottom:-2px; font-size:0.85rem; font-weight:600; color:#6b7280; cursor:pointer; font-family:inherit;
+    }
+    .tab-btn.active { color:#1565c0; border-bottom-color:#1565c0; }
+    .tab-btn:hover:not(.active) { color:#374151; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    /* Form */
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-group label { font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
+    .form-group input, .form-group select {
+      border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.85rem; color:#111827; outline:none;
+      font-family:inherit; transition:border-color 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus { border-color:#1565c0; box-shadow:0 0 0 3px rgba(21,101,192,0.1); }
+
+    /* Transfer list */
+    .transfer-item {
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px 16px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px;
+      background:#fafafa;
+    }
+    .transfer-item .info { flex:1; }
+    .transfer-item .name { font-size:0.88rem; font-weight:600; color:#111827; }
+    .transfer-item .detail { font-size:0.75rem; color:#6b7280; }
+    .transfer-item .status { font-size:0.75rem; font-weight:600; }
+    .transfer-item .status.pending { color:#92400e; }
+    .transfer-item .status.done { color:#166534; }
+    .transfer-item .status.error { color:#991b1b; }
+
+    /* Log panel */
+    .log-panel {
+      background:#1e293b; color:#e2e8f0; border-radius:10px; padding:14px 16px;
+      font-family:'JetBrains Mono', 'Fira Code', monospace; font-size:0.72rem;
+      max-height:200px; overflow-y:auto; line-height:1.6;
+    }
+    .log-panel .log-entry { margin-bottom:2px; }
+    .log-panel .log-time { color:#64748b; }
+    .log-panel .log-ok { color:#4ade80; }
+    .log-panel .log-err { color:#f87171; }
+    .log-panel .log-info { color:#60a5fa; }
+
+    /* Settings */
+    .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .settings-section { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:16px; }
+    .settings-section h3 { font-size:0.85rem; font-weight:700; color:#111827; margin-bottom:12px; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ HERO ═══ -->
+<div class="card hero-card">
+  <div class="hero-title-row">
+    <div class="hero-icon">📊</div>
+    <div>
+      <h1>Alaya to SQL Account Transfer</h1>
+      <div class="sub">Transfer data from Alaya POS to SQL Accounting (eStream)</div>
+    </div>
+  </div>
+  <div class="status-row">
+    <span id="conn-badge" class="badge badge-waiting">Connecting…</span>
+    <span id="backend-badge" class="badge badge-waiting">Backend: checking…</span>
+  </div>
+</div>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<div class="card">
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="transfer">Transfer</button>
+    <button class="tab-btn" data-tab="advanced">Advanced</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
+    <button class="tab-btn" data-tab="log">Log</button>
+  </div>
+
+  <!-- ── Transfer Tab ── -->
+  <div id="tab-transfer" class="tab-panel active">
+    <div class="form-row">
+      <div class="form-group">
+        <label>From Date</label>
+        <input type="date" id="from-date" />
+      </div>
+      <div class="form-group">
+        <label>To Date</label>
+        <input type="date" id="to-date" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>SQL Account Company</label>
+        <select id="sql-company">
+          <option value="">Loading companies…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Transfer Method</label>
+        <select id="transfer-method">
+          <option value="itemize">By Item</option>
+          <option value="summary">Summary</option>
+        </select>
+      </div>
+    </div>
+
+    <h2 style="margin-top:16px;">Transfer Options</h2>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-customer" /> Transfer Customer
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-vendor" /> Transfer Vendor
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-cashsales" checked /> Transfer Cash Sales
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-invoice" checked /> Transfer Invoice
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-cn" /> Transfer Credit Note
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-payment" /> Transfer Payment
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button id="btn-transfer" class="btn-primary">Transfer</button>
+      <button id="btn-preview" class="btn-secondary">Preview Data</button>
+    </div>
+
+    <div id="transfer-progress" style="margin-top:16px;display:none;">
+      <div style="font-size:0.82rem;color:#6b7280;margin-bottom:8px;">Transferring… <span id="progress-text"></span></div>
+      <div style="background:#e5e7eb;border-radius:999px;height:6px;overflow:hidden;">
+        <div id="progress-bar" style="background:#1565c0;height:100%;width:0%;transition:width 0.3s;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Advanced Tab ── -->
+  <div id="tab-advanced" class="tab-panel">
+    <h2>Advanced Transfer</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Data Type</label>
+        <select id="adv-type">
+          <option value="customer">Customer</option>
+          <option value="vendor">Vendor</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Action</label>
+        <select id="adv-action">
+          <option value="reload">Reload Data</option>
+          <option value="transfer">Transfer Selected</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-bottom:16px;">
+      <button id="btn-adv-reload" class="btn-secondary">Reload Data</button>
+      <button id="btn-adv-transfer" class="btn-primary">Transfer Selected</button>
+    </div>
+    <div id="adv-list" style="max-height:300px;overflow-y:auto;"></div>
+  </div>
+
+  <!-- ── Settings Tab ── -->
+  <div id="tab-settings" class="tab-panel">
+    <h2>Backend Configuration</h2>
+    <div class="settings-grid">
+      <div class="settings-section">
+        <h3>Backend Server</h3>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>Backend URL</label>
+          <input type="text" id="cfg-backend" value="http://localhost:3100" />
+        </div>
+        <button id="btn-test-backend" class="btn-secondary">Test Connection</button>
+      </div>
+      <div class="settings-section">
+        <h3>Alaya API</h3>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>API URL</label>
+          <input type="text" id="cfg-alaya-api" value="https://api.irsbizsuite.com.my/sit/" />
+        </div>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>Company ID</label>
+          <input type="text" id="cfg-company-id" value="" />
+        </div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button id="btn-save-settings" class="btn-primary">Save Settings</button>
+    </div>
+  </div>
+
+  <!-- ── Log Tab ── -->
+  <div id="tab-log" class="tab-panel">
+    <div class="btn-row" style="margin-bottom:12px;">
+      <button id="btn-clear-log" class="btn-secondary">Clear Log</button>
+    </div>
+    <div id="log-panel" class="log-panel">
+      <div class="log-entry"><span class="log-time">[--:--:--]</span> <span class="log-info">Plugin loaded. Waiting for ALAYA_INIT…</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   ALAYA TO SQL TRANSFER PLUGIN
+   ═══════════════════════════════════════════════════════════════ */
+
+var hostOrigin = null;
+var alayaApiUrl = '';
+var alayaClientId = '';
+var alayaUsername = '';
+var alayaPassword = '';
+var authToken = '';
+var companyId = '';
+var companies = [];
+var pendingDcbCallbacks = {};
+
+var backendUrl = localStorage.getItem('alaya2sql_backend') || 'http://localhost:3100';
+var alayaApiCfg = localStorage.getItem('alaya2sql_alayaapi') || 'https://api.irsbizsuite.com.my/sit/';
+var companyCfg = localStorage.getItem('alaya2sql_companyid') || '';
+
+// ── Logging ──
+function addLog(msg, cls) {
+  var now = new Date();
+  var ts = [now.getHours(), now.getMinutes(), now.getSeconds()].map(function(n){ return n<10?'0'+n:n; }).join(':');
+  var c = cls || '';
+  $('#log-panel').append('<div class="log-entry"><span class="log-time">[' + ts + ']</span> <span class="' + c + '">' + escHtml(msg) + '</span></div>');
+  var el = document.getElementById('log-panel');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Toast ──
+function showToast(msg, isError) {
+  var existing = $('#toast-msg');
+  if (existing.length) existing.parent().remove();
+  var bg = isError ? '#fee2e2' : '#dcfce7';
+  var fg = isError ? '#991b1b' : '#166534';
+  var html = '<div id="toast-msg" style="position:fixed;bottom:24px;right:24px;background:'+bg+';color:'+fg+';padding:12px 20px;border-radius:10px;font-size:0.82rem;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);">'+escHtml(msg)+'</div>';
+  $('body').append(html);
+  setTimeout(function(){ $('#toast-msg').parent().remove(); }, 4000);
+}
+
+// ── postMessage helpers ──
+function postToParent(type, data) {
+  window.parent.postMessage(Object.assign({ type: type, source: 'alaya-to-sql' }, data || {}), '*');
+}
+
+// ── ALAYA_INIT handshake ──
+$(window).on('message', function(e) {
+  var msg = e.originalEvent.data;
+  if (!msg) return;
+
+  if (msg.type === 'ALAYA_INIT') {
+    hostOrigin = msg.source || e.originalEvent.origin;
+    alayaApiUrl = msg.apiurl || '';
+    alayaClientId = msg.client || '';
+    alayaUsername = msg.username || '';
+    companyId = msg.companyid || companyCfg;
+    $('#conn-badge').removeClass('badge-waiting').addClass('badge-received').text('Connected');
+    addLog('ALAYA_INIT received — api=' + alayaApiUrl + ' client=' + alayaClientId + ' user=' + alayaUsername, 'log-ok');
+    postToParent('ALAYA_READY', { plugin: 'alaya-to-sql' });
+    initAuth();
+  }
+
+  if (msg.type === 'alaya-dcb-result' && msg.requestId) {
+    var cb = pendingDcbCallbacks[msg.requestId];
+    if (cb) {
+      delete pendingDcbCallbacks[msg.requestId];
+      clearTimeout(cb.timer);
+      cb.resolve(msg);
+    }
+  }
+});
+
+// ── Auth ──
+function initAuth() {
+  addLog('Authenticating with Alaya API…', 'log-info');
+  $.ajax({
+    url: alayaApiUrl + 'token',
+    type: 'POST',
+    contentType: 'application/x-www-form-urlencoded',
+    data: {
+      grant_type: 'password',
+      clientid: alayaClientId,
+      username: alayaUsername,
+      devkey: '5hL7jK3wX9',
+      nonce: 'alaya2sql'
+    },
+    success: function(r) {
+      authToken = r.token_type + ' ' + r.access_token;
+      addLog('Auth OK', 'log-ok');
+      loadCompanies();
+    },
+    error: function(xhr) {
+      addLog('Auth FAILED: ' + xhr.status + ' ' + (xhr.responseText||'').slice(0,200), 'log-err');
+    }
+  });
+}
+
+// ── Load companies ──
+function loadCompanies() {
+  addLog('Loading SQL Account companies from backend…', 'log-info');
+  $.ajax({
+    url: backendUrl + '/api/companies',
+    type: 'GET',
+    success: function(r) {
+      if (r.success && r.data) {
+        companies = r.data;
+        var sel = $('#sql-company');
+        sel.empty();
+        sel.append('<option value="">Select company…</option>');
+        r.data.forEach(function(c) {
+          sel.append('<option value="' + escHtml(c.code) + '">' + escHtml(c.code) + ' - ' + escHtml(c.name) + '</option>');
+        });
+        addLog('Loaded ' + r.data.length + ' companies', 'log-ok');
+      }
+    },
+    error: function(xhr) {
+      addLog('Backend unreachable: ' + backendUrl, 'log-err');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+    }
+  });
+}
+
+// ── Tab switching ──
+$('.tab-btn').on('click', function() {
+  var tab = $(this).data('tab');
+  $('.tab-btn').removeClass('active');
+  $(this).addClass('active');
+  $('.tab-panel').removeClass('active');
+  $('#tab-' + tab).addClass('active');
+});
+
+// ── Settings ──
+$('#cfg-backend').val(backendUrl);
+$('#cfg-alaya-api').val(alayaApiCfg);
+$('#cfg-company-id').val(companyCfg);
+
+$('#btn-save-settings').on('click', function() {
+  backendUrl = $('#cfg-backend').val().replace(/\/+$/, '');
+  alayaApiCfg = $('#cfg-alaya-api').val();
+  companyCfg = $('#cfg-company-id').val();
+  localStorage.setItem('alaya2sql_backend', backendUrl);
+  localStorage.setItem('alaya2sql_alayaapi', alayaApiCfg);
+  localStorage.setItem('alaya2sql_companyid', companyCfg);
+  addLog('Settings saved', 'log-ok');
+  showToast('Settings saved');
+});
+
+$('#btn-test-backend').on('click', function() {
+  $.ajax({
+    url: backendUrl + '/api/health',
+    type: 'GET',
+    success: function(r) {
+      addLog('Backend healthy: ' + JSON.stringify(r), 'log-ok');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-received').text('Backend: online');
+      showToast('Backend connected');
+    },
+    error: function(xhr) {
+      addLog('Backend test FAILED', 'log-err');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+      showToast('Backend unreachable', true);
+    }
+  });
+});
+
+// ── Transfer ──
+$('#btn-transfer').on('click', function() {
+  var from = $('#from-date').val();
+  var to = $('#to-date').val();
+  var company = $('#sql-company').val();
+
+  if (!from || !to) { showToast('Please select date range', true); return; }
+  if (!company) { showToast('Please select SQL Account company', true); return; }
+
+  addLog('Starting transfer: ' + from + ' ~ ' + to + ' to ' + company, 'log-info');
+  $('#transfer-progress').show();
+  $('#btn-transfer').prop('disabled', true);
+
+  var transfers = [];
+  if ($('#t-cashsales').is(':checked')) transfers.push('cashsales');
+  if ($('#t-invoice').is(':checked')) transfers.push('invoice');
+  if ($('#t-customer').is(':checked')) transfers.push('customer');
+  if ($('#t-vendor').is(':checked')) transfers.push('vendor');
+  if ($('#t-cn').is(':checked')) transfers.push('creditnote');
+  if ($('#t-payment').is(':checked')) transfers.push('payment');
+
+  if (transfers.length === 0) {
+    showToast('No transfer options selected', true);
+    $('#transfer-progress').hide();
+    $('#btn-transfer').prop('disabled', false);
+    return;
+  }
+
+  // Simulate progress
+  var progress = 0;
+  var iv = setInterval(function() {
+    progress = Math.min(progress + Math.random() * 15, 90);
+    $('#progress-bar').css('width', progress + '%');
+    $('#progress-text').text(Math.round(progress) + '%');
+  }, 500);
+
+  // Call backend
+  $.ajax({
+    url: backendUrl + '/api/transfer',
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({
+      fromdate: from,
+      todate: to,
+      companycode: company,
+      transfers: transfers
+    }),
+    success: function(r) {
+      clearInterval(iv);
+      $('#progress-bar').css('width', '100%');
+      $('#progress-text').text('100%');
+      addLog('Transfer completed: ' + JSON.stringify(r), 'log-ok');
+      showToast('Transfer completed');
+      setTimeout(function() { $('#transfer-progress').hide(); }, 2000);
+      $('#btn-transfer').prop('disabled', false);
+    },
+    error: function(xhr) {
+      clearInterval(iv);
+      $('#progress-bar').css('width', '0%');
+      addLog('Transfer FAILED: ' + xhr.status, 'log-err');
+      showToast('Transfer failed', true);
+      $('#transfer-progress').hide();
+      $('#btn-transfer').prop('disabled', false);
+    }
+  });
+});
+
+$('#btn-clear-log').on('click', function() {
+  $('#log-panel').empty();
+  addLog('Log cleared', 'log-info');
+});
+
+// ── Set default dates ──
+var today = new Date().toISOString().slice(0, 10);
+$('#from-date').val(today);
+$('#to-date').val(today);
+
+addLog('Plugin initialized', 'log-info');
+</script>
+</body>
+</html>
