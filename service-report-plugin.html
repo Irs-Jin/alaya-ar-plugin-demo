@@ -884,28 +884,22 @@
       // Mark as non-batch to avoid infinite lazy retries, but still allow manual batch entry via second-screen button
       batch.forEach(function (im) { if (im.batchControl === undefined) { im.batchControl = false; im.serialControl = false; } });
     });
-    // Price from PriceGroupItem (first price) - fallback to ItemUOM
-    qrySql("SELECT PGI_ItemID, MIN(PGI_SalesPrice1) FROM PriceGroupItem WHERE PGI_ItemID IN (" + ids + ") GROUP BY PGI_ItemID", 500).then(function (resp) {
-      var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
-      rows.forEach(function (r) {
-        var found = batch.filter(function (im) { return String(im.id) === String(r[0]); })[0];
-        if (found && r[1]) found.price = parseFloat(r[1]) || 0;
-      });
-      if (rows.length) addLog('Enriched ' + rows.length + ' items with price from PGI');
-      // Items still with price=0: try ItemUOM fallback
-      var missing = batch.filter(function (im) { return !im.price; });
-      if (missing.length) {
-        var mIds = missing.map(function (im) { return parseInt(im.id,10); }).join(',');
-        qrySql("SELECT IU_ItemID, MIN(IU_SalesPrice1) FROM ItemUOM WHERE IU_ItemID IN (" + mIds + ") GROUP BY IU_ItemID", 500).then(function (resp2) {
-          var rows2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows || [];
-          rows2.forEach(function (r) {
-            var found = missing.filter(function (im) { return String(im.id) === String(r[0]); })[0];
-            if (found && r[1]) found.price = parseFloat(r[1]) || 0;
-          });
-          if (rows2.length) addLog('Enriched ' + rows2.length + ' items with price from ItemUOM fallback');
+    // Price comes from THIS item's own ItemUOM row (uomID = IU_ID), not just
+    // "any UOM of this item" - IU_SalesPrice1 varies wildly per UOM (e.g. UNIT
+    // vs CTN vs KG can differ 50x), so a MIN()/unfiltered lookup across all of
+    // an item's UOMs previously grabbed the wrong UOM's price entirely.
+    var withUom = batch.filter(function (im) { return im.uomID; });
+    if (withUom.length) {
+      var uomIds = withUom.map(function (im) { return parseInt(im.uomID,10); }).join(',');
+      qrySql("SELECT IU_ID, IU_SalesPrice1 FROM ItemUOM WHERE IU_ID IN (" + uomIds + ")", 500).then(function (resp) {
+        var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+        rows.forEach(function (r) {
+          var found = withUom.filter(function (im) { return String(im.uomID) === String(r[0]); })[0];
+          if (found && r[1]) found.price = parseFloat(r[1]) || 0;
         });
-      }
-    });
+        if (rows.length) addLog('Enriched ' + rows.length + ' items with price from ItemUOM (matched by UOM)');
+      });
+    }
   }
 
   /* ── Copy-To-Sales prerequisites (Sales Branch / Payment Mode / Payment Term) ──
@@ -1856,26 +1850,21 @@
     if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0) && itemRecord.price) {
       editingReport.actionTaken[i].price = parseFloat(itemRecord.price) || 0;
     }
-    // If still no price, lazy fetch price via PriceGroupItem then ItemUOM fallback
-    if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0)) {
+    // If still no price, lazy fetch it - keyed on this item's own ItemUOM row
+    // (uomID = IU_ID), NOT just "any UOM of this item": ItemUOM.IU_SalesPrice1
+    // varies wildly per UOM (e.g. UNIT vs CTN vs KG can differ 50x), so picking
+    // an unfiltered/MIN price previously grabbed the wrong UOM's price entirely.
+    if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0) && itemRecord.uomID) {
       (function (idx, im) {
-        addLog('Lazy price fetch for item ' + im.code + ' (id=' + im.id + ')');
-        qrySql("SELECT TOP 1 PGI_SalesPrice1 FROM PriceGroupItem WHERE PGI_ItemID=" + parseInt(im.id,10) + " ORDER BY PGI_ID", 5).then(function (resp) {
+        addLog('Lazy price fetch for item ' + im.code + ' UOM id=' + im.uomID);
+        qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ID=" + parseInt(im.uomID,10), 5).then(function (resp) {
           var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
           var p = r && parseFloat(r[0]);
-          addLog('PGI price result for ' + im.code + ': ' + p);
+          addLog('ItemUOM price result for ' + im.code + ': ' + p);
           if (p && p>0) {
             im.price = p;
             if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p; renderActionTable(); }
-            return;
           }
-          // Fallback to ItemUOM
-          return qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ItemID=" + parseInt(im.id,10) + " ORDER BY IU_ID", 5).then(function (resp2) {
-            var r2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows && resp2.results[0].rows[0];
-            var p2 = r2 && parseFloat(r2[0]);
-            addLog('IU price fallback for ' + im.code + ': ' + p2);
-            if (p2 && p2>0) { im.price = p2; if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p2; renderActionTable(); } }
-          });
         }).fail(function(e){ addLog('Price fetch failed for ' + im.code + ': ' + (e&&e.statusText||e)); });
       })(i, itemRecord);
     }
