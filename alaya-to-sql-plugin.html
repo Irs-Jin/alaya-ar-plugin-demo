@@ -402,6 +402,14 @@
           <label>Credit Sales Description</label>
           <input type="text" id="s-desc-creditsales" placeholder="INVOICE" />
         </div>
+        <div class="form-group">
+          <label>Credit Note A/C</label>
+          <input type="text" id="s-ac-creditnote" placeholder="612-000" />
+        </div>
+        <div class="form-group">
+          <label>Credit Note Description (Max 150 Char.)</label>
+          <input type="text" id="s-desc-creditnote" placeholder="RETURN" maxlength="150" />
+        </div>
       </div>
       <div class="acct-col">
         <h4>Vendor</h4>
@@ -422,12 +430,12 @@
           <input type="text" id="s-proj-purchase" placeholder="e.g. JIN6-PROJ" maxlength="20" />
         </div>
         <div class="form-group">
-          <label>Credit Note A/C</label>
-          <input type="text" id="s-ac-creditnote" placeholder="612-000" />
+          <label>Debit Note A/C</label>
+          <input type="text" id="s-ac-debitnote" placeholder="612-000" />
         </div>
         <div class="form-group">
-          <label>Credit Note Description (Max 150 Char.)</label>
-          <input type="text" id="s-desc-creditnote" placeholder="RETURN" maxlength="150" />
+          <label>Debit Note Description (Max 150 Char.)</label>
+          <input type="text" id="s-desc-debitnote" placeholder="RETURN" maxlength="150" />
         </div>
       </div>
     </div>
@@ -581,6 +589,8 @@ var defaultSettings = {
   projPurchase: '',
   acCreditnote: '612-000',
   descCreditnote: 'RETURN',
+  acDebitnote: '612-000',
+  descDebitnote: 'RETURN',
   tCustomer: false,
   tVendor: false,
   tCashsales: true,
@@ -626,11 +636,12 @@ function packRows(s) {
   rows.push(['CUSTOMER', JSON.stringify({
     cs: s.acCashsales, cr: s.acCashrounding, is: s.acCreditsales,
     ir: s.acCreditrounding, sc: s.acServicecharge,
-    dc: s.descCashsales, di: s.descCreditsales
+    dc: s.descCashsales, di: s.descCreditsales,
+    cn: s.acCreditnote, cnd: s.descCreditnote
   })]);
   rows.push(['VENDOR', JSON.stringify({
     p: s.acPurchase, pr: s.acPurchRounding, dp: s.descPurchase,
-    pj: s.projPurchase, cn: s.acCreditnote, dc: s.descCreditnote
+    pj: s.projPurchase, dn: s.acDebitnote, dnd: s.descDebitnote
   })]);
   rows.push(['OPTS', JSON.stringify({
     c: B(s.tCustomer), v: B(s.tVendor), cs: B(s.tCashsales),
@@ -665,10 +676,11 @@ function unpackRows(rowArr) {
         s.acCashsales = c.cs; s.acCashrounding = c.cr; s.acCreditsales = c.is;
         s.acCreditrounding = c.ir; s.acServicecharge = c.sc;
         s.descCashsales = c.dc; s.descCreditsales = c.di;
+        s.acCreditnote = c.cn; s.descCreditnote = c.cnd;
       } else if (code === 'VENDOR') {
         var v = JSON.parse(val);
         s.acPurchase = v.p; s.acPurchRounding = v.pr; s.descPurchase = v.dp;
-        s.projPurchase = v.pj; s.acCreditnote = v.cn; s.descCreditnote = v.dc;
+        s.projPurchase = v.pj; s.acDebitnote = v.dn; s.descDebitnote = v.dnd;
       } else if (code === 'OPTS') {
         var o = JSON.parse(val);
         s.tCustomer = flag(o.c); s.tVendor = flag(o.v); s.tCashsales = flag(o.cs);
@@ -759,6 +771,8 @@ function applySettings() {
   $('#s-proj-purchase').val(s.projPurchase);
   $('#s-ac-creditnote').val(s.acCreditnote);
   $('#s-desc-creditnote').val(s.descCreditnote);
+  $('#s-ac-debitnote').val(s.acDebitnote);
+  $('#s-desc-debitnote').val(s.descDebitnote);
   $('#s-pm-bybranch').prop('checked', s.pmByBranch);
   $('#s-t-customer').prop('checked', s.tCustomer);
   $('#s-t-vendor').prop('checked', s.tVendor);
@@ -800,6 +814,8 @@ function saveSettings() {
     projPurchase: $('#s-proj-purchase').val(),
     acCreditnote: $('#s-ac-creditnote').val(),
     descCreditnote: $('#s-desc-creditnote').val(),
+    acDebitnote: $('#s-ac-debitnote').val(),
+    descDebitnote: $('#s-desc-debitnote').val(),
     pmByBranch: $('#s-pm-bybranch').is(':checked'),
     tCustomer: $('#s-t-customer').is(':checked'),
     tVendor: $('#s-t-vendor').is(':checked'),
@@ -980,10 +996,14 @@ function loadCompaniesFromApi() {
         clearCompanyFilter();
         sel.val(String(picked));
         settings.alayaCompanyId = picked;
+        $('input[name="adv-type"]:checked').length; // noop guard
         addLog('Default company auto-selected: ' + sel.find('option:selected').text(), 'log-ok');
         if (!hadSaved && data.length && String(picked) === String(data[0].CO_ID)) {
           probeDefaultCompanyByStaff(picked);
         }
+      } else {
+        // Saved company no longer in list (e.g. filtered out) - keep dropdown empty but log
+        addLog('No default company resolvable; dropdown left unselected', 'log-warn');
       }
       applyUserCompanyFilter();
       window._companyScopeMode = 'full list';
@@ -2282,6 +2302,8 @@ $('#btn-transfer').on('click', function() {
         projPurchase: $('#s-proj-purchase').val(),
         acCreditnote: $('#s-ac-creditnote').val(),
         descCreditnote: $('#s-desc-creditnote').val(),
+        acDebitnote: $('#s-ac-debitnote').val(),
+        descDebitnote: $('#s-desc-debitnote').val(),
         pmByBranch: $('#s-pm-bybranch').is(':checked')
       },
       paymodes: maps.paymodes,
@@ -2445,9 +2467,21 @@ $('#btn-save-settings-bottom').on('click', function() {
   saveSettings();
 });
 $('#btn-save-default-company').on('click', function() {
-  settings.alayaCompanyId = currentAlayaCompanyID();
-  settings.alayaCompany = currentAlayaCompanyCode();
-  $('#s-alaya-company').val(settings.alayaCompany);
+  var id = currentAlayaCompanyID();
+  var code = currentAlayaCompanyCode();
+  if (!id) { showToast('No Alaya company selected in the dropdown yet', true); return; }
+  settings.alayaCompanyId = id;
+  settings.alayaCompany = code;
+  $('#s-alaya-company').val(code);
+  try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
+  var name = $('#alaya-company-select').find('option:selected').text() || code;
+  var display = code;
+  if (name && name !== code) {
+    var dash = name.indexOf('-');
+    display = code + (dash >= 0 ? ' (' + $.trim(name.slice(dash + 1)) + ')' : '');
+  }
+  showToast('Default company saved: ' + display);
+  addLog('Default Alaya company saved: ' + code + ' (ID ' + id + ')', 'log-ok');
   saveSettings();
 });
 
