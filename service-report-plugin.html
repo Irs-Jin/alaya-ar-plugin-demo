@@ -2363,8 +2363,11 @@
           $check.on('change', function () {
             // Multi-select: one Action Taken line can be fulfilled from several
             // batches (e.g. 5 from ABC + 3 from G1001), each with its own Qty.
+            // Default to what's actually needed (the line's own Qty), NOT the
+            // full Qty Available - a 1-unit package component shouldn't
+            // auto-fill to "499 available" (user feedback).
             if ($(this).is(':checked')) {
-              $qtyInput.prop('disabled', false).val(qtyAvail);
+              $qtyInput.prop('disabled', false).val(Math.min(row.qty || 1, qtyAvail));
               $('#batch-input-manual').val('');
             } else {
               $qtyInput.prop('disabled', true).val('');
