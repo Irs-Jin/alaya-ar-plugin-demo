@@ -182,6 +182,9 @@
           <option value="">Loading companies...</option>
         </select>
         <div id="company-scope-note" style="font-size:0.72rem;color:#6b7280;margin-top:4px;"></div>
+        <div style="margin-top:6px;">
+          <button id="btn-save-default-company" class="btn-secondary" style="padding:6px 14px;font-size:0.8rem;">Save as default</button>
+        </div>
       </div>
       <div class="form-group">
         <label>SQL Account Company</label>
@@ -1224,6 +1227,22 @@ function loadSqlCompanies() {
           if (current) sel.val(current);
         });
         addLog('Loaded ' + r.data.length + ' SQL companies', 'log-ok');
+        // Restore the backend's active company (persisted in config.json on last switch)
+        $.ajax({
+          url: BACKEND_URL + '/api/settings/connection',
+          type: 'GET',
+          success: function(rc) {
+            try {
+              var db = (rc && rc.data && rc.data.database) || '';
+              var base = String(db).split(/[/\\]/).pop() || '';
+              var code = base.replace(/\.[^.]*$/, '');
+              if (code && $('#sql-company option[value="' + code + '"]').length) {
+                $('#sql-company, #s-sql-company').val(code);
+                addLog('SQL Account company restored: ' + code, 'log-ok');
+              }
+            } catch(e) {}
+          }
+        });
       }
     },
     error: function(xhr) {
@@ -1333,7 +1352,8 @@ $('#alaya-company-select').on('change', function() {
   settings.alayaCompanyId = id;
   settings.alayaCompany = currentAlayaCompanyCode();
   $('#s-alaya-company').val(settings.alayaCompany);
-  addLog('Alaya company selected: ' + txt + ' (ID ' + id + ')', 'log-ok');
+  saveSettings();
+  addLog('Alaya company selected: ' + txt + ' (ID ' + id + ') - saved as default', 'log-ok');
   // Functional: auto-reload this company's mappings + preview data
   if (id && apiUrl && authToken) {
     refreshPaymodesForCompany(id);
@@ -2405,6 +2425,12 @@ $('#btn-save-settings').on('click', function() {
   saveSettings();
 });
 $('#btn-save-settings-bottom').on('click', function() {
+  saveSettings();
+});
+$('#btn-save-default-company').on('click', function() {
+  settings.alayaCompanyId = currentAlayaCompanyID();
+  settings.alayaCompany = currentAlayaCompanyCode();
+  $('#s-alaya-company').val(settings.alayaCompany);
   saveSettings();
 });
 
