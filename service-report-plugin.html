@@ -1945,6 +1945,7 @@
           var $qtyInput = $('<input type="number" min="0" step="1" class="batch-row-qty" style="width:70px;">')
             .attr('max', qtyAvail).val('').prop('disabled', true);
           var $tr = $('<tr>')
+            .attr('data-bin-id', r[3] || '')
             .append($('<td>').append($check))
             .append($('<td>').text(batchNo))
             .append($('<td>').text(qtyAvail))
@@ -2008,11 +2009,13 @@
     if (batchEditingIdx === null) return;
     var row = editingReport.actionTaken[batchEditingIdx];
     var batches = [];
+    var binIDs = [];
     $('#batch-tbody .batch-row-check:checked').each(function () {
       var $tr = $(this).closest('tr');
       var bNo = $tr.find('td').eq(1).text();
       var qty = parseFloat($tr.find('.batch-row-qty').val()) || 0;
-      if (qty > 0) batches.push({ batchNo: bNo, qty: qty });
+      var binID = parseInt($tr.attr('data-bin-id'), 10);
+      if (qty > 0) { batches.push({ batchNo: bNo, qty: qty }); if (binID) binIDs.push(binID); }
     });
     var manualNo = $.trim($('#batch-input-manual').val());
     if (!batches.length && manualNo) batches.push({ batchNo: manualNo, qty: parseFloat($('#batch-qty').val()) || row.qty || 0 });
@@ -2020,9 +2023,6 @@
     var sText = $.trim($('#serial-input').val());
     var serials = sText ? sText.split(/\n/).map(function (s) { return $.trim(s); }).filter(Boolean) : [];
     if (batchNeedBatch && !batchOptional && !batches.length) { showToast('Batch No is required for this item - tick one or more batches above, or type one manually', true); return; }
-    if (batchNeedBatch && batches.length && totalQty !== parseFloat(row.qty || 0)) {
-      showToast('Selected batch Qty total (' + totalQty + ') must match line Qty (' + row.qty + ')', true); return;
-    }
     if (batchNeedSerial && serials.length !== parseInt(row.qty || 0, 10)) {
       showToast('Serial count (' + serials.length + ') must match Qty (' + row.qty + ')', true); return;
     }
@@ -2030,7 +2030,21 @@
     row.batches = batches;
     row.batchNo = batches.length ? batches[0].batchNo : '';
     row.serialNos = serials;
-    addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batches=' + JSON.stringify(batches) + ' serials=' + (row.serialNos||[]).length);
+    // Picking batch(es) fixes what's actually being taken from stock - sync the
+    // outer line's Qty to the selected total, and its Bin Location to the
+    // batch's own bin (all selected batches share the same bin in practice).
+    if (batchNeedBatch && batches.length) {
+      row.qty = totalQty;
+      var uniqueBin = binIDs.length && binIDs.every(function (b) { return b === binIDs[0]; }) ? binIDs[0] : (binIDs[0] || null);
+      if (uniqueBin) {
+        row.binLocationID = uniqueBin;
+        var whID = editingReport.warehouseID;
+        var wh = warehouses.filter(function (w) { return w.id === whID; })[0];
+        var bl = wh ? (wh.bins || []).filter(function (b) { return b.id === uniqueBin; })[0] : null;
+        row.binLocationCode = bl ? bl.code : '';
+      }
+    }
+    addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batches=' + JSON.stringify(batches) + ' qty=' + row.qty + ' bin=' + row.binLocationID + ' serials=' + (row.serialNos||[]).length);
     closeBatchModal();
     renderActionTable();
     markDirty('batch/serial');
