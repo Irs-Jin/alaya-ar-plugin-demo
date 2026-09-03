@@ -2520,7 +2520,9 @@
       if (need) {
         var label = (c.batches && c.batches.length) ? 'B:' + c.batches.map(function (b) { return b.batchNo + '(' + b.qty + ')'; }).join('+') :
           (c.serialNos && c.serialNos.length) ? 'S:' + c.serialNos.length : 'required';
-        var $btn = $('<button class="btn-secondary btn-sm" type="button">').text(label).on('click', function () { openBatchModalForComponent(packageEditingIdx, ci); });
+        // Explicit edit-pencil icon - a plain text label read as static, non-clickable
+        // text (confirmed by user feedback on this exact "required" cell).
+        var $btn = $('<button class="btn-secondary btn-sm" type="button" style="white-space:nowrap;">').html('&#9998; ' + label).on('click', function () { openBatchModalForComponent(packageEditingIdx, ci); });
         if (!(c.batches && c.batches.length) && !(c.serialNos && c.serialNos.length)) $btn.css({ color: '#dc2626', borderColor: '#fecaca' });
         $tr.append($('<td>').append($btn));
       } else {
@@ -2711,7 +2713,7 @@
         }
         var $cell = $('<td>');
         if (need) {
-          var $btn = $('<button class="btn-secondary btn-sm" type="button">').html(label).on('click', function () { openBatchModalForRow(i); });
+          var $btn = $('<button class="btn-secondary btn-sm" type="button">').html('&#9998; ' + label).on('click', function () { openBatchModalForRow(i); });
           if (!a.batchNo && !(a.batches && a.batches.length) && !a.serialNos) $btn.css({ color:'#dc2626', borderColor:'#fecaca' });
           $cell.append($btn);
         } else {
