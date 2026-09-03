@@ -2526,7 +2526,9 @@
         if (!(c.batches && c.batches.length) && !(c.serialNos && c.serialNos.length)) $btn.css({ color: '#dc2626', borderColor: '#fecaca' });
         $tr.append($('<td>').append($btn));
       } else {
-        $tr.append($('<td>').text('-'));
+        // Matches native: every row keeps the edit affordance, just disabled/
+        // dimmed for components that don't need batch/serial (nothing to edit).
+        $tr.append($('<td>').append($('<button class="btn-secondary btn-sm" type="button" disabled style="opacity:0.4; cursor:default;">').html('&#9998;')));
       }
       $tb.append($tr);
     });
