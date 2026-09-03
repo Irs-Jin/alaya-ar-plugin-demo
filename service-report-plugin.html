@@ -1803,7 +1803,10 @@
         var share = isLast ? (footerDiscount - allocated) : Math.round((orig / subTotal) * footerDiscount * 10000) / 10000;
         allocated += share;
         var net = Math.max(0, orig - share).toFixed(4);
-        d.Total = net; d.TaxableAmt = net; d.TaxableExcFooterDisc = net;
+        // Exclusive-tax mode requires Total === SubTotal + TaxAmt per line; with
+        // TaxAmt always 0 here, SubTotal must also be reduced to the net amount
+        // ("Exclusive Tax:Total Amount not equal (SubTotal + TaxAmt)").
+        d.Total = net; d.SubTotal = net; d.TaxableAmt = net; d.TaxableExcFooterDisc = net;
         // ItemFooterDiscount is validated server-side as a PER-UNIT discount -
         // "FooterDiscount not equal all item's (ItemFooterDiscount x Qty)" - so
         // it must be this line's allocated share divided back by its own Qty.
