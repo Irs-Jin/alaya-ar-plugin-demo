@@ -1237,7 +1237,7 @@
     });
   }
 
-  function doSaveReportsToDb() {
+  function doSaveReportsToDb(scopeCodes) {
     if (isSaving) { addLog('Save already in progress — please wait'); return Promise.resolve(false); }
     if (!hostOrigin) { addLog('Save skipped — no host origin yet (ALAYA_INIT pending)'); showToast('Save failed — not connected to host', true); return Promise.resolve(false); }
     if (!hasUnsavedChanges) {
@@ -1249,9 +1249,12 @@
       return Promise.resolve(true);
     }
     isSaving = true;
-    var sql = buildExportSql();
+    // Scoped save (one Save or one Delete) only touches the affected doc code(s)
+    // instead of rewriting every saved report - see buildScopedExportSql.
+    var scoped = scopeCodes && scopeCodes.length;
+    var sql = scoped ? buildScopedExportSql(scopeCodes) : buildExportSql();
     setSaveStatus('Saving…', 'badge-waiting');
-    addLog('Saving ' + reports.length + ' reports to DB via host eval bridge…');
+    addLog(scoped ? 'Saving ' + scopeCodes.length + ' report(s) (' + scopeCodes.join(', ') + ') to DB via host eval bridge…' : 'Saving all ' + reports.length + ' reports to DB via host eval bridge…');
     return executeSqlViaHost(sql).then(function (msg) {
       isSaving = false;
       if (msg.error) {
@@ -1268,9 +1271,9 @@
       if (ok) {
         clearDirty();
         setSaveStatus('Saved successfully', 'badge-received');
-        addLog('DB save OK — ' + reports.length + ' reports persisted. Reloading from DB…');
-        showToast('Save successful — ' + reports.length + ' reports saved');
-        try { postToParent('ALAYA_SAVE_SUCCESS', { success: true, count: reports.length }); } catch (e) {}
+        addLog('DB save OK' + (scoped ? ' (' + scopeCodes.length + ' report(s))' : ' — ' + reports.length + ' reports') + ' persisted. Reloading from DB…');
+        showToast(scoped ? 'Save successful' : 'Save successful — ' + reports.length + ' reports saved');
+        try { postToParent('ALAYA_SAVE_SUCCESS', { success: true, count: scoped ? scopeCodes.length : reports.length }); } catch (e) {}
         try { postToParent('ALAYA_SAVE_COMPLETED', { success: true }); } catch (e) {}
         loadReportsFromDb();
         return true;
@@ -1519,7 +1522,7 @@
     reports = reports.filter(function (r) { return r.code !== code; });
     markDirty('delete ' + code);
     renderList();
-    doSaveReportsToDb();
+    doSaveReportsToDb([code]);
   }
 
   /* ── Detail view ── */
@@ -2358,7 +2361,7 @@
       $('#btn-delete-report').toggle(canDelete);
     }
     markDirty('save ' + editingReport.code);
-    doSaveReportsToDb();
+    doSaveReportsToDb([editingReport.code]);
   }
 
   /* ── Persist SQL (same delete-all + reinsert pattern as jm6todo) ── */
@@ -2397,10 +2400,43 @@
 
   /* ZZC_Description is NVARCHAR(400) - a header row with Equipment/Action Taken
      embedded easily exceeds that (confirmed live: "String or binary data would be
-     truncated", SQL error 8152). Normalised into three DELETE-all + reinsert
-     batches: svcrpt (compact header only), svcrpteq, svcrptact (one row per line,
-     keyed '<docCode>-E<n>'/'<docCode>-A<n>', each carrying docCode so loadReportsFromDb
-     can regroup them). */
+     truncated", SQL error 8152). Normalised into three tables: svcrpt (compact
+     header only), svcrpteq, svcrptact (one row per line, keyed
+     '<docCode>-E<n>'/'<docCode>-A<n>', each carrying docCode so loadReportsFromDb
+     can regroup them). Short keys (d/st/cid/...) below are load-bearing, not
+     cosmetic - the previous long-key format overflowed the 400-char cap as soon
+     as Sales Branch/Warehouse/multi-batch fields were added ("String or binary
+     data would be truncated", SQL error 8152); this column also can't be widened
+     since Alaya's own SQL tool refuses ALTER/CREATE/DROP/TRUNCATE outright.
+     loadReportsFromDb() falls back to the old long keys for already-saved records. */
+  function buildReportInsertLines(r, now, oversized) {
+    var lines = [];
+    var dateCreated = r.createdAt ? fmtAuditDate(new Date(r.createdAt)) : now;
+    var headerPayload = {
+      d: r.date || '', ex: r.expiry || '', st: r.status || 'new',
+      cid: r.companyID || DEFAULT_COMPANY_ID, cnm: r.companyName || DEFAULT_COMPANY_NAME,
+      cc: r.custCode || '', cn: r.custName || '', cp: r.custPhone || '',
+      a1: r.custAddr1 || '', a2: r.custAddr2 || '', a3: r.custAddr3 || '', a4: r.custAddr4 || '',
+      rf: r.ref || '', rb: r.receivedBy || '', sv: r.servicedBy || '', rm: r.remark || '',
+      sbi: r.salesBranchID || '', sbc: r.salesBranchCode || '', wid: r.warehouseID || null, fdisc: r.footerDiscount || 0,
+      ca: r.createdAt || '', cb: r.createdBy || ''
+    };
+    lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now, oversized, ['rm', 'rf', 'a4', 'a3', 'cn']));
+
+    (r.equipment || []).forEach(function (eq, i) {
+      var payload = { dc: r.code, ds: eq.desc || '', br: eq.brand || '', md: eq.model || '', sn: eq.sn || '', sy: eq.symptom || '', rm: eq.remark || '' };
+      lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now, oversized, ['rm', 'sy', 'ds']));
+    });
+    (r.actionTaken || []).forEach(function (a, i) {
+      var payload = {
+        dc: r.code, i: a.item || '', ds: a.desc || '', u: a.uom || '', q: a.qty || 0, p: a.price || 0,
+        bt: (a.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty }; }),
+        sn: a.serialNos || [], bl: a.binLocationID || null
+      };
+      lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now, oversized, ['ds']));
+    });
+    return lines;
+  }
   function buildExportSql() {
     var now = fmtAuditDate(new Date());
     var lines = [
@@ -2408,38 +2444,29 @@
       'DELETE FROM ZZT_' + EQUIP_TABLE_CODE + ';',
       'DELETE FROM ZZT_' + ACTION_TABLE_CODE + ';'
     ];
-    // Short keys (d/st/cid/...) below are load-bearing, not cosmetic: ZZC_Description
-    // is a hard NVARCHAR(400) limit on every ZZT_ table (cannot be widened - Alaya's
-    // own SQL tool refuses ALTER/CREATE/DROP/TRUNCATE outright), and the previous
-    // long-key format overflowed it as soon as Sales Branch/Warehouse/multi-batch
-    // fields were added ("String or binary data would be truncated", SQL error 8152).
-    // loadReportsFromDb() falls back to the old long keys for already-saved records.
     var oversized = [];
-    reports.forEach(function (r) {
-      var dateCreated = r.createdAt ? fmtAuditDate(new Date(r.createdAt)) : now;
-      var headerPayload = {
-        d: r.date || '', ex: r.expiry || '', st: r.status || 'new',
-        cid: r.companyID || DEFAULT_COMPANY_ID, cnm: r.companyName || DEFAULT_COMPANY_NAME,
-        cc: r.custCode || '', cn: r.custName || '', cp: r.custPhone || '',
-        a1: r.custAddr1 || '', a2: r.custAddr2 || '', a3: r.custAddr3 || '', a4: r.custAddr4 || '',
-        rf: r.ref || '', rb: r.receivedBy || '', sv: r.servicedBy || '', rm: r.remark || '',
-        sbi: r.salesBranchID || '', sbc: r.salesBranchCode || '', wid: r.warehouseID || null, fdisc: r.footerDiscount || 0,
-        ca: r.createdAt || '', cb: r.createdBy || ''
-      };
-      lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now, oversized, ['rm', 'rf', 'a4', 'a3', 'cn']));
-
-      (r.equipment || []).forEach(function (eq, i) {
-        var payload = { dc: r.code, ds: eq.desc || '', br: eq.brand || '', md: eq.model || '', sn: eq.sn || '', sy: eq.symptom || '', rm: eq.remark || '' };
-        lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now, oversized, ['rm', 'sy', 'ds']));
-      });
-      (r.actionTaken || []).forEach(function (a, i) {
-        var payload = {
-          dc: r.code, i: a.item || '', ds: a.desc || '', u: a.uom || '', q: a.qty || 0, p: a.price || 0,
-          bt: (a.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty }; }),
-          sn: a.serialNos || [], bl: a.binLocationID || null
-        };
-        lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now, oversized, ['ds']));
-      });
+    reports.forEach(function (r) { lines = lines.concat(buildReportInsertLines(r, now, oversized)); });
+    if (oversized.length) {
+      showToast('Note: some text was shortened to fit the 400-char field limit, or a line has too many batches to fit - ' + oversized.join('; '), true);
+    }
+    return lines.join('\n');
+  }
+  /* Scoped save - only touches the specific document code(s) that actually
+     changed (Save of one report, or Delete of one row), instead of the
+     delete-everything + reinsert-everything pattern above. That full rebuild
+     gets linearly slower as the number of saved reports grows, since every
+     Save/Delete was rewriting the ENTIRE table regardless of how much changed. */
+  function buildScopedExportSql(codes) {
+    var now = fmtAuditDate(new Date());
+    var lines = [];
+    var oversized = [];
+    codes.forEach(function (code) {
+      var codeSafe = code.replace(/'/g, "''");
+      lines.push("DELETE FROM ZZT_" + REPORT_TABLE_CODE + " WHERE ZZC_Code='" + codeSafe + "';");
+      lines.push("DELETE FROM ZZT_" + EQUIP_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-E%';");
+      lines.push("DELETE FROM ZZT_" + ACTION_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-A%';");
+      var r = reports.filter(function (rr) { return rr.code === code; })[0];
+      if (r) lines = lines.concat(buildReportInsertLines(r, now, oversized));
     });
     if (oversized.length) {
       showToast('Note: some text was shortened to fit the 400-char field limit, or a line has too many batches to fit - ' + oversized.join('; '), true);
