@@ -428,12 +428,29 @@
   <div class="section-title">Action Taken</div>
   <div class="sub" id="action-branch-wh-hint" style="display:none; color:#dc2626; margin-bottom:6px;">Select Sales Branch and Warehouse above before adding/editing items.</div>
   <table class="sub-grid-table" id="action-table">
-    <thead><tr><th style="width:12%">Item No</th><th style="width:22%">Description</th><th style="width:14%">Bin Location</th><th style="width:8%">UOM</th><th style="width:8%">Qty</th><th style="width:12%">Price</th><th style="width:14%">Batch / Serial</th><th style="width:10%"></th></tr></thead>
+    <thead><tr><th style="width:11%">Item No</th><th style="width:19%">Description</th><th style="width:12%">Bin Location</th><th style="width:7%">UOM</th><th style="width:7%">Qty</th><th style="width:10%">Price</th><th style="width:10%">Total</th><th style="width:14%">Batch / Serial</th><th style="width:10%"></th></tr></thead>
     <tbody id="action-tbody"></tbody>
   </table>
   <datalist id="item-datalist"></datalist>
   <div class="sub-grid-empty" id="action-empty" style="display:none;">No action-taken lines added yet.</div>
   <button class="btn-secondary btn-sm" id="btn-add-action" type="button">+ Add Line</button>
+
+  <div style="display:flex; justify-content:flex-end; margin-top:14px;">
+    <div style="width:280px; display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <label style="font-size:0.85rem; font-weight:600;">Sub Total:</label>
+        <span id="d-sub-total" style="font-size:0.9rem;">0.00</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <label style="font-size:0.85rem; font-weight:600;">Footer Discount:</label>
+        <input type="number" id="d-footer-discount" min="0" step="0.01" value="0" style="width:120px; border:1px solid #d1d5db; border-radius:6px; padding:5px 8px; text-align:right;" />
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #e5e7eb; padding-top:8px;">
+        <label style="font-size:0.9rem; font-weight:700;">Total:</label>
+        <span id="d-grand-total" style="font-size:1rem; font-weight:700;">0.00</span>
+      </div>
+    </div>
+  </div>
 
   <div class="btn-row" style="margin-top:20px;">
     <button class="btn-secondary" id="btn-cancel-detail">Cancel</button>
@@ -1380,6 +1397,7 @@
             custAddr1: meta.a1 || meta.custAddr1 || '', custAddr2: meta.a2 || meta.custAddr2 || '', custAddr3: meta.a3 || meta.custAddr3 || '', custAddr4: meta.a4 || meta.custAddr4 || '',
             ref: meta.rf || meta.ref || '', receivedBy: meta.rb || meta.receivedBy || '', servicedBy: meta.sv || meta.servicedBy || '', remark: meta.rm || meta.remark || '',
             salesBranchID: meta.sbi || meta.salesBranchID || '', salesBranchCode: meta.sbc || meta.salesBranchCode || '', warehouseID: meta.wid || meta.warehouseID || null,
+            footerDiscount: meta.fdisc || 0,
             equipment: equipByDoc[code] || [], actionTaken: actionByDoc[code] || [],
             createdAt: meta.ca || meta.createdAt || '', createdBy: meta.cb || meta.createdBy || ''
           });
@@ -1481,7 +1499,7 @@
     var companyID = parseInt($('#sel-company-filter').val(), 10) || DEFAULT_COMPANY_ID;
     var match = companies.filter(function (c) { return c.id === companyID; })[0];
     var companyName = match ? match.name : DEFAULT_COMPANY_NAME;
-    return { code: '', date: todayStr(), expiry: '', status: 'new', companyID: companyID, companyName: companyName, custCode: '', custName: '', custPhone: '', custAddress: '', custAddr1: '', custAddr2: '', custAddr3: '', custAddr4: '', ref: '', receivedBy: username || '', servicedBy: '', remark: '', salesBranchID: '', salesBranchCode: '', equipment: [], actionTaken: [], createdAt: '', createdBy: username || '' };
+    return { code: '', date: todayStr(), expiry: '', status: 'new', companyID: companyID, companyName: companyName, custCode: '', custName: '', custPhone: '', custAddress: '', custAddr1: '', custAddr2: '', custAddr3: '', custAddr4: '', ref: '', receivedBy: username || '', servicedBy: '', remark: '', salesBranchID: '', salesBranchCode: '', footerDiscount: 0, equipment: [], actionTaken: [], createdAt: '', createdBy: username || '' };
   }
   var editingReport = blankReport();
 
@@ -1521,6 +1539,7 @@
       $('#d-sales-branch').val(salesBranches[0].id).trigger('change');
     }
     $('#cust-lookup-status').text('');
+    $('#d-footer-discount').val(editingReport.footerDiscount || 0);
     renderEquipTable();
     renderActionTable();
     $('#view-list').hide();
@@ -1568,6 +1587,7 @@
       else editingReport.warehouseID = parseInt($('#d-warehouse').val(), 10) || null;
     }
     $('#cust-lookup-status').text('');
+    $('#d-footer-discount').val(editingReport.footerDiscount || 0);
     renderEquipTable();
     renderActionTable();
     $('#view-list').hide();
@@ -1592,8 +1612,11 @@
       return '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(eq.desc) + '</td><td>' + escapeHtml(eq.brand) + '</td><td>' + escapeHtml(eq.model) + '</td><td>' + escapeHtml(eq.sn) + '</td><td>' + escapeHtml(eq.remark) + '</td></tr>';
     }).join('') || '<tr><td colspan="6" style="text-align:center;color:#888;">No equipment</td></tr>';
     var actionRows = (editingReport.actionTaken || []).map(function (a) {
-      return '<tr><td>' + escapeHtml(a.item) + '</td><td>' + escapeHtml(a.desc) + '</td><td>' + escapeHtml(a.uom) + '</td><td>' + (a.qty || 0) + '</td><td>' + (a.price || 0).toFixed(2) + '</td></tr>';
-    }).join('') || '<tr><td colspan="5" style="text-align:center;color:#888;">No action taken</td></tr>';
+      return '<tr><td>' + escapeHtml(a.item) + '</td><td>' + escapeHtml(a.desc) + '</td><td>' + escapeHtml(a.uom) + '</td><td>' + (a.qty || 0) + '</td><td>' + (a.price || 0).toFixed(2) + '</td><td>' + ((a.qty || 0) * (a.price || 0)).toFixed(2) + '</td></tr>';
+    }).join('') || '<tr><td colspan="6" style="text-align:center;color:#888;">No action taken</td></tr>';
+    var printSubTotal = (editingReport.actionTaken || []).reduce(function (s, a) { return s + (a.qty || 0) * (a.price || 0); }, 0);
+    var printDiscount = parseFloat(editingReport.footerDiscount) || 0;
+    var printTotal = Math.max(0, printSubTotal - printDiscount);
 
     var html =
       '<div class="print-title">Service Report ' + escapeHtml($('#d-docno').val() || '[Unsaved]') + '</div>' +
@@ -1614,7 +1637,12 @@
       '<div style="font-weight:800; margin-bottom:6px;">Equipment</div>' +
       '<table><thead><tr><th>No</th><th>Description</th><th>Brand</th><th>Model</th><th>S/N</th><th>Remark</th></tr></thead><tbody>' + equipRows + '</tbody></table>' +
       '<div style="font-weight:800; margin-bottom:6px;">Action Taken</div>' +
-      '<table><thead><tr><th>Item No</th><th>Description</th><th>UOM</th><th>Qty</th><th>Price</th></tr></thead><tbody>' + actionRows + '</tbody></table>';
+      '<table><thead><tr><th>Item No</th><th>Description</th><th>UOM</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>' + actionRows + '</tbody></table>' +
+      '<table style="width:280px; margin-left:auto;"><tbody>' +
+        '<tr><td><b>Sub Total</b></td><td style="text-align:right;">' + printSubTotal.toFixed(2) + '</td></tr>' +
+        '<tr><td><b>Footer Discount</b></td><td style="text-align:right;">' + printDiscount.toFixed(2) + '</td></tr>' +
+        '<tr><td><b>Total</b></td><td style="text-align:right;"><b>' + printTotal.toFixed(2) + '</b></td></tr>' +
+      '</tbody></table>';
 
     $('#print-view').html(html);
     window.print();
@@ -1732,7 +1760,9 @@
       }
     });
 
-    var total = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
+    var subTotal = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
+    var footerDiscount = parseFloat(editingReport.footerDiscount) || 0;
+    var total = Math.max(0, subTotal - footerDiscount);
     var now = fmtCashSalesDate(new Date());
     var body = {
       CompanyID: String(companyID), BranchID: String(branch.id), DocumentNo: '',
@@ -1740,7 +1770,7 @@
       PostingDate: now, DocumentDate: now, DueDate: '', DeliveryDate: now,
       CustomerID: String(custRecord.id), WarehouseID: String(branch.warehouseID), PriceLevel: '1',
       CompanyPaymentTermID: payTerm ? String(payTerm.id) : '',
-      TaxItemize: 'false', InclusiveTax: 'False', Rounding_YN: 'False', RoundingAmount: '0.0000', FooterDiscount: '0.0000',
+      TaxItemize: 'false', InclusiveTax: 'False', Rounding_YN: 'False', RoundingAmount: '0.0000', FooterDiscount: footerDiscount.toFixed(4),
       SalesAgentID: '', Total: total.toFixed(4), TotalPoint: '0.0000',
       SalesDTL: dtl,
       SalesPayment: [{ PaymentModeID: String(cashMode.id), Remarks: '', ChequeNo: null, PaymentAmount: total.toFixed(4), Currency: 'RINGGIT MALAYSIA', CurrencyRate: '1.00', Reason: '', RedeemPoint: '0' }],
@@ -2128,8 +2158,9 @@
         $tr.append($('<td>').append($binSel));
       })();
       $tr.append($('<td>').append($('<input>').val(a.uom || '').on('input', function () { editingReport.actionTaken[i].uom = $(this).val(); })));
-      $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; })));
-      $tr.append($('<td>').append($('<input type="number" step="0.01" min="0">').val(a.price || 0).on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; })));
+      $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; updateActionTotals(); })));
+      $tr.append($('<td>').append($('<input type="number" step="0.01" min="0">').val(a.price || 0).on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; updateActionTotals(); })));
+      $tr.append($('<td>').append($('<span class="line-total">').text(((a.qty || 0) * (a.price || 0)).toFixed(2))));
       (function () {
         var itemRec = a.item ? items.filter(function (im) { return $.trim(im.code) === a.item; })[0] : null;
         var need = itemRec && (itemRec.batchControl || itemRec.serialControl);
@@ -2155,7 +2186,21 @@
       $tb.append($tr);
     });
     $('#action-empty').toggle((editingReport.actionTaken || []).length === 0);
+    updateActionTotals();
   }
+  function updateActionTotals() {
+    var subTotal = 0;
+    (editingReport.actionTaken || []).forEach(function (a) { subTotal += (a.qty || 0) * (a.price || 0); });
+    $('#action-tbody tr').each(function (idx) {
+      var a = (editingReport.actionTaken || [])[idx];
+      if (a) $(this).find('.line-total').text(((a.qty || 0) * (a.price || 0)).toFixed(2));
+    });
+    var discount = parseFloat($('#d-footer-discount').val()) || 0;
+    editingReport.footerDiscount = discount;
+    $('#d-sub-total').text(subTotal.toFixed(2));
+    $('#d-grand-total').text(Math.max(0, subTotal - discount).toFixed(2));
+  }
+  $('#d-footer-discount').on('input', function () { updateActionTotals(); markDirty('footer discount'); });
   function hasBranchAndWarehouse() { return !!(editingReport.salesBranchID && $('#d-warehouse').val()); }
   $('#btn-add-action').on('click', function () {
     if (!hasBranchAndWarehouse()) { showToast('Please select Sales Branch and Warehouse first', true); return; }
@@ -2269,7 +2314,7 @@
         cc: r.custCode || '', cn: r.custName || '', cp: r.custPhone || '',
         a1: r.custAddr1 || '', a2: r.custAddr2 || '', a3: r.custAddr3 || '', a4: r.custAddr4 || '',
         rf: r.ref || '', rb: r.receivedBy || '', sv: r.servicedBy || '', rm: r.remark || '',
-        sbi: r.salesBranchID || '', sbc: r.salesBranchCode || '', wid: r.warehouseID || null,
+        sbi: r.salesBranchID || '', sbc: r.salesBranchCode || '', wid: r.warehouseID || null, fdisc: r.footerDiscount || 0,
         ca: r.createdAt || '', cb: r.createdBy || ''
       };
       lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now, oversized, ['rm', 'rf', 'a4', 'a3', 'cn']));
