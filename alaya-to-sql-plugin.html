@@ -208,6 +208,9 @@
     <div class="btn-row">
       <button id="btn-transfer" class="btn-primary">Transfer</button>
       <button id="btn-load-data" class="btn-secondary">Load Alaya Data</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-left:8px;">
+        <input type="checkbox" id="t-dryrun" checked /> Dry run (validate only, no posting)
+      </label>
     </div>
 
     <div id="transfer-progress" style="margin-top:16px;display:none;">
@@ -333,8 +336,8 @@
           <input type="text" id="s-desc-purchase" placeholder="INVOICE - BY ITEMIZE" maxlength="70" />
         </div>
         <div class="form-group" style="margin-bottom:8px;">
-          <label>Purchase Project Code</label>
-          <input type="text" id="s-proj-purchase" placeholder="Purchase Organization" />
+          <label>Purchase Project Code (max 20 char.)</label>
+          <input type="text" id="s-proj-purchase" placeholder="e.g. JIN6-PROJ" maxlength="20" />
         </div>
         <div class="form-group" style="margin-bottom:8px;">
           <label>Credit Note A/C</label>
@@ -474,7 +477,7 @@ var defaultSettings = {
   acPurchase: '610-000',
   acPurchRounding: '610-000',
   descPurchase: 'INVOICE - BY ITEMIZE',
-  projPurchase: 'Purchase Organization',
+  projPurchase: '',
   acCreditnote: '612-000',
   descCreditnote: 'RETURN',
   tCustomer: false,
@@ -866,7 +869,14 @@ function loadCompaniesFromApi() {
     headers: { 'Authorization': authToken },
     success: function (resp) {
       var data = (resp && resp.data) || [];
+      if (!data.length) {
+        addLog('GetAllCompany returned no rows - rate limit possible, click Retry', 'log-err');
+        showCompanyRetry('empty response');
+        loadSqlCompanies();
+        return;
+      }
       companies = data;
+      hideCompanyRetry();
       addLog('Loaded ' + data.length + ' companies from Alaya', 'log-ok');
       var sel = $('#alaya-company-select');
       sel.empty();
@@ -880,10 +890,22 @@ function loadCompaniesFromApi() {
       loadSqlCompanies();
     },
     error: function (r) {
-      addLog('Load companies failed: ' + r.status, 'log-err');
+      addLog('Load companies failed: ' + r.status + ' - click Retry', 'log-err');
+      showCompanyRetry('HTTP ' + r.status);
     }
   });
 }
+
+function showCompanyRetry(msg) {
+  var sel = $('#alaya-company-select');
+  sel.empty().append('<option value="">Company list failed (' + msg + ') - retry below</option>');
+  if (!$('#btn-retry-company').length) {
+    $('<button id="btn-retry-company" class="btn-secondary" style="margin-top:8px;">Retry Load Companies</button>')
+      .on('click', function(e) { e.preventDefault(); loadCompaniesFromApi(); })
+      .insertAfter(sel);
+  }
+}
+function hideCompanyRetry() { $('#btn-retry-company').remove(); }
 
 // ΓöÇΓöÇ Load SQL Account companies from backend ΓöÇΓöÇ
 function loadSqlCompanies() {
@@ -929,11 +951,25 @@ function testBackendConnection() {
 function currentAlayaCompanyID() {
   return parseInt($('#alaya-company-select').val(), 10) || settings.alayaCompanyId || defaultSettings.alayaCompanyId || 0;
 }
+function currentAlayaCompanyCode() {
+  var txt = $('#alaya-company-select').find('option:selected').text() || '';
+  return $.trim(txt.split('-')[0]);
+}
 $('#alaya-company-select').on('change', function() {
   var id = parseInt($(this).val(), 10) || 0;
   var txt = $(this).find('option:selected').text();
   settings.alayaCompanyId = id;
-  addLog('Alaya company selected: ' + txt + ' (ID ' + id + ') - click Refresh buttons to reload mappings', 'log-info');
+  settings.alayaCompany = currentAlayaCompanyCode();
+  $('#s-alaya-company').val(settings.alayaCompany);
+  addLog('Alaya company selected: ' + txt + ' (ID ' + id + ')', 'log-ok');
+  // Functional: auto-reload this company's mappings + preview data
+  if (id && apiUrl && authToken) {
+    refreshPaymodesForCompany(id);
+    refreshBranchesForCompany(id);
+  }
+  if (id && hostOrigin) {
+    $('#btn-load-data').trigger('click');
+  }
 });
 
 // ΓöÇΓöÇ Mapping tables render ΓöÇΓöÇ
@@ -988,12 +1024,10 @@ function appendDivisionRow(code, itemGroup) {
   $('#division-tbody').append(tr);
 }
 
-// ΓöÇΓöÇ Refresh mappings from Alaya API ΓöÇΓöÇ
-$('#btn-refresh-paymodes').on('click', function() {
-  var cid = currentAlayaCompanyID();
-  if (!cid) { showToast('Select an Alaya company first', true); return; }
+// ΓöÇΓöÇ Refresh mappings from Alaya API (callable: button or company-change) ΓöÇΓöÇ
+function refreshPaymodesForCompany(cid, btn) {
   if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
-  var btn = $(this).prop('disabled', true).text('Loading...');
+  if (btn) btn.prop('disabled', true).text('Loading...');
   addLog('POST api/PaymentMode/GetAllPaymentMode (company ' + cid + ')');
   $.ajax({
     url: apiUrl + 'api/PaymentMode/GetAllPaymentMode', type: 'POST', cache: false, contentType: 'application/json',
@@ -1010,15 +1044,19 @@ $('#btn-refresh-paymodes').on('click', function() {
       showToast('Loading Done. ' + data.length + ' payment modes');
     },
     error: function(xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ')', 'log-err'); showToast('Refresh failed', true); },
-    complete: function() { btn.prop('disabled', false).text('Refresh Alaya Payment Mode'); }
+    complete: function() { if (btn) btn.prop('disabled', false).text('Refresh Alaya Payment Mode'); }
   });
-});
+}
 
-$('#btn-refresh-branches').on('click', function() {
+$('#btn-refresh-paymodes').on('click', function() {
   var cid = currentAlayaCompanyID();
   if (!cid) { showToast('Select an Alaya company first', true); return; }
+  refreshPaymodesForCompany(cid, $(this));
+});
+
+function refreshBranchesForCompany(cid, btn) {
   if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
-  var btn = $(this).prop('disabled', true).text('Loading...');
+  if (btn) btn.prop('disabled', true).text('Loading...');
   addLog('POST api/SalesBranch/GetAllSalesBranch (company ' + cid + ')');
   $.ajax({
     url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
@@ -1036,8 +1074,14 @@ $('#btn-refresh-branches').on('click', function() {
       showToast('Refresh Done. ' + data.length + ' sales branches');
     },
     error: function(xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ')', 'log-err'); showToast('Refresh failed', true); },
-    complete: function() { btn.prop('disabled', false).text('Refresh Alaya Sales Branch Code'); }
+    complete: function() { if (btn) btn.prop('disabled', false).text('Refresh Alaya Sales Branch Code'); }
   });
+}
+
+$('#btn-refresh-branches').on('click', function() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  refreshBranchesForCompany(cid, $(this));
 });
 
 $('#btn-refresh-divisions').on('click', function() {
@@ -1135,15 +1179,82 @@ function executeSqlViaHost(sql) {
   });
 }
 
-// ΓöÇΓöÇ Load Alaya data ΓöÇΓöÇ
+// ΓöÇΓöÇ Load Alaya data (company-scoped via REST when possible) ΓöÇΓöÇ
+function loadScopedViaRest(cid, done) {
+  var pending = 2;
+  function oneDone() { if (--pending === 0) done(); }
+  $.ajax({
+    url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      alayaData.customers = data.map(function(c) {
+        return [c.Cust_AccountCode || '', c.Cust_NAME || '', '', 0];
+      }).filter(function(r) { return r[0]; });
+      addLog('Loaded ' + alayaData.customers.length + ' customers for company ' + cid + ' (REST, scoped)', 'log-ok');
+    },
+    error: function(xhr) { addLog('GetAllCustomer failed (' + xhr.status + ') for company ' + cid, 'log-err'); },
+    complete: oneDone
+  });
+  $.ajax({
+    url: apiUrl + 'api/Item/GetAllItemMasterByCompanyID', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      alayaData.items = data.map(function(im) {
+        return [$.trim(im.IM_Code || ''), im.IM_Description || '', im.IM_BaseUOMCode || '', 0];
+      }).filter(function(r) { return r[0]; });
+      addLog('Loaded ' + alayaData.items.length + ' items for company ' + cid + ' (REST, scoped; price via full load)', 'log-ok');
+    },
+    error: function(xhr) { addLog('GetAllItemMasterByCompanyID failed (' + xhr.status + ')', 'log-err'); },
+    complete: oneDone
+  });
+}
+
+function finishScopedLoad(btn) {
+  var advType = $('input[name="adv-type"]:checked').val() || 'customer';
+  if (advType === 'vendor') {
+    var vendorSql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AP_SUPPLIER WHERE STATUS = 'Active' ORDER BY CODE";
+    executeSqlViaHost(vendorSql).then(function(vmsg) {
+      try {
+        var vresult = JSON.parse(vmsg.result);
+        if (vresult.success && vresult.results && vresult.results[0]) {
+          alayaData.vendors = vresult.results[0].rows || [];
+          addLog('Loaded ' + alayaData.vendors.length + ' vendors from Alaya', 'log-ok');
+        }
+      } catch(e) { addLog('Parse vendors error: ' + e.message, 'log-err'); }
+      btn.prop('disabled', false).text('Load Alaya Data');
+      showToast('Alaya data loaded successfully');
+      renderPreview();
+    }).catch(function(err) {
+      addLog('Load vendors error: ' + err.message, 'log-err');
+      btn.prop('disabled', false).text('Load Alaya Data');
+      renderPreview();
+    });
+  } else {
+    btn.prop('disabled', false).text('Load Alaya Data');
+    showToast('Alaya data loaded successfully');
+    renderPreview();
+  }
+}
+
 $('#btn-load-data').on('click', function() {
   if (!hostOrigin) {
     showToast('Not connected to Alaya (ALAYA_INIT pending)', true);
     return;
   }
-  
-  addLog('Loading Alaya data...', 'log-info');
-  $(this).prop('disabled', true).text('Loading...');
+
+  var btn = $(this);
+  var cid = currentAlayaCompanyID();
+  if (cid && apiUrl && authToken) {
+    addLog('Loading Alaya data for company ' + cid + ' (' + currentAlayaCompanyCode() + ')...', 'log-info');
+    btn.prop('disabled', true).text('Loading...');
+    loadScopedViaRest(cid, function() { finishScopedLoad(btn); });
+    return;
+  }
+
+  addLog('Loading Alaya data (unscoped fallback - select a company for scoped load)...', 'log-info');
+  btn.prop('disabled', true).text('Loading...');
   
   // Load customers
   var sql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AR_CUSTOMER WHERE STATUS = 'Active' ORDER BY CODE";
@@ -1274,6 +1385,8 @@ $('#btn-transfer').on('click', function() {
 
   if (!from || !to) { showToast('Please select date range', true); return; }
   if (!company) { showToast('Please select SQL Account company', true); return; }
+  var alayaCid = currentAlayaCompanyID();
+  if (!alayaCid) { showToast('Please select an Alaya company', true); return; }
 
   addLog('Starting transfer: ' + from + ' ~ ' + to + ' to ' + company, 'log-info');
   $('#transfer-progress').show();
@@ -1306,6 +1419,21 @@ $('#btn-transfer').on('click', function() {
 
   // Call backend (mappings included; backend may ignore unknown fields for now)
   var maps = collectMappingsFromUI();
+  // Master-data docs come from the Preview data loaded via the SQL bridge
+  var custDocs = (alayaData.customers || []).map(function(c) {
+    return { code: c[0] || '', name: c[1] || '', creditterm: c[2] || '', creditlimit: c[3] || 0 };
+  }).filter(function(d) { return d.code; });
+  var vendDocs = (alayaData.vendors || []).map(function(v) {
+    return { code: v[0] || '', name: v[1] || '', creditterm: v[2] || '', creditlimit: v[3] || 0 };
+  }).filter(function(d) { return d.code; });
+  if ((transfers.indexOf('customer') >= 0 && !custDocs.length) ||
+      (transfers.indexOf('vendor') >= 0 && !vendDocs.length)) {
+    showToast('Load Alaya Data first (Preview) before transferring master data', true);
+    addLog('Transfer blocked: no master data loaded - click Load Alaya Data first', 'log-err');
+    $('#transfer-progress').hide();
+    $('#btn-transfer').prop('disabled', false);
+    return;
+  }
   $.ajax({
     url: BACKEND_URL + '/api/transfer',
     type: 'POST',
@@ -1318,6 +1446,7 @@ $('#btn-transfer').on('click', function() {
       transferMethod: $('#transfer-method').val(),
       docType: $('#adv-doc-type').val(),
       transfers: transfers,
+      dryRun: $('#t-dryrun').is(':checked'),
       options: {
         cashsalesMethod: $('#s-cashsales-method').val(),
         cashsalesPrefix: $('#s-cashsales-prefix').val(),
@@ -1338,7 +1467,8 @@ $('#btn-transfer').on('click', function() {
       },
       paymodes: maps.paymodes,
       branches: maps.branches,
-      divisions: maps.divisions
+      divisions: maps.divisions,
+      docs: { customer: custDocs, vendor: vendDocs }
     }),
     success: function(r) {
       clearInterval(iv);
