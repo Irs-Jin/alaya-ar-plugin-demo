@@ -1803,7 +1803,12 @@
         var share = isLast ? (footerDiscount - allocated) : Math.round((orig / subTotal) * footerDiscount * 10000) / 10000;
         allocated += share;
         var net = Math.max(0, orig - share).toFixed(4);
-        d.Total = net; d.TaxableAmt = net; d.TaxableExcFooterDisc = net; d.ItemFooterDiscount = share.toFixed(6);
+        d.Total = net; d.TaxableAmt = net; d.TaxableExcFooterDisc = net;
+        // ItemFooterDiscount is validated server-side as a PER-UNIT discount -
+        // "FooterDiscount not equal all item's (ItemFooterDiscount x Qty)" - so
+        // it must be this line's allocated share divided back by its own Qty.
+        var qty = parseFloat(d.Qty) || 1;
+        d.ItemFooterDiscount = (share / qty).toFixed(6);
       });
     }
     var total = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
