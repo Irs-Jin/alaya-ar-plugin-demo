@@ -2477,10 +2477,12 @@
           binLocationID: prev ? prev.binLocationID : row.binLocationID
         };
       });
-      // Resolve each component's UOM code (batched, same pattern as elsewhere)
+      // Resolve each component's UOM code - IU_UOM is a foreign key into UOM
+      // (confirmed live: IU_UOM=1029 -> UOM.UOM_Code='UNIT'), not the code text
+      // itself, so this needs a join, not a bare SELECT of IU_UOM.
       var uomIds = editingReport.actionTaken[idx].packageComponents.map(function (c) { return c.uomID; }).filter(Boolean);
       if (uomIds.length) {
-        qrySql("SELECT IU_ID, IU_UOM FROM ItemUOM WHERE IU_ID IN (" + uomIds.join(',') + ")", 50).then(function (ur) {
+        qrySql("SELECT iu.IU_ID, u.UOM_Code FROM ItemUOM iu INNER JOIN UOM u ON u.UOM_ID=iu.IU_UOM WHERE iu.IU_ID IN (" + uomIds.join(',') + ")", 50).then(function (ur) {
           var uRows = ur && ur.results && ur.results[0] && ur.results[0].rows || [];
           editingReport.actionTaken[idx].packageComponents.forEach(function (c) {
             var m = uRows.filter(function (r) { return r[0] === c.uomID; })[0];
@@ -2618,9 +2620,10 @@
             var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
             if (!r) { showToast('Item ' + code + ' not found for this company', true); return; }
             var fetched = { id: r[0], code: String(r[1]).trim(), desc: r[2] || '', uom: '', uomID: r[3], typeID: 1, batchControl: !!r[5], serialControl: !!r[4], price: 0 };
-            // Resolve UOM code if possible
+            // Resolve UOM code if possible - IU_UOM is a foreign key into UOM
+            // (confirmed live: IU_UOM=1029 -> UOM.UOM_Code='UNIT'), needs a join.
             if (r[3]) {
-              qrySql("SELECT IU_UOM FROM ItemUOM WHERE IU_ID=" + parseInt(r[3],10), 5).then(function (ur) {
+              qrySql("SELECT u.UOM_Code FROM ItemUOM iu INNER JOIN UOM u ON u.UOM_ID=iu.IU_UOM WHERE iu.IU_ID=" + parseInt(r[3],10), 5).then(function (ur) {
                 var urRow = ur && ur.results && ur.results[0] && ur.results[0].rows && ur.results[0].rows[0];
                 if (urRow) fetched.uom = urRow[0] || '';
                 items.push(fetched); renderItemDatalist();
