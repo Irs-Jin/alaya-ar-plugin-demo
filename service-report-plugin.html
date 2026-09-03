@@ -459,14 +459,16 @@
     <div id="batch-batch-section">
       <div class="picker-table-wrap" style="max-height:240px;">
         <table class="picker-table" id="batch-table">
-          <thead><tr><th>Batch No</th><th>Qty Available</th><th>Expiry Date</th><th>Bin Location</th></tr></thead>
+          <thead><tr><th style="width:36px;"></th><th>Batch No</th><th>Qty Available</th><th style="width:90px;">Qty</th><th>Expiry Date</th><th>Bin Location</th></tr></thead>
           <tbody id="batch-tbody"></tbody>
         </table>
         <div class="picker-empty" id="batch-empty" style="display:none;">No batch available</div>
       </div>
-      <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
-        <label style="font-size:0.82rem; font-weight:600;">Batch No:</label>
-        <input type="text" id="batch-input" placeholder="e.g. G0046-231001" style="flex:1; border:1px solid #d1d5db; border-radius:6px; padding:7px 10px;" />
+      <input type="hidden" id="batch-input" />
+      <div style="margin-top:6px;" class="sub" id="batch-manual-hint">Tick a batch above to select it and set Qty, or type one manually below.</div>
+      <div style="margin-top:6px; display:flex; gap:8px; align-items:center;">
+        <label style="font-size:0.82rem; font-weight:600;">Manual Batch No:</label>
+        <input type="text" id="batch-input-manual" placeholder="e.g. G0046-231001" style="flex:1; border:1px solid #d1d5db; border-radius:6px; padding:7px 10px;" />
         <label style="font-size:0.82rem; font-weight:600;">Qty:</label>
         <input type="number" id="batch-qty" min="0" step="1" style="width:80px; border:1px solid #d1d5db; border-radius:6px; padding:7px 10px;" />
       </div>
@@ -1883,6 +1885,7 @@
     $('#batch-batch-section').toggle(needBatch);
     $('#batch-serial-section').toggle(needSerial);
     $('#batch-input').val(row.batchNo || '');
+    $('#batch-input-manual').val('');
     $('#batch-qty').val(row.qty || 1);
     $('#serial-input').val((row.serialNos || []).join('\n'));
     $('#serial-hint').text(needSerial ? 'Enter ' + (row.qty || 1) + ' serial(s), one per line' : '');
@@ -1898,12 +1901,41 @@
         var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
         if (!rows.length) { $('#batch-empty').show(); return; }
         rows.forEach(function (r) {
-          var batchNo = r[0], qty = r[1], exp = r[2];
+          var batchNo = r[0], qtyAvail = r[1], exp = r[2];
           var expStr = exp ? new Date(exp).toLocaleDateString('en-MY') : '-';
-          var $tr = $('<tr>').append($('<td>').text(batchNo)).append($('<td>').text(qty)).append($('<td>').text(expStr)).append($('<td>').text(r[3] || ''));
-          $tr.css('cursor','pointer').on('click', function () { $('#batch-input').val(batchNo); });
+          var $check = $('<input type="checkbox" class="batch-row-check">');
+          var $qtyInput = $('<input type="number" min="0" step="1" class="batch-row-qty" style="width:70px;">').val('').prop('disabled', true);
+          var $tr = $('<tr>')
+            .append($('<td>').append($check))
+            .append($('<td>').text(batchNo))
+            .append($('<td>').text(qtyAvail))
+            .append($('<td>').append($qtyInput))
+            .append($('<td>').text(expStr))
+            .append($('<td>').text(r[3] || ''));
+          $check.on('change', function () {
+            // Single-select: this row supports one batch per Action Taken line,
+            // so ticking one row unchecks/clears every other row.
+            $('#batch-tbody .batch-row-check').not(this).prop('checked', false);
+            $('#batch-tbody .batch-row-qty').not($qtyInput).val('').prop('disabled', true);
+            if ($(this).is(':checked')) {
+              $qtyInput.prop('disabled', false).val(qtyAvail);
+              $('#batch-input').val(batchNo);
+              $('#batch-input-manual').val('');
+              $('#batch-qty').val(qtyAvail);
+            } else {
+              $qtyInput.prop('disabled', true).val('');
+              $('#batch-input').val('');
+            }
+          });
+          $qtyInput.on('input', function () { $('#batch-qty').val($(this).val()); });
           $('#batch-tbody').append($tr);
         });
+        // Pre-check whichever batch this row was already saved with, if any
+        if (row.batchNo) {
+          $('#batch-tbody tr').each(function () {
+            if ($(this).find('td').eq(1).text() === row.batchNo) { $(this).find('.batch-row-check').prop('checked', true).trigger('change'); }
+          });
+        }
       });
     }
     $('#batch-modal').addClass('show');
@@ -1911,20 +1943,28 @@
   function closeBatchModal() { $('#batch-modal').removeClass('show'); batchEditingIdx = null; }
   $('#btn-batch-cancel').on('click', closeBatchModal);
   $('#batch-modal').on('click', function (e) { if (e.target.id === 'batch-modal') closeBatchModal(); });
+  // Typing a manual Batch No clears any table selection (they're mutually exclusive)
+  $('#batch-input-manual').on('input', function () {
+    if ($(this).val()) { $('#batch-tbody .batch-row-check').prop('checked', false); $('#batch-tbody .batch-row-qty').val('').prop('disabled', true); $('#batch-input').val(''); }
+  });
   $('#btn-batch-ok').on('click', function () {
     if (batchEditingIdx === null) return;
     var row = editingReport.actionTaken[batchEditingIdx];
-    var bNo = $.trim($('#batch-input').val());
+    var bNo = $.trim($('#batch-input').val()) || $.trim($('#batch-input-manual').val());
+    var qtyVal = parseFloat($('#batch-qty').val());
     var sText = $.trim($('#serial-input').val());
     var serials = sText ? sText.split(/\n/).map(function (s) { return $.trim(s); }).filter(Boolean) : [];
-    if (batchNeedBatch && !batchOptional && !bNo) { showToast('Batch No is required for this item', true); return; }
+    if (batchNeedBatch && !batchOptional && !bNo) { showToast('Batch No is required for this item - tick a batch above or type one manually', true); return; }
     if (batchNeedSerial && serials.length !== parseInt(row.qty || 0, 10)) {
       showToast('Serial count (' + serials.length + ') must match Qty (' + row.qty + ')', true); return;
     }
     if (batchNeedSerial && !serials.length) { showToast('Serial No is required', true); return; }
     row.batchNo = bNo;
     row.serialNos = serials;
-    addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batch=' + (row.batchNo||'-') + ' serials=' + (row.serialNos||[]).length);
+    // Selecting a batch row (with its own Qty Available auto-fill) updates the
+    // outer Action Taken row's Qty too, matching what was actually taken from stock.
+    if (qtyVal > 0) row.qty = qtyVal;
+    addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batch=' + (row.batchNo||'-') + ' qty=' + row.qty + ' serials=' + (row.serialNos||[]).length);
     closeBatchModal();
     renderActionTable();
     markDirty('batch/serial');
