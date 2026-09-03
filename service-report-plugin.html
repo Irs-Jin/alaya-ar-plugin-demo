@@ -1904,7 +1904,8 @@
           var batchNo = r[0], qtyAvail = r[1], exp = r[2];
           var expStr = exp ? new Date(exp).toLocaleDateString('en-MY') : '-';
           var $check = $('<input type="checkbox" class="batch-row-check">');
-          var $qtyInput = $('<input type="number" min="0" step="1" class="batch-row-qty" style="width:70px;">').val('').prop('disabled', true);
+          var $qtyInput = $('<input type="number" min="0" step="1" class="batch-row-qty" style="width:70px;">')
+            .attr('max', qtyAvail).val('').prop('disabled', true);
           var $tr = $('<tr>')
             .append($('<td>').append($check))
             .append($('<td>').text(batchNo))
@@ -1927,7 +1928,11 @@
               $('#batch-input').val('');
             }
           });
-          $qtyInput.on('input', function () { $('#batch-qty').val($(this).val()); });
+          $qtyInput.on('input', function () {
+            var v = parseFloat($(this).val());
+            if (v > qtyAvail) { v = qtyAvail; $(this).val(v); showToast('Only ' + qtyAvail + ' available in batch ' + batchNo, true); }
+            $('#batch-qty').val($(this).val());
+          });
           $('#batch-tbody').append($tr);
         });
         // Pre-check whichever batch this row was already saved with, if any
