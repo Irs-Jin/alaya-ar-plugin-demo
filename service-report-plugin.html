@@ -436,7 +436,6 @@
   <button class="btn-secondary btn-sm" id="btn-add-action" type="button">+ Add Line</button>
 
   <div class="btn-row" style="margin-top:20px;">
-    <button class="btn-primary" id="btn-save-detail">Save (local) &mdash; then use system toolbar Save to persist</button>
     <button class="btn-secondary" id="btn-cancel-detail">Cancel</button>
   </div>
 </div>
@@ -1476,10 +1475,11 @@
   $('#sel-company-filter').on('change', renderList);
 
   function deleteReport(code) {
-    if (!confirm('Remove service report ' + code + '? This only changes the local list — click the system toolbar Save to persist.')) return;
+    if (!confirm('Remove service report ' + code + '? This cannot be undone.')) return;
     reports = reports.filter(function (r) { return r.code !== code; });
     markDirty('delete ' + code);
     renderList();
+    doSaveReportsToDb();
   }
 
   /* ── Detail view ── */
@@ -1583,7 +1583,7 @@
 
   $('#btn-new-report, #btn-new-report-top').on('click', function () { openDetail(null); });
   $('#btn-back-to-list').on('click', function () { $('#view-detail').hide(); $('#view-list').show(); renderList(); });
-  $('#btn-save-detail-top').on('click', function () { $('#btn-save-detail').trigger('click'); });
+  $('#btn-save-detail-top').on('click', saveDetailAndPersist);
   $('#btn-cancel-detail').on('click', function () { $('#view-detail').hide(); $('#view-list').show(); });
   $('#btn-delete-report').on('click', function () { if (editingCode) { deleteReport(editingCode); $('#view-detail').hide(); $('#view-list').show(); } });
 
@@ -2179,7 +2179,10 @@
     return 'SR-' + String(max + 1).padStart(6, '0');
   }
 
-  $('#btn-save-detail').on('click', function () {
+  /* Save now persists straight to the DB (no separate "save locally, then click
+     the host toolbar Save" step) - the host toolbar Save button isn't reliably
+     available in every embedding, so this plugin drives its own persistence. */
+  function saveDetailAndPersist() {
     if (!$('#d-date').val()) { showToast('Date is required', true); return; }
     if (!$('#d-cust-code').val().trim()) { showToast('Customer Account Code is required', true); return; }
     editingReport.date = $('#d-date').val();
@@ -2209,11 +2212,11 @@
       editingCode = editingReport.code;
     }
     markDirty('save ' + editingReport.code);
-    showToast('Saved locally as ' + editingReport.code + ' — use system toolbar Save to persist');
     $('#view-detail').hide();
     $('#view-list').show();
     renderList();
-  });
+    doSaveReportsToDb();
+  }
 
   /* ── Persist SQL (same delete-all + reinsert pattern as jm6todo) ── */
   function fmtAuditDate(d) {
