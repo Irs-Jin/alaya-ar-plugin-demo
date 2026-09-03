@@ -1357,26 +1357,38 @@
         var equipByDoc = {}, actionByDoc = {};
         equipRows.forEach(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
-          if (!meta.docCode) return;
-          (equipByDoc[meta.docCode] = equipByDoc[meta.docCode] || []).push({ desc: meta.desc || '', brand: meta.brand || '', model: meta.model || '', sn: meta.sn || '', symptom: meta.symptom || '', remark: meta.remark || '' });
+          var docCode = meta.dc || meta.docCode;
+          if (!docCode) return;
+          (equipByDoc[docCode] = equipByDoc[docCode] || []).push({ desc: meta.ds || meta.desc || '', brand: meta.br || meta.brand || '', model: meta.md || meta.model || '', sn: meta.sn || '', symptom: meta.sy || meta.symptom || '', remark: meta.rm || meta.remark || '' });
         });
         actionRows.forEach(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
-          if (!meta.docCode) return;
-          (actionByDoc[meta.docCode] = actionByDoc[meta.docCode] || []).push({ item: meta.item || '', desc: meta.desc || '', uom: meta.uom || '', qty: meta.qty || 0, price: meta.price || 0, batchNo: meta.batchNo || '', batches: meta.batches || [], serialNos: meta.serialNos || [], binLocationID: meta.binLocationID || null, binLocationCode: meta.binLocationCode || '' });
+          var docCode = meta.dc || meta.docCode;
+          if (!docCode) return;
+          var batches = meta.bt ? meta.bt.map(function (b) { return { batchNo: b.n, qty: b.q }; }) : (meta.batches || []);
+          (actionByDoc[docCode] = actionByDoc[docCode] || []).push({
+            item: meta.i || meta.item || '', desc: meta.ds || meta.desc || '', uom: meta.u || meta.uom || '',
+            qty: (meta.q !== undefined ? meta.q : meta.qty) || 0, price: (meta.p !== undefined ? meta.p : meta.price) || 0,
+            batchNo: batches.length ? batches[0].batchNo : (meta.batchNo || ''), batches: batches,
+            serialNos: meta.sn || meta.serialNos || [], binLocationID: (meta.bl !== undefined ? meta.bl : meta.binLocationID) || null
+          });
         });
         reports = headerRows.map(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           var code = r.ZZC_Code || '';
+          // Short keys (d/st/cid/...) are the current compact format; the meta.date-style
+          // long keys are read as a fallback for records saved before this compaction
+          // (ZZC_Description is NVARCHAR(400) and long keys blew that budget - see
+          // "String or binary data would be truncated" SQL error 8152).
           return $.extend({ code: code }, {
-            date: meta.date || '', expiry: meta.expiry || '', status: (meta.status || 'new').toLowerCase(),
-            companyID: meta.companyID || DEFAULT_COMPANY_ID, companyName: meta.companyName || DEFAULT_COMPANY_NAME,
-            custCode: meta.custCode || '', custName: meta.custName || '', custPhone: meta.custPhone || '', custAddress: meta.custAddress || '',
-            custAddr1: meta.custAddr1 || '', custAddr2: meta.custAddr2 || '', custAddr3: meta.custAddr3 || '', custAddr4: meta.custAddr4 || '',
-            ref: meta.ref || '', receivedBy: meta.receivedBy || '', servicedBy: meta.servicedBy || '', remark: meta.remark || '',
-            salesBranchID: meta.salesBranchID || '', salesBranchCode: meta.salesBranchCode || '', warehouseID: meta.warehouseID || null,
+            date: meta.d || meta.date || '', expiry: meta.ex || meta.expiry || '', status: (meta.st || meta.status || 'new').toLowerCase(),
+            companyID: meta.cid || meta.companyID || DEFAULT_COMPANY_ID, companyName: meta.cnm || meta.companyName || DEFAULT_COMPANY_NAME,
+            custCode: meta.cc || meta.custCode || '', custName: meta.cn || meta.custName || '', custPhone: meta.cp || meta.custPhone || '',
+            custAddr1: meta.a1 || meta.custAddr1 || '', custAddr2: meta.a2 || meta.custAddr2 || '', custAddr3: meta.a3 || meta.custAddr3 || '', custAddr4: meta.a4 || meta.custAddr4 || '',
+            ref: meta.rf || meta.ref || '', receivedBy: meta.rb || meta.receivedBy || '', servicedBy: meta.sv || meta.servicedBy || '', remark: meta.rm || meta.remark || '',
+            salesBranchID: meta.sbi || meta.salesBranchID || '', salesBranchCode: meta.sbc || meta.salesBranchCode || '', warehouseID: meta.wid || meta.warehouseID || null,
             equipment: equipByDoc[code] || [], actionTaken: actionByDoc[code] || [],
-            createdAt: meta.createdAt || '', createdBy: meta.createdBy || ''
+            createdAt: meta.ca || meta.createdAt || '', createdBy: meta.cb || meta.createdBy || ''
           });
         });
         addLog('Loaded ' + reports.length + ' service reports (' + equipRows.length + ' equipment, ' + actionRows.length + ' action-taken lines)');
@@ -2208,8 +2220,9 @@
     function p(n) { return (n < 10 ? '0' : '') + n; }
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
-  function sqlInsertLine(tableCode, code, payload, dateCreated, now) {
+  function sqlInsertLine(tableCode, code, payload, dateCreated, now, oversized) {
     var json = JSON.stringify(payload);
+    if (json.length > 400 && oversized) oversized.push(code + ' (' + json.length + ' chars)');
     var sqlSafe = json.replace(/'/g, "''");
     var codeSafe = (code || '').replace(/'/g, "''");
     return "INSERT INTO ZZT_" + tableCode
@@ -2230,28 +2243,42 @@
       'DELETE FROM ZZT_' + EQUIP_TABLE_CODE + ';',
       'DELETE FROM ZZT_' + ACTION_TABLE_CODE + ';'
     ];
+    // Short keys (d/st/cid/...) below are load-bearing, not cosmetic: ZZC_Description
+    // is a hard NVARCHAR(400) limit on every ZZT_ table (cannot be widened - Alaya's
+    // own SQL tool refuses ALTER/CREATE/DROP/TRUNCATE outright), and the previous
+    // long-key format overflowed it as soon as Sales Branch/Warehouse/multi-batch
+    // fields were added ("String or binary data would be truncated", SQL error 8152).
+    // loadReportsFromDb() falls back to the old long keys for already-saved records.
+    var oversized = [];
     reports.forEach(function (r) {
       var dateCreated = r.createdAt ? fmtAuditDate(new Date(r.createdAt)) : now;
       var headerPayload = {
-        date: r.date || '', expiry: r.expiry || '', status: r.status || 'new',
-        companyID: r.companyID || DEFAULT_COMPANY_ID, companyName: r.companyName || DEFAULT_COMPANY_NAME,
-        custCode: r.custCode || '', custName: r.custName || '', custPhone: r.custPhone || '', custAddress: r.custAddress || '',
-        custAddr1: r.custAddr1 || '', custAddr2: r.custAddr2 || '', custAddr3: r.custAddr3 || '', custAddr4: r.custAddr4 || '',
-        ref: r.ref || '', receivedBy: r.receivedBy || '', servicedBy: r.servicedBy || '', remark: r.remark || '',
-        salesBranchID: r.salesBranchID || '', salesBranchCode: r.salesBranchCode || '', warehouseID: r.warehouseID || null,
-        createdAt: r.createdAt || '', createdBy: r.createdBy || ''
+        d: r.date || '', ex: r.expiry || '', st: r.status || 'new',
+        cid: r.companyID || DEFAULT_COMPANY_ID, cnm: r.companyName || DEFAULT_COMPANY_NAME,
+        cc: r.custCode || '', cn: r.custName || '', cp: r.custPhone || '',
+        a1: r.custAddr1 || '', a2: r.custAddr2 || '', a3: r.custAddr3 || '', a4: r.custAddr4 || '',
+        rf: r.ref || '', rb: r.receivedBy || '', sv: r.servicedBy || '', rm: r.remark || '',
+        sbi: r.salesBranchID || '', sbc: r.salesBranchCode || '', wid: r.warehouseID || null,
+        ca: r.createdAt || '', cb: r.createdBy || ''
       };
-      lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now));
+      lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now, oversized));
 
       (r.equipment || []).forEach(function (eq, i) {
-        var payload = { docCode: r.code, desc: eq.desc || '', brand: eq.brand || '', model: eq.model || '', sn: eq.sn || '', symptom: eq.symptom || '', remark: eq.remark || '' };
-        lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now));
+        var payload = { dc: r.code, ds: eq.desc || '', br: eq.brand || '', md: eq.model || '', sn: eq.sn || '', sy: eq.symptom || '', rm: eq.remark || '' };
+        lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now, oversized));
       });
       (r.actionTaken || []).forEach(function (a, i) {
-        var payload = { docCode: r.code, item: a.item || '', desc: a.desc || '', uom: a.uom || '', qty: a.qty || 0, price: a.price || 0, batchNo: a.batchNo || '', batches: a.batches || [], serialNos: a.serialNos || [], binLocationID: a.binLocationID || null, binLocationCode: a.binLocationCode || '' };
-        lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now));
+        var payload = {
+          dc: r.code, i: a.item || '', ds: a.desc || '', u: a.uom || '', q: a.qty || 0, p: a.price || 0,
+          bt: (a.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty }; }),
+          sn: a.serialNos || [], bl: a.binLocationID || null
+        };
+        lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now, oversized));
       });
     });
+    if (oversized.length) {
+      showToast('Warning: ' + oversized.length + ' line(s) still exceed 400 chars and will fail to save - shorten Remark/Description/Address text: ' + oversized.join(', '), true);
+    }
     return lines.join('\n');
   }
 
