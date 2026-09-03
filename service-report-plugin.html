@@ -1723,11 +1723,16 @@
     var dtl = lines.map(function (a, idx) {
       var itemRecord = items.filter(function (im) { return im.code === a.item; })[0];
       if (!itemRecord || !itemRecord.id) { unresolvedItems.push(a.item); return null; }
-      var qty = a.qty.toFixed(4), total = (a.qty * (a.price || 0)).toFixed(4);
+      // Round to 2dp up front - UnitPrice/NewUnitPrice/DiscountAmt/Total all have
+      // to derive from the SAME rounded price ("UnitPrice not equal (NewUnitPrice
+      // + DiscountAmt)" fires if UnitPrice keeps extra precision like 99.990938
+      // while NewUnitPrice is rounded to 99.99).
+      var unitPrice = parseFloat((a.price || 0).toFixed(2));
+      var qty = a.qty.toFixed(4), total = (a.qty * unitPrice).toFixed(4);
       var grp = 'G' + (idx + 1);
       var obj = {
         Description: itemRecord.desc || a.desc || '', Qty: qty, ItemID: String(itemRecord.id), ItemUOMID: String(itemRecord.uomID || ''),
-        UnitPrice: (a.price || 0).toFixed(6), NewUnitPrice: (a.price || 0).toFixed(2), DiscountAmt: '0.00', DiscountFormula: '', ItemTypeID: String(itemRecord.typeID || ''),
+        UnitPrice: unitPrice.toFixed(6), NewUnitPrice: unitPrice.toFixed(2), DiscountAmt: '0.00', DiscountFormula: '', ItemTypeID: String(itemRecord.typeID || ''),
         WarehouseID: '', BinLocationID: '', Remarks: '', GroupID: grp,
         SubTotal: total, TaxAmt: '0.0000', TaxableAmt: total, Total: total, TaxCode: '',
         TaxableExcFooterDisc: total, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
