@@ -468,6 +468,31 @@
 <!-- Print view - populated just before window.print(), hidden otherwise (see @media print) -->
 <div id="print-view"></div>
 
+<!-- Package Item modal - mirrors native Cash Sales "Package Item" popup: pick how
+     many packages, review/edit each component's Qty & Price, batch-select any
+     batch/serial-controlled component. -->
+<div class="modal-overlay" id="package-modal">
+  <div class="modal" style="max-width:820px;">
+    <h2>Package Item</h2>
+    <div id="package-info" class="sub" style="margin-bottom:8px;"></div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <label style="font-weight:600;">Total Package:<span class="required-mark">*</span></label>
+      <input type="number" id="package-total-multiplier" min="1" step="1" value="1" style="width:80px; border:1px solid #d1d5db; border-radius:6px; padding:6px 8px;" />
+    </div>
+    <div class="picker-table-wrap" style="max-height:280px;">
+      <table class="picker-table" id="package-table">
+        <thead><tr><th>Item Code</th><th>Description</th><th style="width:70px;">UOM</th><th style="width:80px;">Qty</th><th style="width:100px;">Price</th><th style="width:140px;">Batch/Serial</th></tr></thead>
+        <tbody id="package-tbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:8px; text-align:right;"><b>Total: <span id="package-total-price">0.00</span></b></div>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button class="btn-primary" id="btn-package-ok" type="button">OK</button>
+      <button class="btn-secondary" id="btn-package-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Batch/Serial modal - mirrors native Cash Sales Batch/Serial popup (Batch No, Qty Available, etc.) -->
 <div class="modal-overlay" id="batch-modal">
   <div class="modal" style="max-width:720px;">
@@ -592,6 +617,12 @@
   var EQUIP_TABLE_CODE = 'svcrpteq';
   var ACTION_TABLE_CODE = 'svcrptact';
   var DEFAULT_COMPANY_ID = 548; // matches jin's default test company (JIN6 SDN BHD)
+  var PACKAGE_ITEM_TYPE_ID = 5; // ItemMaster.IM_Type - confirmed live via item 'A000001'
+  var MATRIX_ITEM_TYPE_ID = 4; // ItemMaster.IM_Type - confirmed live via item 841264 ("Matrix Item")
+  var VARIANCE_ITEM_TYPE_ID = 11; // ItemMaster.IM_Type - confirmed live via item 100660 ("Variance Item")
+  // Matrix/Variance items need their own size/color variant picker, which Service
+  // Report doesn't have - excluded from the item list entirely rather than half-supported.
+  var EXCLUDED_ITEM_TYPE_IDS = [MATRIX_ITEM_TYPE_ID, VARIANCE_ITEM_TYPE_ID];
   var DEFAULT_COMPANY_NAME = 'JIN6 SDN BHD';
   /* No company-list API is confirmed reachable from a plugin iframe (ALAYA_INIT's
      payload only carries apiurl/nonce/client/username — no company/companyid field,
@@ -844,7 +875,7 @@
       var data = (resp && resp.data) || [];
       items = data.map(function (im) {
         return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
-      }).filter(function (im) { return im.code; });
+      }).filter(function (im) { return im.code && EXCLUDED_ITEM_TYPE_IDS.indexOf(im.typeID) < 0; });
       addLog('Loaded ' + items.length + ' items for company ' + companyID);
       renderItemDatalist();
       // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
@@ -1443,12 +1474,25 @@
           var docCode = meta.dc || meta.docCode;
           if (!docCode) return;
           var batches = meta.bt ? meta.bt.map(function (b) { return { batchNo: b.n, qty: b.q }; }) : (meta.batches || []);
-          (actionByDoc[docCode] = actionByDoc[docCode] || []).push({
+          var actionRow = {
             item: meta.i || meta.item || '', desc: meta.ds || meta.desc || '', uom: meta.u || meta.uom || '',
             qty: (meta.q !== undefined ? meta.q : meta.qty) || 0, price: (meta.p !== undefined ? meta.p : meta.price) || 0,
             batchNo: batches.length ? batches[0].batchNo : (meta.batchNo || ''), batches: batches,
             serialNos: meta.sn || meta.serialNos || [], binLocationID: (meta.bl !== undefined ? meta.bl : meta.binLocationID) || null
-          });
+          };
+          if (meta.pc && meta.pc.length) {
+            actionRow.totalPackage = meta.pn || 1;
+            actionRow.packageConfirmed = true;
+            actionRow.packageComponents = meta.pc.map(function (c) {
+              return {
+                id: c.i, code: c.c, desc: c.d, uomID: c.u, uom: c.um || '', qty: c.q || 0, price: c.p || 0,
+                binLocationID: c.bl || null, batchControl: !!c.b, serialControl: !!(c.s && c.s.length),
+                batches: c.b ? [{ batchNo: c.b, qty: c.bq || 0, expiryDate: c.be || '' }] : [],
+                serialNos: c.s || []
+              };
+            });
+          }
+          (actionByDoc[docCode] = actionByDoc[docCode] || []).push(actionRow);
         });
         reports = headerRows.map(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
@@ -1823,11 +1867,17 @@
     // but has no ItemWarehouse row at all). Check up front and name the item.
     var checkIds = [];
     dtl.forEach(function (d) { if (checkIds.indexOf(d.ItemID) < 0) checkIds.push(d.ItemID); });
+    lines.forEach(function (a) {
+      (a.packageComponents || []).forEach(function (c) { var cid = String(c.id); if (checkIds.indexOf(cid) < 0) checkIds.push(cid); });
+    });
     qrySql("SELECT DISTINCT IW_ItemID FROM ItemWarehouse WHERE IW_CompanyID=" + parseInt(companyID,10) + " AND IW_WarehouseID=" + parseInt(headerWhID,10) + " AND IW_ItemID IN (" + checkIds.join(',') + ")", checkIds.length).then(function (resp) {
       var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
       var foundIds = rows.map(function (r) { return String(r[0]); });
       var missingCodes = [];
       dtl.forEach(function (d, idx) { if (foundIds.indexOf(String(d.ItemID)) < 0) missingCodes.push(lines[idx].item); });
+      lines.forEach(function (a) {
+        (a.packageComponents || []).forEach(function (c) { if (foundIds.indexOf(String(c.id)) < 0) missingCodes.push(a.item + ' > ' + c.code); });
+      });
       if (missingCodes.length) {
         showToast('Cannot Copy To Sales: ' + missingCodes.join(', ') + ' has no warehouse stock set up for this company/warehouse - set it up in Alaya\'s Item Warehouse settings first', true);
         addLog('Copy To Sales blocked: no ItemWarehouse row for ' + missingCodes.join(', ') + ' (company ' + companyID + ', warehouse ' + headerWhID + ')');
@@ -1942,6 +1992,57 @@
       SalesAgentID: '', Total: total.toFixed(4), TotalPoint: '0.0000',
       SalesDTL: dtl,
     };
+    // Explode Package Item rows into their component child lines. Confirmed live
+    // against a real posted document: a package parent posts as its own header
+    // line PLUS one child line per component, ALL sharing the parent's GroupID,
+    // and every row in that group (parent + every child) reports the SAME
+    // "Total" - the WHOLE package's total, not the individual component's own
+    // subtotal. Replicated exactly rather than guessed, since deviating from a
+    // confirmed-working shape risks yet another opaque server-side error.
+    lines.forEach(function (a, idx) {
+      if (!a.packageComponents || !a.packageComponents.length) return;
+      var parentDtl = dtl.filter(function (d) { return d.GroupID === lineGroupIds[idx]; })[0];
+      if (!parentDtl) return;
+      var grp = lineGroupIds[idx];
+      a.packageComponents.forEach(function (c) {
+        var compQty = (c.qty || 0).toFixed(4);
+        var compPrice = parseFloat((c.price || 0).toFixed(2));
+        var childObj = {
+          Description: c.desc || c.code, Qty: compQty, ItemID: String(c.id), ItemUOMID: String(c.uomID || ''),
+          UnitPrice: compPrice.toFixed(6), NewUnitPrice: compPrice.toFixed(2), DiscountAmt: '0.00', DiscountFormula: '',
+          ItemTypeID: '1', WarehouseID: parentDtl.WarehouseID, BinLocationID: c.binLocationID ? String(c.binLocationID) : parentDtl.BinLocationID,
+          Remarks: '', GroupID: grp, SubItem_YN: true,
+          SubTotal: parentDtl.Total, TaxAmt: '0.0000', TaxableAmt: parentDtl.Total, Total: parentDtl.Total, TaxCode: '',
+          TaxableExcFooterDisc: parentDtl.Total, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
+        };
+        if (c.batches && c.batches.length) { childObj.BatchNo = c.batches[0].batchNo; childObj.CSB_BatchNo = c.batches[0].batchNo; }
+        if (c.serialNos && c.serialNos.length) { childObj.SerialNo = c.serialNos[0]; childObj.CSSN_SerialNo = c.serialNos[0]; }
+        body.SalesDTL.push(childObj);
+        // Batch/serial for a package component shares the PACKAGE's GroupID
+        // (confirmed live: CashSalesBatch.CSB_GroupID matched the group's shared
+        // GUID, not a per-component one).
+        if (c.batchControl && c.batches && c.batches.length) {
+          c.batches.forEach(function (b) {
+            var q = (typeof b.qty === 'number' ? b.qty : parseFloat(b.qty) || 0).toFixed(4);
+            var expStr = b.expiryDate ? fmtCashSalesDate(new Date(b.expiryDate)) : '';
+            salesBatches.push({
+              GroupID: grp, ItemID: String(c.id), BatchNo: b.batchNo, Qty: q, BaseQty: q,
+              BinLocationID: childObj.BinLocationID, WarehouseID: childObj.WarehouseID, ExpiryDate: expStr,
+              CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: grp, CSB_ExpiryDate: expStr
+            });
+          });
+        }
+        if (c.serialControl && c.serialNos && c.serialNos.length) {
+          c.serialNos.forEach(function (sn) {
+            salesSNs.push({
+              GroupID: grp, ItemID: String(c.id), SerialNo: sn, BatchNo: (c.batches[0] && c.batches[0].batchNo) || '',
+              CSSN_SerialNo: sn, CSSN_BatchNo: (c.batches[0] && c.batches[0].batchNo) || '', BinLocationID: childObj.BinLocationID
+            });
+          });
+        }
+      });
+    });
+
     // Attach batch/serial child arrays under multiple possible keys for API compatibility
     if (salesBatches.length) {
       body.SalesBatch = salesBatches; body.CashSalesBatch = salesBatches; body.DetailBatch = salesBatches; body.BatchList = salesBatches;
@@ -2111,6 +2212,17 @@
     editingReport.actionTaken[i].desc = itemRecord.desc;
     editingReport.actionTaken[i].uom = itemRecord.uom;
     editingReport.actionTaken[i].itemId = itemRecord.id;
+    // Package Item (IM_Type=5, confirmed live) - the parent item itself isn't
+    // batch/serial-controlled directly, its COMPONENTS can be. Native pops up a
+    // "Package Item" second screen the same way Batch/Serial does for regular
+    // items; the package modal owns its own price/batch flow from here.
+    if (itemRecord.typeID === PACKAGE_ITEM_TYPE_ID) {
+      delete editingReport.actionTaken[i].packageComponents;
+      renderActionTable();
+      markDirty('item selected');
+      openPackageModalForRow(i);
+      return;
+    }
     // Auto-fill price if row has no price yet and item has a price
     if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0) && itemRecord.price) {
       editingReport.actionTaken[i].price = parseFloat(itemRecord.price) || 0;
@@ -2168,13 +2280,27 @@
      When a batch/serial item is selected, prompt for Batch No (and Serial Nos).
      Data is stored on the row as batchNo / serialNos and validated before
      Copy To Sales. Available batches are loaded from ItemBatch via query.irs-alaya.com. */
-  var batchEditingIdx = null, batchNeedBatch=false, batchNeedSerial=false, batchOptional=false;
+  // batchTarget generalizes "what am I editing batch/serial for" - either a top-level
+  // Action Taken row, or one component nested inside an open Package Item modal.
+  // { row: <object with .item/.qty/.batches/...>, after: fn to refresh whichever UI owns it }
+  var batchTarget = null, batchNeedBatch=false, batchNeedSerial=false, batchOptional=false;
   function openBatchModalForRow(idx, force) {
     var row = editingReport.actionTaken[idx];
     if (!row || !row.item) return;
     var itemRec = items.filter(function (im) { return $.trim(im.code) === row.item; })[0];
     if (!itemRec) return;
-    batchEditingIdx = idx;
+    batchTarget = { row: row, after: renderActionTable };
+    openBatchModalCore(row, itemRec, force);
+  }
+  function openBatchModalForComponent(rowIdx, compIdx, force) {
+    var comp = editingReport.actionTaken[rowIdx].packageComponents[compIdx];
+    if (!comp) return;
+    var itemRec = items.filter(function (im) { return $.trim(im.code) === comp.code; })[0] ||
+      { id: comp.id, code: comp.code, desc: comp.desc, batchControl: comp.batchControl, serialControl: comp.serialControl };
+    batchTarget = { row: comp, after: function () { renderPackageTable(); } };
+    openBatchModalCore(comp, itemRec, force);
+  }
+  function openBatchModalCore(row, itemRec, force) {
     var needBatch = !!itemRec.batchControl;
     var needSerial = !!itemRec.serialControl;
     batchOptional = false;
@@ -2261,7 +2387,7 @@
     }
     $('#batch-modal').addClass('show');
   }
-  function closeBatchModal() { $('#batch-modal').removeClass('show'); batchEditingIdx = null; }
+  function closeBatchModal() { $('#batch-modal').removeClass('show'); batchTarget = null; }
   $('#btn-batch-cancel').on('click', closeBatchModal);
   $('#batch-modal').on('click', function (e) { if (e.target.id === 'batch-modal') closeBatchModal(); });
   // Typing a manual Batch No clears any table selection (mutually exclusive with checked rows)
@@ -2273,8 +2399,8 @@
     }
   });
   $('#btn-batch-ok').on('click', function () {
-    if (batchEditingIdx === null) return;
-    var row = editingReport.actionTaken[batchEditingIdx];
+    if (!batchTarget) return;
+    var row = batchTarget.row;
     var batches = [];
     var binIDs = [];
     $('#batch-tbody .batch-row-check:checked').each(function () {
@@ -2312,10 +2438,136 @@
         row.binLocationCode = bl ? bl.code : '';
       }
     }
-    addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batches=' + JSON.stringify(batches) + ' qty=' + row.qty + ' bin=' + row.binLocationID + ' serials=' + (row.serialNos||[]).length);
+    addLog('Batch/Serial saved: batches=' + JSON.stringify(batches) + ' qty=' + row.qty + ' bin=' + row.binLocationID + ' serials=' + (row.serialNos||[]).length);
+    var after = batchTarget.after;
     closeBatchModal();
-    renderActionTable();
+    after();
     markDirty('batch/serial');
+  });
+
+  /* ── Package Item handling (mirrors native Cash Sales "Package Item" popup) ──
+     Confirmed live against a real posted document: a package parent (IM_Type=5)
+     posts as ONE header line PLUS one child line per PackageItem component, all
+     sharing a single GroupID; each row's Total is the WHOLE PACKAGE's total (not
+     the individual component's own subtotal) - replicated exactly in
+     buildPackageDtlLines() below since deviating risks yet another opaque
+     server-side validation error. */
+  var packageEditingIdx = null;
+  function openPackageModalForRow(idx) {
+    var row = editingReport.actionTaken[idx];
+    var itemRec = items.filter(function (im) { return $.trim(im.code) === row.item; })[0];
+    if (!itemRec) return;
+    packageEditingIdx = idx;
+    $('#package-info').text(itemRec.code + ' - ' + (itemRec.desc || row.desc || ''));
+    $('#package-total-multiplier').val(row.totalPackage || 1);
+    $('#package-tbody').empty();
+    var sql = "SELECT pi.PI_ChildItemID, pi.PI_Qty, pi.PI_SalesPrice1, im.IM_Code, im.IM_Description, im.IM_BaseUOM, im.IM_BatchControl_YN, im.IM_SerializeControl_YN FROM PackageItem pi INNER JOIN ItemMaster im ON im.IM_ID=pi.PI_ChildItemID WHERE pi.PI_ParentItemID=" + parseInt(itemRec.id,10) + " ORDER BY pi.PI_Sequence";
+    qrySql(sql, 50).then(function (resp) {
+      var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+      if (!rows.length) { showToast('This package has no components configured', true); return; }
+      var existing = row.packageComponents || [];
+      editingReport.actionTaken[idx].packageComponents = rows.map(function (r) {
+        var prev = existing.filter(function (e) { return e.id === r[0]; })[0];
+        return {
+          id: r[0], code: $.trim(r[3]), desc: r[4] || '', baseQty: parseFloat(r[1]) || 1,
+          uomID: r[5], uom: '', batchControl: !!r[6], serialControl: !!r[7],
+          price: prev ? prev.price : (parseFloat(r[2]) || 0),
+          qty: prev ? prev.qty : (parseFloat(r[1]) || 1),
+          batches: prev ? prev.batches : [], serialNos: prev ? prev.serialNos : [],
+          binLocationID: prev ? prev.binLocationID : row.binLocationID
+        };
+      });
+      // Resolve each component's UOM code (batched, same pattern as elsewhere)
+      var uomIds = editingReport.actionTaken[idx].packageComponents.map(function (c) { return c.uomID; }).filter(Boolean);
+      if (uomIds.length) {
+        qrySql("SELECT IU_ID, IU_UOM FROM ItemUOM WHERE IU_ID IN (" + uomIds.join(',') + ")", 50).then(function (ur) {
+          var uRows = ur && ur.results && ur.results[0] && ur.results[0].rows || [];
+          editingReport.actionTaken[idx].packageComponents.forEach(function (c) {
+            var m = uRows.filter(function (r) { return r[0] === c.uomID; })[0];
+            if (m) c.uom = m[1] || '';
+          });
+          renderPackageTable();
+        }).fail(renderPackageTable);
+      } else {
+        renderPackageTable();
+      }
+      $('#package-modal').addClass('show');
+    }).fail(function (e) {
+      addLog('Package component fetch failed: ' + (e && e.statusText || e));
+      showToast('Failed to load package components', true);
+    });
+  }
+  function renderPackageTable() {
+    if (packageEditingIdx === null) return;
+    var row = editingReport.actionTaken[packageEditingIdx];
+    var $tb = $('#package-tbody').empty();
+    var total = 0;
+    (row.packageComponents || []).forEach(function (c, ci) {
+      total += (c.qty || 0) * (c.price || 0);
+      var $tr = $('<tr>');
+      $tr.append($('<td>').text(c.code));
+      $tr.append($('<td>').text(c.desc));
+      $tr.append($('<td>').text(c.uom));
+      $tr.append($('<td>').append($('<input type="number" min="0" step="1" style="width:70px;">').val(c.qty).on('input', function () {
+        c.qty = parseFloat($(this).val()) || 0; renderPackageTable();
+      })));
+      $tr.append($('<td>').append($('<input type="number" min="0" step="0.01" style="width:90px;">').val(c.price).on('input', function () {
+        c.price = parseFloat($(this).val()) || 0; renderPackageTable();
+      })));
+      var need = c.batchControl || c.serialControl;
+      if (need) {
+        var label = (c.batches && c.batches.length) ? 'B:' + c.batches.map(function (b) { return b.batchNo + '(' + b.qty + ')'; }).join('+') :
+          (c.serialNos && c.serialNos.length) ? 'S:' + c.serialNos.length : 'required';
+        var $btn = $('<button class="btn-secondary btn-sm" type="button">').text(label).on('click', function () { openBatchModalForComponent(packageEditingIdx, ci); });
+        if (!(c.batches && c.batches.length) && !(c.serialNos && c.serialNos.length)) $btn.css({ color: '#dc2626', borderColor: '#fecaca' });
+        $tr.append($('<td>').append($btn));
+      } else {
+        $tr.append($('<td>').text('-'));
+      }
+      $tb.append($tr);
+    });
+    $('#package-total-price').text(total.toFixed(2));
+  }
+  $('#package-total-multiplier').on('input', function () {
+    if (packageEditingIdx === null) return;
+    var row = editingReport.actionTaken[packageEditingIdx];
+    var mult = parseInt($(this).val(), 10) || 1;
+    (row.packageComponents || []).forEach(function (c) { c.qty = (c.baseQty || 1) * mult; });
+    renderPackageTable();
+  });
+  function closePackageModal() {
+    $('#package-modal').removeClass('show');
+    if (packageEditingIdx !== null && !(editingReport.actionTaken[packageEditingIdx] || {}).packageConfirmed) {
+      // Never confirmed (Cancel, or closed via backdrop) - drop the half-picked item
+      // rather than leave a package row with no confirmed component set.
+      editingReport.actionTaken[packageEditingIdx].item = '';
+      editingReport.actionTaken[packageEditingIdx].desc = '';
+      delete editingReport.actionTaken[packageEditingIdx].packageComponents;
+      renderActionTable();
+    }
+    packageEditingIdx = null;
+  }
+  $('#btn-package-cancel').on('click', closePackageModal);
+  $('#package-modal').on('click', function (e) { if (e.target.id === 'package-modal') closePackageModal(); });
+  $('#btn-package-ok').on('click', function () {
+    if (packageEditingIdx === null) return;
+    var row = editingReport.actionTaken[packageEditingIdx];
+    var comps = row.packageComponents || [];
+    var missingBatch = comps.filter(function (c) { return c.batchControl && !(c.batches && c.batches.length); }).map(function (c) { return c.code; });
+    var missingSerial = comps.filter(function (c) { return c.serialControl && !(c.serialNos && c.serialNos.length); }).map(function (c) { return c.code; });
+    if (missingBatch.length) { showToast('Please select batch for: ' + missingBatch.join(', '), true); return; }
+    if (missingSerial.length) { showToast('Please enter serial for: ' + missingSerial.join(', '), true); return; }
+    var mult = parseInt($('#package-total-multiplier').val(), 10) || 1;
+    var total = comps.reduce(function (s, c) { return s + (c.qty || 0) * (c.price || 0); }, 0);
+    row.totalPackage = mult;
+    row.qty = mult;
+    row.price = total;
+    row.packageConfirmed = true;
+    addLog('Package confirmed for row ' + (packageEditingIdx + 1) + ': ' + comps.length + ' components, total ' + total.toFixed(2));
+    $('#package-modal').removeClass('show');
+    packageEditingIdx = null;
+    renderActionTable();
+    markDirty('package item');
   });
 
   function renderActionTable() {
@@ -2360,7 +2612,9 @@
           // that item has ZERO ItemWarehouse rows for company 548 - i.e. a company
           // item can legitimately exist with no warehouse stock set up yet, so
           // ItemWarehouse is the wrong table to scope on here).
-          qrySql("SELECT TOP 1 im.IM_ID, im.IM_Code, im.IM_Description, im.IM_BaseUOM, im.IM_SerializeControl_YN, im.IM_BatchControl_YN FROM ItemMaster im INNER JOIN CompanyItem ci ON ci.CI_ItemID=im.IM_ID WHERE LTRIM(RTRIM(im.IM_Code))='" + esc + "' AND ci.CI_CompanyID=" + parseInt(fallbackCompId,10), 5).then(function (resp) {
+          // Matrix/Variance items (IM_Type 4/11) excluded - Service Report has no
+          // size/color variant picker for them.
+          qrySql("SELECT TOP 1 im.IM_ID, im.IM_Code, im.IM_Description, im.IM_BaseUOM, im.IM_SerializeControl_YN, im.IM_BatchControl_YN FROM ItemMaster im INNER JOIN CompanyItem ci ON ci.CI_ItemID=im.IM_ID WHERE LTRIM(RTRIM(im.IM_Code))='" + esc + "' AND ci.CI_CompanyID=" + parseInt(fallbackCompId,10) + " AND im.IM_Type NOT IN (" + EXCLUDED_ITEM_TYPE_IDS.join(',') + ")", 5).then(function (resp) {
             var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
             if (!r) { showToast('Item ' + code + ' not found for this company', true); return; }
             var fetched = { id: r[0], code: String(r[1]).trim(), desc: r[2] || '', uom: '', uomID: r[3], typeID: 1, batchControl: !!r[5], serialControl: !!r[4], price: 0 };
@@ -2420,10 +2674,28 @@
         $tr.append($('<td>').append($binSel));
       })();
       $tr.append($('<td>').append($('<input>').val(a.uom || '').on('input', function () { editingReport.actionTaken[i].uom = $(this).val(); })));
-      $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; updateActionTotals(); })));
-      $tr.append($('<td>').append($('<input type="number" step="0.01" min="0">').val(a.price || 0).on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; updateActionTotals(); })));
+      var isPackage = !!a.packageComponents;
+      // Package rows: Qty/Price are DERIVED (Total Package multiplier x sum of
+      // component prices, set from the Package Item modal) - editing them here
+      // directly would desync from the actual component breakdown Copy To Sales
+      // sends, so they're read-only; re-open the modal to change anything.
+      $tr.append($('<td>').append(
+        $('<input type="number" step="1" min="0">').val(a.qty || 0).prop('disabled', isPackage)
+          .on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; updateActionTotals(); })
+      ));
+      $tr.append($('<td>').append(
+        $('<input type="number" step="0.01" min="0">').val(a.price || 0).prop('disabled', isPackage)
+          .on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; updateActionTotals(); })
+      ));
       $tr.append($('<td>').append($('<span class="line-total">').text(((a.qty || 0) * (a.price || 0)).toFixed(2))));
       (function () {
+        if (isPackage) {
+          var $pkgBtn = $('<button class="btn-secondary btn-sm" type="button">').text('Package (' + a.packageComponents.length + ' items)').on('click', function () { openPackageModalForRow(i); });
+          var incomplete = a.packageComponents.some(function (c) { return (c.batchControl && !(c.batches && c.batches.length)) || (c.serialControl && !(c.serialNos && c.serialNos.length)); });
+          if (incomplete) $pkgBtn.css({ color: '#dc2626', borderColor: '#fecaca' });
+          $tr.append($('<td>').append($pkgBtn));
+          return;
+        }
         var itemRec = a.item ? items.filter(function (im) { return $.trim(im.code) === a.item; })[0] : null;
         var need = itemRec && (itemRec.batchControl || itemRec.serialControl);
         var label = '-';
@@ -2586,6 +2858,16 @@
         bt: (a.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty }; }),
         sn: a.serialNos || [], bl: a.binLocationID || null
       };
+      if (a.packageComponents && a.packageComponents.length) {
+        // Compact: first batch only per component (multi-batch WITHIN one
+        // package component is rare enough that persisting just one is an
+        // acceptable trade-off against the NVARCHAR(400) budget).
+        payload.pn = a.totalPackage || 0;
+        payload.pc = a.packageComponents.map(function (c) {
+          var b0 = (c.batches && c.batches[0]) || null;
+          return { i: c.id, c: c.code, d: c.desc, u: c.uomID, um: c.uom, q: c.qty, p: c.price, bl: c.binLocationID || null, b: b0 ? b0.batchNo : '', bq: b0 ? b0.qty : 0, be: b0 ? b0.expiryDate : '', s: c.serialNos || [] };
+        });
+      }
       lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now, oversized, ['ds']));
     });
     return lines;
