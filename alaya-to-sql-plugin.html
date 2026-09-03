@@ -93,6 +93,13 @@
     /* Progress */
     .progress-bar { background:#e5e7eb; border-radius:999px; height:8px; overflow:hidden; margin-top:10px; }
     .progress-fill { background:#1565c0; height:100%; width:0%; transition:width 0.3s; }
+
+    /* Settings */
+    .settings-section { margin-bottom:20px; }
+    .settings-section h3 { font-size:0.9rem; font-weight:700; color:#1565c0; margin-bottom:12px; border-bottom:1px solid #e5e7eb; padding-bottom:6px; }
+    .settings-col { display:flex; gap:20px; }
+    .settings-col > div { flex:1; }
+    .settings-col h4 { font-size:0.82rem; font-weight:600; color:#374151; margin-bottom:8px; }
   </style>
 </head>
 <body>
@@ -117,6 +124,7 @@
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="transfer">Transfer</button>
     <button class="tab-btn" data-tab="preview">Preview</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
     <button class="tab-btn" data-tab="log">Log</button>
   </div>
 
@@ -197,6 +205,109 @@
     </div>
   </div>
 
+  <!-- ΓöÇΓöÇ Settings Tab ΓöÇΓöÇ -->
+  <div id="tab-settings" class="tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2>Settings</h2>
+      <button id="btn-save-settings" class="btn-success">Save</button>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin-bottom:12px;">Backend Connection</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Backend URL</label>
+        <input type="text" id="s-backend-url" placeholder="http://localhost:3100" />
+      </div>
+      <div class="form-group">
+        <label>Alaya Company (Client ID)</label>
+        <input type="text" id="s-alaya-company" placeholder="qa3" />
+      </div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Settings</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Cash Sales Method</label>
+        <select id="s-cashsales-method">
+          <option value="itemize">Itemize</option>
+          <option value="summary">Summary</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cash Sales Doc No. Prefix</label>
+        <input type="text" id="s-cashsales-prefix" placeholder="CS" />
+      </div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Account Codes</h3>
+    <div style="display:flex;gap:16px;margin-bottom:16px;">
+      <div style="flex:1;">
+        <h4 style="font-size:0.82rem;font-weight:600;color:#374151;margin-bottom:8px;">Customer</h4>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Cash Sales A/C</label>
+          <input type="text" id="s-ac-cashsales" placeholder="500-000" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Cash Sales Rounding A/C</label>
+          <input type="text" id="s-ac-cashrounding" placeholder="500-000" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Credit Sales A/C</label>
+          <input type="text" id="s-ac-creditsales" placeholder="500-000" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Credit Sales Rounding A/C</label>
+          <input type="text" id="s-ac-creditrounding" placeholder="500-000" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Service Charge A/C</label>
+          <input type="text" id="s-ac-servicecharge" placeholder="500-000" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Cash Sales Description</label>
+          <input type="text" id="s-desc-cashsales" placeholder="CASH SALES - BY ITEMIZED" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Credit Sales Description</label>
+          <input type="text" id="s-desc-creditsales" placeholder="INVOICE" />
+        </div>
+      </div>
+      <div style="flex:1;">
+        <h4 style="font-size:0.82rem;font-weight:600;color:#374151;margin-bottom:8px;">Vendor</h4>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Credit Note A/C</label>
+          <input type="text" id="s-ac-creditnote" placeholder="510-000" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Credit Note Description</label>
+          <input type="text" id="s-desc-creditnote" placeholder="RETURN" />
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Options</h3>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-customer" /> Transfer Customer Data
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-vendor" /> Transfer Vendor Data
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-cashsales" checked /> Transfer Cash Sales
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-cashpayment" /> Transfer Cash Sales Payment
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-invoice" checked /> Transfer Invoice
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-cn" /> Transfer Credit Note
+      </label>
+    </div>
+  </div>
+
   <!-- ΓöÇΓöÇ Log Tab ΓöÇΓöÇ -->
   <div id="tab-log" class="tab-panel">
     <div class="btn-row" style="margin-bottom:12px;">
@@ -215,10 +326,33 @@
 
 // ΓöÇΓöÇ Config ΓöÇΓöÇ
 var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
-var BACKEND_URL = 'http://localhost:3100';
 var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
 
+// ΓöÇΓöÇ Default Settings ΓöÇΓöÇ
+var defaultSettings = {
+  backendUrl: 'http://localhost:3100',
+  alayaCompany: 'qa3',
+  cashsalesMethod: 'itemize',
+  cashsalesPrefix: '',
+  acCashsales: '500-000',
+  acCashrounding: '500-000',
+  acCreditsales: '500-000',
+  acCreditrounding: '500-000',
+  acServicecharge: '500-000',
+  descCashsales: 'CASH SALES - BY ITEMIZED',
+  descCreditsales: 'INVOICE',
+  acCreditnote: '510-000',
+  descCreditnote: 'RETURN',
+  tCustomer: false,
+  tVendor: false,
+  tCashsales: true,
+  tCashpayment: false,
+  tInvoice: true,
+  tCn: false
+};
+
 // ΓöÇΓöÇ State ΓöÇΓöÇ
+var BACKEND_URL = defaultSettings.backendUrl;
 var hostOrigin = '';
 var apiUrl = '';
 var nonce = '';
@@ -228,6 +362,77 @@ var authToken = '';
 var companies = [];
 var alayaData = { customers: [], items: [], sales: [] };
 var pendingDcbCallbacks = {};
+var settings = {};
+
+// ΓöÇΓöÇ Load/Save Settings ΓöÇΓöÇ
+function loadSettings() {
+  try {
+    var saved = localStorage.getItem('alaya-to-sql-settings');
+    settings = saved ? JSON.parse(saved) : {};
+  } catch(e) { settings = {}; }
+  var s = $.extend({}, defaultSettings, settings);
+  $('#s-backend-url').val(s.backendUrl);
+  $('#s-alaya-company').val(s.alayaCompany);
+  $('#s-cashsales-method').val(s.cashsalesMethod);
+  $('#s-cashsales-prefix').val(s.cashsalesPrefix);
+  $('#s-ac-cashsales').val(s.acCashsales);
+  $('#s-ac-cashrounding').val(s.acCashrounding);
+  $('#s-ac-creditsales').val(s.acCreditsales);
+  $('#s-ac-creditrounding').val(s.acCreditrounding);
+  $('#s-ac-servicecharge').val(s.acServicecharge);
+  $('#s-desc-cashsales').val(s.descCashsales);
+  $('#s-desc-creditsales').val(s.descCreditsales);
+  $('#s-ac-creditnote').val(s.acCreditnote);
+  $('#s-desc-creditnote').val(s.descCreditnote);
+  $('#s-t-customer').prop('checked', s.tCustomer);
+  $('#s-t-vendor').prop('checked', s.tVendor);
+  $('#s-t-cashsales').prop('checked', s.tCashsales);
+  $('#s-t-cashpayment').prop('checked', s.tCashpayment);
+  $('#s-t-invoice').prop('checked', s.tInvoice);
+  $('#s-t-cn').prop('checked', s.tCn);
+  $('#t-customer').prop('checked', s.tCustomer);
+  $('#t-vendor').prop('checked', s.tVendor);
+  $('#t-cashsales').prop('checked', s.tCashsales);
+  $('#t-invoice').prop('checked', s.tInvoice);
+  $('#t-cn').prop('checked', s.tCn);
+  $('#t-payment').prop('checked', s.tCashpayment);
+  BACKEND_URL = s.backendUrl;
+}
+
+function saveSettings() {
+  settings = {
+    backendUrl: $('#s-backend-url').val() || defaultSettings.backendUrl,
+    alayaCompany: $('#s-alaya-company').val(),
+    cashsalesMethod: $('#s-cashsales-method').val(),
+    cashsalesPrefix: $('#s-cashsales-prefix').val(),
+    acCashsales: $('#s-ac-cashsales').val(),
+    acCashrounding: $('#s-ac-cashrounding').val(),
+    acCreditsales: $('#s-ac-creditsales').val(),
+    acCreditrounding: $('#s-ac-creditrounding').val(),
+    acServicecharge: $('#s-ac-servicecharge').val(),
+    descCashsales: $('#s-desc-cashsales').val(),
+    descCreditsales: $('#s-desc-creditsales').val(),
+    acCreditnote: $('#s-ac-creditnote').val(),
+    descCreditnote: $('#s-desc-creditnote').val(),
+    tCustomer: $('#s-t-customer').is(':checked'),
+    tVendor: $('#s-t-vendor').is(':checked'),
+    tCashsales: $('#s-t-cashsales').is(':checked'),
+    tCashpayment: $('#s-t-cashpayment').is(':checked'),
+    tInvoice: $('#s-t-invoice').is(':checked'),
+    tCn: $('#s-t-cn').is(':checked')
+  };
+  localStorage.setItem('alaya-to-sql-settings', JSON.stringify(settings));
+  BACKEND_URL = settings.backendUrl;
+  $('#t-customer').prop('checked', settings.tCustomer);
+  $('#t-vendor').prop('checked', settings.tVendor);
+  $('#t-cashsales').prop('checked', settings.tCashsales);
+  $('#t-invoice').prop('checked', settings.tInvoice);
+  $('#t-cn').prop('checked', settings.tCn);
+  $('#t-payment').prop('checked', settings.tCashpayment);
+  showToast('Settings saved');
+  addLog('Settings saved to localStorage', 'log-ok');
+  testBackendConnection();
+}
 
 // ΓöÇΓöÇ Logging ΓöÇΓöÇ
 function addLog(msg, cls) {
@@ -629,11 +834,17 @@ $('#btn-clear-log').on('click', function() {
   addLog('Log cleared', 'log-info');
 });
 
+// ΓöÇΓöÇ Save settings ΓöÇΓöÇ
+$('#btn-save-settings').on('click', function() {
+  saveSettings();
+});
+
 // ΓöÇΓöÇ Set default dates ΓöÇΓöÇ
 var today = new Date().toISOString().slice(0, 10);
 $('#from-date').val(today);
 $('#to-date').val(today);
 
+loadSettings();
 addLog('Plugin initialized - listening for ALAYA_INIT', 'log-info');
 </script>
 </body>
