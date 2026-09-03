@@ -988,7 +988,15 @@
         addLog('Loaded ' + companyPaymentTerms.length + ' company payment terms for company ' + companyID);
       }, function (xhr) { addLog('GetAllCompanyPaymentTerm failed (' + xhr.status + ') for company ' + companyID); })
     ).always(function () {
-      scopedPrereqsLoadedForCompany = companyID;
+      // Only cache successful loads - a failed/rate-limited load must retry on
+      // the next click instead of permanently caching empty arrays (which made
+      // every later Copy To Sales fail with the same "No Sales Branch" toast).
+      if (salesBranches.length && paymentModes.length) {
+        scopedPrereqsLoadedForCompany = companyID;
+      } else {
+        scopedPrereqsLoadedForCompany = null;
+      }
+      renderSalesBranchOptions();
       onDone();
     });
   }
@@ -1692,7 +1700,9 @@
      affects inventory/ledger) - not a sandboxed ZZT_ row. Requires explicit user
      confirmation every time; never fires automatically. */
   function copyToCashSales() {
-    var companyID = currentFilterCompanyID();
+    // Prefer the OPENED document's own company - the list filter can point at a
+    // different company than SR-000024-style old records actually belong to.
+    var companyID = (editingReport && editingReport.companyID) || currentFilterCompanyID();
     $('#btn-copy-to-sales').prop('disabled', true);
     loadCopyToSalesPrereqs(companyID, function () {
       $('#btn-copy-to-sales').prop('disabled', false);
@@ -1757,11 +1767,19 @@
     }).filter(Boolean);
     if (unresolvedItems.length) { showToast('These Item No(s) are not in the company item list: ' + unresolvedItems.join(', '), true); return; }
 
-    var companyID = currentFilterCompanyID();
+    var companyID = (editingReport && editingReport.companyID) || currentFilterCompanyID();
+    // Sync any branch picked in the header dropdown into editingReport first -
+    // openDetail() only rendered options, it never copied a pre-existing
+    // selection back for old records saved before branch became required.
+    var headerBranchID = $('#d-sales-branch').val();
+    if (headerBranchID && headerBranchID !== editingReport.salesBranchID) {
+      editingReport.salesBranchID = headerBranchID;
+    }
     var branchID = editingReport.salesBranchID;
     var branch = branchID ? salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0] : null;
     if (!branch) branch = salesBranches.filter(function (b) { return b.warehouseID; })[0];
-    if (!branch) { showToast('No Sales Branch loaded for this company yet - try again in a moment', true); return; }
+    if (!salesBranches.length) { showToast('Company ' + companyID + ' has no Sales Branch loaded (API returned 0 rows or load failed) - check Sales > Sales Branch master data, then click Copy To Sales again to retry', true); addLog('Copy To Sales blocked: salesBranches empty for company ' + companyID); return; }
+    if (!branch) { showToast('Please select a Sales Branch (with a default Warehouse) in Service Header first', true); addLog('Copy To Sales blocked: ' + salesBranches.length + ' branches loaded but none selected/matched (selected=' + (branchID || 'none') + ')'); $('#d-sales-branch').focus(); return; }
     dtl.forEach(function (d, idx) {
       var a = lines[idx];
       d.WarehouseID = String(editingReport.warehouseID || branch.warehouseID);
