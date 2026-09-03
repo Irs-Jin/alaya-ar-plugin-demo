@@ -268,6 +268,7 @@
         <label>&nbsp;</label>
         <div class="btn-row">
           <button id="btn-adv-reload" class="btn-secondary">Reload Data</button>
+          <button id="btn-adv-transfer" class="btn-primary">Transfer Ticked</button>
         </div>
       </div>
     </div>
@@ -1777,9 +1778,14 @@ function renderAdvGrid(docs, type, key) {
   window._advGrid = { key: key, type: type, docs: docs || [] };
   var box = $('#adv-doc-grid').empty();
   if (!docs || !docs.length) {
-    box.html('<p style="color:#6b7280;font-size:0.85rem;">No ' + escHtml(type) + ' documents found for the selected dates.</p>');
+    var parts = String(key || '').split('|');
+    var ctx = parts.length === 4 ? ' (company ' + parts[0] + ', ' + parts[1] + ' ~ ' + parts[2] + ')' : '';
+    box.html('<p style="color:#6b7280;font-size:0.85rem;">No ' + escHtml(type) + ' documents found for the selected dates' + escHtml(ctx) +
+             '.<br>Try a wider date range or another doc type, and check the Log tab for API errors.</p>');
     return;
   }
+  // Fresh rows default to ticked (matches transfer logic: _ticked !== false counts as selected)
+  (docs || []).forEach(function(d) { if (d._ticked === undefined) d._ticked = true; });
   var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice');
   var html = '<div style="font-size:0.82rem;color:#374151;margin-bottom:8px;"><b>' + docs.length +
              '</b> ' + escHtml(type) + ' docs (ticked = transfer) | <a href="#" id="adv-tick-all">tick all</a> / <a href="#" id="adv-untick-all">untick all</a></div>';
@@ -1840,6 +1846,17 @@ function loadAdvDocs() {
 // ΓöÇΓöÇ Advanced Reload (Preview tab) ΓöÇΓöÇ
 $('#btn-adv-reload').on('click', function() {
   loadAdvDocs();
+});
+// Transfer the ticked Advanced grid rows (reuses the main Transfer flow;
+// fetchAllSourceDocs picks up ticked rows when company+dates+type match)
+$('#btn-adv-transfer').on('click', function() {
+  var g = window._advGrid;
+  if (!g || !g.docs || !g.docs.length) { showToast('Reload Data first - no documents loaded', true); return; }
+  var ticked = g.docs.filter(function(d) { return d._ticked !== false; });
+  if (!ticked.length) { showToast('Tick at least one row to transfer', true); return; }
+  addLog('Advanced transfer: ' + ticked.length + '/' + g.docs.length + ' ticked ' + g.type + ' docs', 'log-ok');
+  $('.tab-btn[data-tab="transfer"]').trigger('click');
+  $('#btn-transfer').trigger('click');
 });
 $('input[name="adv-type"]').on('change', function() {
   settings.advType = $(this).val();
