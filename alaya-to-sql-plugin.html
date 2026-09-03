@@ -951,11 +951,15 @@ function loadCompaniesFromApi() {
         var id = c.CO_ID, code = String(c.CO_Code || '').trim();
         sel.append('<option value="' + id + '">' + escHtml(code) + ' - ' + escHtml(c.CO_Name || '') + '</option>');
       });
+      var hadSaved = !!((settings && settings.alayaCompanyId));
       var picked = pickDefaultCompany(data);
       if (picked) {
         sel.val(String(picked));
         settings.alayaCompanyId = picked;
         addLog('Default company auto-selected: ' + sel.find('option:selected').text(), 'log-ok');
+        if (!hadSaved && data.length && String(picked) === String(data[0].CO_ID)) {
+          probeDefaultCompanyByStaff(picked);
+        }
       }
       loadSqlCompanies();
     },
@@ -964,6 +968,58 @@ function loadCompaniesFromApi() {
       showCompanyRetry('HTTP ' + r.status);
     }
   });
+}
+
+// Default-company oracle probe: find this login's default company via Staff table.
+// Bridge returns rows without column names, so single-column SELECTs give clean values.
+// Runs in background only when no saved/API/JWT default resolved. All steps logged.
+function probeDefaultCompanyByStaff(pickedId) {
+  if (!hostOrigin || !username) { addLog('Staff probe skipped (no host/username)', 'log-info'); return; }
+  var user = String(username).replace(/'/g, "''");
+  var linkCols = ['ST_Code', 'ST_UserID', 'ST_LoginID', 'ST_Username'];
+  var compCols = ['ST_DefaultCompanyID', 'ST_DefaultCompany', 'ST_CompanyID'];
+  addLog('Probing Staff table for ' + username + ' default company...', 'log-info');
+  function tryLink(i) {
+    if (i >= linkCols.length) { addLog('Staff probe: no login-link column matched', 'log-warn'); return; }
+    var col = linkCols[i];
+    executeSqlViaHost("SELECT COUNT(*) AS C FROM Staff WHERE " + col + " = '" + user + "'").then(function(msg) {
+      if (msg.error) throw new Error(msg.error);
+      var n = 0;
+      try {
+        var r = JSON.parse(msg.result);
+        n = (r.results && r.results[0] && r.results[0].rows && r.results[0].rows[0]) ? r.results[0].rows[0][0] : 0;
+      } catch(e) { throw e; }
+      if (!n) { tryLink(i + 1); return; }
+      addLog('Staff probe: linked via ' + col, 'log-ok');
+      tryComp(col, 0);
+    }).catch(function(err) {
+      addLog('Staff probe ' + col + ': ' + String(err.message || err).slice(0, 120), 'log-info');
+      tryLink(i + 1);
+    });
+  }
+  function tryComp(linkCol, j) {
+    if (j >= compCols.length) { addLog('Staff probe: no company column yielded an ID', 'log-warn'); return; }
+    var cc = compCols[j];
+    executeSqlViaHost("SELECT " + cc + " FROM Staff WHERE " + linkCol + " = '" + user + "'").then(function(msg) {
+      if (msg.error) throw new Error(msg.error);
+      var id = 0;
+      try {
+        var r = JSON.parse(msg.result);
+        id = (r.results && r.results[0] && r.results[0].rows && r.results[0].rows[0]) ? parseInt(r.results[0].rows[0][0], 10) : 0;
+      } catch(e) { throw e; }
+      if (!id || !$('#alaya-company-select option[value="' + id + '"]').length) { tryComp(linkCol, j + 1); return; }
+      $('#alaya-company-select').val(String(id));
+      settings.alayaCompanyId = id;
+      settings.alayaCompany = currentAlayaCompanyCode();
+      addLog('Default company auto-selected from Staff: ' + $('#alaya-company-select option:selected').text(), 'log-ok');
+      showToast('Company set to your default');
+      try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
+    }).catch(function(err) {
+      addLog('Staff probe ' + cc + ': ' + String(err.message || err).slice(0, 120), 'log-info');
+      tryComp(linkCol, j + 1);
+    });
+  }
+  tryLink(0);
 }
 
 function showCompanyRetry(msg) {
