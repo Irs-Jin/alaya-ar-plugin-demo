@@ -2312,11 +2312,13 @@
       editingReport.createdBy = username || '';
       reports.push(editingReport);
       editingCode = editingReport.code;
+      // Was "New Service Report" until now - reflect the assigned Doc No and
+      // reveal Delete, without leaving the detail screen (stays open post-save).
+      $('#detail-title').text('Service Report ' + editingReport.code);
+      $('#d-docno').val(editingReport.code);
+      $('#btn-delete-report').toggle(canDelete);
     }
     markDirty('save ' + editingReport.code);
-    $('#view-detail').hide();
-    $('#view-list').show();
-    renderList();
     doSaveReportsToDb();
   }
 
