@@ -1929,7 +1929,9 @@
       var compId = currentFilterCompanyID();
       var branchID = editingReport.salesBranchID;
       var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
-      var whID = branch ? branch.warehouseID : 0;
+      var whID = editingReport.warehouseID || (branch ? branch.warehouseID : 0);
+      var whForBins = warehouses.filter(function (w) { return w.id === whID; })[0];
+      var binsForLookup = whForBins ? (whForBins.bins || []) : [];
       var sql = "SELECT TOP 20 IB_BatchNo, IB_Qty, IB_ExpiryDate, IB_BinLocationID FROM ItemBatch WHERE IB_ItemID=" + parseInt(itemRec.id,10) + " AND IB_CompanyID=" + compId + (whID ? " AND IB_WarehouseID=" + parseInt(whID,10) : "") + " AND IB_Qty>0 ORDER BY IB_ExpiryDate";
       qrySql(sql, 20).then(function (resp) {
         var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
@@ -1937,6 +1939,8 @@
         rows.forEach(function (r) {
           var batchNo = r[0], qtyAvail = r[1], exp = r[2];
           var expStr = exp ? new Date(exp).toLocaleDateString('en-MY') : '-';
+          var binLoc = binsForLookup.filter(function (bl) { return bl.id === r[3]; })[0];
+          var binText = binLoc ? (binLoc.code + ' - ' + binLoc.name) : (r[3] || '-');
           var $check = $('<input type="checkbox" class="batch-row-check">');
           var $qtyInput = $('<input type="number" min="0" step="1" class="batch-row-qty" style="width:70px;">')
             .attr('max', qtyAvail).val('').prop('disabled', true);
@@ -1946,7 +1950,7 @@
             .append($('<td>').text(qtyAvail))
             .append($('<td>').append($qtyInput))
             .append($('<td>').text(expStr))
-            .append($('<td>').text(r[3] || ''));
+            .append($('<td>').text(binText));
           function recalcTotal() {
             var sum = 0;
             $('#batch-tbody .batch-row-check:checked').each(function () {
