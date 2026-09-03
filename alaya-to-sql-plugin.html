@@ -143,16 +143,36 @@
 
     <div class="form-row">
       <div class="form-group">
+        <label>Alaya Company</label>
+        <select id="alaya-company-select">
+          <option value="">Loading companies...</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>SQL Account Company</label>
         <select id="sql-company">
           <option value="">Loading companies...</option>
         </select>
       </div>
+    </div>
+
+    <div class="form-row">
       <div class="form-group">
         <label>Transfer Method</label>
         <select id="transfer-method">
           <option value="itemize">By Item</option>
           <option value="summary">Summary</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Doc Type (for Preview / Advanced)</label>
+        <select id="adv-doc-type">
+          <option value="CASH SALES">CASH SALES</option>
+          <option value="INVOICE">INVOICE</option>
+          <option value="CREDIT NOTE">CREDIT NOTE</option>
+          <option value="PAYMENT">PAYMENT</option>
+          <option value="CASH PURCHASES">CASH PURCHASES</option>
+          <option value="VENDOR INVOICE">VENDOR INVOICE</option>
         </select>
       </div>
     </div>
@@ -177,6 +197,12 @@
       <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
         <input type="checkbox" id="t-payment" /> Transfer Payment
       </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-cashpurch" /> Transfer Cash Purchases
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-vendorinv" /> Transfer Vendor Invoice
+      </label>
     </div>
 
     <div class="btn-row">
@@ -197,11 +223,31 @@
     </div>
   </div>
 
-  <!-- ΓöÇΓöÇ Preview Tab ΓöÇΓöÇ -->
+  <!-- ΓöÇΓöÇ Preview Tab (Advanced) ΓöÇΓöÇ -->
   <div id="tab-preview" class="tab-panel">
-    <h2>Alaya Data Preview</h2>
+    <h2>Alaya Data Preview (Advanced)</h2>
+    <div class="form-row" style="align-items:flex-end;">
+      <div class="form-group">
+        <label>Party Type</label>
+        <div style="display:flex;gap:16px;font-size:0.85rem;padding:8px 0;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="adv-type" value="customer" checked /> Customer
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="adv-type" value="vendor" /> Vendor
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <div class="btn-row">
+          <button id="btn-adv-reload" class="btn-secondary">Reload Data</button>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:0.75rem;color:#6b7280;margin-bottom:10px;">Doc type follows the "Doc Type (for Preview / Advanced)" selection on the Transfer tab.</div>
     <div id="preview-content" style="max-height:400px;overflow-y:auto;">
-      <p style="color:#6b7280;font-size:0.85rem;">Click "Load Alaya Data" to preview data from Alaya.</p>
+      <p style="color:#6b7280;font-size:0.85rem;">Click "Load Alaya Data" or "Reload Data" to preview data from Alaya.</p>
     </div>
   </div>
 
@@ -275,12 +321,28 @@
       <div style="flex:1;">
         <h4 style="font-size:0.82rem;font-weight:600;color:#374151;margin-bottom:8px;">Vendor</h4>
         <div class="form-group" style="margin-bottom:8px;">
-          <label>Credit Note A/C</label>
-          <input type="text" id="s-ac-creditnote" placeholder="510-000" />
+          <label>Purchase A/C</label>
+          <input type="text" id="s-ac-purchase" placeholder="610-000" />
         </div>
         <div class="form-group" style="margin-bottom:8px;">
-          <label>Credit Note Description</label>
-          <input type="text" id="s-desc-creditnote" placeholder="RETURN" />
+          <label>Purchase Rounding A/C</label>
+          <input type="text" id="s-ac-purchrounding" placeholder="610-000" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Purchase Description (Max 70 Char.)</label>
+          <input type="text" id="s-desc-purchase" placeholder="INVOICE - BY ITEMIZE" maxlength="70" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Purchase Project Code</label>
+          <input type="text" id="s-proj-purchase" placeholder="Purchase Organization" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Credit Note A/C</label>
+          <input type="text" id="s-ac-creditnote" placeholder="612-000" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Credit Note Description (Max 150 Char.)</label>
+          <input type="text" id="s-desc-creditnote" placeholder="RETURN" maxlength="150" />
         </div>
       </div>
     </div>
@@ -305,6 +367,73 @@
       <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
         <input type="checkbox" id="s-t-cn" /> Transfer Credit Note
       </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-cashpurch" /> Transfer Cash Purchases
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-cashpurchpay" /> Transfer Cash Purchases Payment
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-t-vendorinv" /> Transfer Vendor Invoice
+      </label>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Payment Mode Mapping</h3>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <button id="btn-refresh-paymodes" class="btn-secondary">Refresh Alaya Payment Mode</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="s-pm-bybranch" /> Payment Mode by Sales Branch
+      </label>
+      <span style="font-size:0.75rem;color:#6b7280;">Map each Alaya payment mode to its Control Account in SQL Acct</span>
+    </div>
+    <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead><tr style="background:#f9fafb;position:sticky;top:0;">
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Payment Mode in Alaya</th>
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Control Account in SQL Acct</th>
+        </tr></thead>
+        <tbody id="paymode-tbody">
+          <tr><td colspan="2" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Payment Mode" to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Sales Branch Mapping</h3>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <button id="btn-refresh-branches" class="btn-secondary">Refresh Alaya Sales Branch Code</button>
+      <span style="font-size:0.75rem;color:#6b7280;">Per-branch Cash Sales A/C, Acct Code, and Item-Group A/C flag</span>
+    </div>
+    <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead><tr style="background:#f9fafb;position:sticky;top:0;">
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Sales Branch Code in Alaya</th>
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Cash Sales A/C in SQL Acct</th>
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Acct Code in SQL Acct</th>
+          <th style="padding:8px;text-align:center;border-bottom:2px solid #e5e7eb;">Item Group A/C in Alaya</th>
+        </tr></thead>
+        <tbody id="branch-tbody">
+          <tr><td colspan="4" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Sales Branch Code" to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Purchase Division Mapping</h3>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <button id="btn-refresh-divisions" class="btn-secondary">Refresh Alaya Purchase Division Code</button>
+      <button id="btn-add-division" class="btn-secondary">+ Add Row</button>
+      <span style="font-size:0.75rem;color:#6b7280;">Tick = use Purchase A/C Code (Item Group) in Alaya</span>
+    </div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead><tr style="background:#f9fafb;position:sticky;top:0;">
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Purchase Division in Alaya</th>
+          <th style="padding:8px;text-align:center;border-bottom:2px solid #e5e7eb;">Item Group A/C in Alaya</th>
+          <th style="padding:8px;width:60px;border-bottom:2px solid #e5e7eb;"></th>
+        </tr></thead>
+        <tbody id="division-tbody">
+          <tr><td colspan="3" style="padding:10px;color:#6b7280;">No divisions yet. Refresh or add manually.</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -332,6 +461,7 @@ var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQue
 var defaultSettings = {
   backendUrl: 'http://localhost:3100',
   alayaCompany: 'qa3',
+  alayaCompanyId: 0,
   cashsalesMethod: 'itemize',
   cashsalesPrefix: '',
   acCashsales: '500-000',
@@ -341,14 +471,27 @@ var defaultSettings = {
   acServicecharge: '500-000',
   descCashsales: 'CASH SALES - BY ITEMIZED',
   descCreditsales: 'INVOICE',
-  acCreditnote: '510-000',
+  acPurchase: '610-000',
+  acPurchRounding: '610-000',
+  descPurchase: 'INVOICE - BY ITEMIZE',
+  projPurchase: 'Purchase Organization',
+  acCreditnote: '612-000',
   descCreditnote: 'RETURN',
   tCustomer: false,
   tVendor: false,
   tCashsales: true,
   tCashpayment: false,
   tInvoice: true,
-  tCn: false
+  tCn: false,
+  tCashpurch: false,
+  tCashpurchpay: false,
+  tVendorinv: false,
+  pmByBranch: false,
+  paymodes: [],
+  branches: [],
+  divisions: [],
+  advType: 'customer',
+  advDoc: 'CASH SALES'
 };
 
 // ΓöÇΓöÇ State ΓöÇΓöÇ
@@ -360,34 +503,136 @@ var clientId = '';
 var username = '';
 var authToken = '';
 var companies = [];
-var alayaData = { customers: [], items: [], sales: [] };
+var alayaData = { customers: [], vendors: [], items: [], sales: [] };
 var pendingDcbCallbacks = {};
 var SETTINGS_TABLE = 'ZZT_ALAYATOSQL';
+var LOCAL_BACKUP_KEY = 'alaya-to-sql-settings-v2';
 var settings = {};
 
-// ΓöÇΓöÇ Load/Save Settings (UDF table) ΓöÇΓöÇ
-function loadSettings() {
-  var sql = "SELECT ZZC_Description FROM " + SETTINGS_TABLE + " WHERE ZZC_Code = 'SETTINGS'";
-  executeSqlViaHost(sql).then(function(msg) {
+// Short-key packing keeps every UDF row far below the NVARCHAR(400) limit
+function packRows(s) {
+  var rows = [];
+  function B(v) { return v ? 1 : 0; }
+  rows.push(['GENERAL', JSON.stringify({
+    bu: s.backendUrl, ac: s.alayaCompany, aid: s.alayaCompanyId,
+    cm: s.cashsalesMethod, cp: s.cashsalesPrefix,
+    pb: B(s.pmByBranch), at: s.advType, ad: s.advDoc
+  })]);
+  rows.push(['CUSTOMER', JSON.stringify({
+    cs: s.acCashsales, cr: s.acCashrounding, is: s.acCreditsales,
+    ir: s.acCreditrounding, sc: s.acServicecharge,
+    dc: s.descCashsales, di: s.descCreditsales
+  })]);
+  rows.push(['VENDOR', JSON.stringify({
+    p: s.acPurchase, pr: s.acPurchRounding, dp: s.descPurchase,
+    pj: s.projPurchase, cn: s.acCreditnote, dc: s.descCreditnote
+  })]);
+  rows.push(['OPTS', JSON.stringify({
+    c: B(s.tCustomer), v: B(s.tVendor), cs: B(s.tCashsales),
+    cp: B(s.tCashpayment), i: B(s.tInvoice), n: B(s.tCn),
+    cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv)
+  })]);
+  (s.paymodes || []).forEach(function(pm) {
+    if (pm && pm.code) rows.push(['PM_' + pm.code, String(pm.acct || '')]);
+  });
+  (s.branches || []).forEach(function(b) {
+    if (b && b.code) rows.push(['BR_' + b.code, JSON.stringify({ c: b.cashAcct || '', a: b.acct || '', ig: B(b.itemGroup) })]);
+  });
+  (s.divisions || []).forEach(function(d) {
+    if (d && d.code) rows.push(['DV_' + d.code, B(d.itemGroup) ? '1' : '0']);
+  });
+  return rows;
+}
+
+function unpackRows(rowArr) {
+  var s = {};
+  function flag(v) { return v === 1 || v === '1' || v === true; }
+  rowArr.forEach(function(r) {
+    var code = r[0], val = r[1] || '';
     try {
-      var result = JSON.parse(msg.result);
-      if (result.success && result.results && result.results[0] && result.results[0].rows && result.results[0].rows[0]) {
-        settings = JSON.parse(result.results[0].rows[0][0]);
-        addLog('Settings loaded from UDF table', 'log-ok');
-      } else {
-        settings = {};
-        addLog('No saved settings found, using defaults', 'log-info');
+      if (code === 'GENERAL') {
+        var g = JSON.parse(val);
+        s.backendUrl = g.bu; s.alayaCompany = g.ac; s.alayaCompanyId = g.aid;
+        s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp;
+        s.pmByBranch = flag(g.pb); s.advType = g.at; s.advDoc = g.ad;
+      } else if (code === 'CUSTOMER') {
+        var c = JSON.parse(val);
+        s.acCashsales = c.cs; s.acCashrounding = c.cr; s.acCreditsales = c.is;
+        s.acCreditrounding = c.ir; s.acServicecharge = c.sc;
+        s.descCashsales = c.dc; s.descCreditsales = c.di;
+      } else if (code === 'VENDOR') {
+        var v = JSON.parse(val);
+        s.acPurchase = v.p; s.acPurchRounding = v.pr; s.descPurchase = v.dp;
+        s.projPurchase = v.pj; s.acCreditnote = v.cn; s.descCreditnote = v.dc;
+      } else if (code === 'OPTS') {
+        var o = JSON.parse(val);
+        s.tCustomer = flag(o.c); s.tVendor = flag(o.v); s.tCashsales = flag(o.cs);
+        s.tCashpayment = flag(o.cp); s.tInvoice = flag(o.i); s.tCn = flag(o.n);
+        s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi);
+      } else if (code.indexOf('PM_') === 0) {
+        s.paymodes = s.paymodes || [];
+        s.paymodes.push({ code: code.slice(3), acct: val });
+      } else if (code.indexOf('BR_') === 0) {
+        var b = JSON.parse(val);
+        s.branches = s.branches || [];
+        s.branches.push({ code: code.slice(3), cashAcct: b.c, acct: b.a, itemGroup: flag(b.ig) });
+      } else if (code.indexOf('DV_') === 0) {
+        s.divisions = s.divisions || [];
+        s.divisions.push({ code: code.slice(3), itemGroup: (val === '1') });
       }
-    } catch(e) {
+    } catch(e) { /* skip bad row */ }
+  });
+  return s;
+}
+
+// ΓöÇΓöÇ Load/Save Settings (UDF table, localStorage backup) ΓöÇΓöÇ
+function loadSettings() {
+  var sql = "SELECT ZZC_Code, ZZC_Description FROM " + SETTINGS_TABLE;
+  executeSqlViaHost(sql).then(function(msg) {
+    if (msg.error) throw new Error(msg.error);
+    var result = JSON.parse(msg.result);
+    var rows = (result.success && result.results && result.results[0] && result.results[0].rows) ? result.results[0].rows : [];
+    if (!rows.length) {
+      addLog('No saved settings in UDF table, using defaults', 'log-info');
       settings = {};
-      addLog('Parse settings error: ' + e.message, 'log-warn');
+    } else {
+      settings = unpackRows(rows);
+      addLog('Settings loaded from UDF table (' + rows.length + ' rows)', 'log-ok');
     }
     applySettings();
   }).catch(function(err) {
-    addLog('Load settings from UDF failed: ' + err.message + ', using defaults', 'log-warn');
-    settings = {};
+    addLog('UDF load failed (' + err.message + ') - trying local backup', 'log-warn');
+    try {
+      var saved = localStorage.getItem(LOCAL_BACKUP_KEY);
+      settings = saved ? JSON.parse(saved) : {};
+      if (saved) addLog('Settings loaded from local backup', 'log-info');
+    } catch(e) { settings = {}; }
     applySettings();
   });
+}
+
+function collectMappingsFromUI() {
+  var paymodes = [];
+  $('#paymode-tbody tr').each(function() {
+    var code = $(this).data('pm-code');
+    if (code) paymodes.push({ code: code, acct: $(this).find('.pm-acct').val() || '' });
+  });
+  var branches = [];
+  $('#branch-tbody tr').each(function() {
+    var code = $(this).data('br-code');
+    if (code) branches.push({
+      code: code,
+      cashAcct: $(this).find('.br-cash').val() || '',
+      acct: $(this).find('.br-acct').val() || '',
+      itemGroup: $(this).find('.br-ig').is(':checked')
+    });
+  });
+  var divisions = [];
+  $('#division-tbody tr').each(function() {
+    var code = $(this).find('.dv-code').val() || '';
+    if ($.trim(code)) divisions.push({ code: $.trim(code), itemGroup: $(this).find('.dv-ig').is(':checked') });
+  });
+  return { paymodes: paymodes, branches: branches, divisions: divisions };
 }
 
 function applySettings() {
@@ -403,27 +648,45 @@ function applySettings() {
   $('#s-ac-servicecharge').val(s.acServicecharge);
   $('#s-desc-cashsales').val(s.descCashsales);
   $('#s-desc-creditsales').val(s.descCreditsales);
+  $('#s-ac-purchase').val(s.acPurchase);
+  $('#s-ac-purchrounding').val(s.acPurchRounding);
+  $('#s-desc-purchase').val(s.descPurchase);
+  $('#s-proj-purchase').val(s.projPurchase);
   $('#s-ac-creditnote').val(s.acCreditnote);
   $('#s-desc-creditnote').val(s.descCreditnote);
+  $('#s-pm-bybranch').prop('checked', s.pmByBranch);
   $('#s-t-customer').prop('checked', s.tCustomer);
   $('#s-t-vendor').prop('checked', s.tVendor);
   $('#s-t-cashsales').prop('checked', s.tCashsales);
   $('#s-t-cashpayment').prop('checked', s.tCashpayment);
   $('#s-t-invoice').prop('checked', s.tInvoice);
   $('#s-t-cn').prop('checked', s.tCn);
+  $('#s-t-cashpurch').prop('checked', s.tCashpurch);
+  $('#s-t-cashpurchpay').prop('checked', s.tCashpurchpay);
+  $('#s-t-vendorinv').prop('checked', s.tVendorinv);
   $('#t-customer').prop('checked', s.tCustomer);
   $('#t-vendor').prop('checked', s.tVendor);
   $('#t-cashsales').prop('checked', s.tCashsales);
   $('#t-invoice').prop('checked', s.tInvoice);
   $('#t-cn').prop('checked', s.tCn);
   $('#t-payment').prop('checked', s.tCashpayment);
+  $('#t-cashpurch').prop('checked', s.tCashpurch);
+  $('#t-vendorinv').prop('checked', s.tVendorinv);
+  $('input[name="adv-type"][value="' + (s.advType || 'customer') + '"]').prop('checked', true);
+  $('#adv-doc-type').val(s.advDoc || 'CASH SALES');
+  if (s.alayaCompanyId) $('#alaya-company-select').val(String(s.alayaCompanyId));
   BACKEND_URL = s.backendUrl;
+  renderPaymodeTable(s.paymodes || []);
+  renderBranchTable(s.branches || []);
+  renderDivisionTable(s.divisions || []);
 }
 
 function saveSettings() {
+  var maps = collectMappingsFromUI();
   settings = {
     backendUrl: $('#s-backend-url').val() || defaultSettings.backendUrl,
     alayaCompany: $('#s-alaya-company').val(),
+    alayaCompanyId: parseInt($('#alaya-company-select').val(), 10) || 0,
     cashsalesMethod: $('#s-cashsales-method').val(),
     cashsalesPrefix: $('#s-cashsales-prefix').val(),
     acCashsales: $('#s-ac-cashsales').val(),
@@ -433,14 +696,27 @@ function saveSettings() {
     acServicecharge: $('#s-ac-servicecharge').val(),
     descCashsales: $('#s-desc-cashsales').val(),
     descCreditsales: $('#s-desc-creditsales').val(),
+    acPurchase: $('#s-ac-purchase').val(),
+    acPurchRounding: $('#s-ac-purchrounding').val(),
+    descPurchase: $('#s-desc-purchase').val(),
+    projPurchase: $('#s-proj-purchase').val(),
     acCreditnote: $('#s-ac-creditnote').val(),
     descCreditnote: $('#s-desc-creditnote').val(),
+    pmByBranch: $('#s-pm-bybranch').is(':checked'),
     tCustomer: $('#s-t-customer').is(':checked'),
     tVendor: $('#s-t-vendor').is(':checked'),
     tCashsales: $('#s-t-cashsales').is(':checked'),
     tCashpayment: $('#s-t-cashpayment').is(':checked'),
     tInvoice: $('#s-t-invoice').is(':checked'),
-    tCn: $('#s-t-cn').is(':checked')
+    tCn: $('#s-t-cn').is(':checked'),
+    tCashpurch: $('#s-t-cashpurch').is(':checked'),
+    tCashpurchpay: $('#s-t-cashpurchpay').is(':checked'),
+    tVendorinv: $('#s-t-vendorinv').is(':checked'),
+    paymodes: maps.paymodes,
+    branches: maps.branches,
+    divisions: maps.divisions,
+    advType: $('input[name="adv-type"]:checked').val() || 'customer',
+    advDoc: $('#adv-doc-type').val() || 'CASH SALES'
   };
   BACKEND_URL = settings.backendUrl;
   $('#t-customer').prop('checked', settings.tCustomer);
@@ -449,29 +725,35 @@ function saveSettings() {
   $('#t-invoice').prop('checked', settings.tInvoice);
   $('#t-cn').prop('checked', settings.tCn);
   $('#t-payment').prop('checked', settings.tCashpayment);
+  $('#t-cashpurch').prop('checked', settings.tCashpurch);
+  $('#t-vendorinv').prop('checked', settings.tVendorinv);
+
+  // Always keep a local backup
+  try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
 
   var now = new Date();
-  var dateStr = now.getFullYear() + '-' + ('0'+(now.getMonth()+1)).slice(-2) + '-' + ('0'+now.getDate()).slice(-2) + ' ' + ('0'+now.getHours()).slice(-2) + ':' + ('0'+now.getMinutes()).slice(-2) + ':' + ('0'+now.getSeconds()).slice(-2);
-  var jsonSafe = JSON.stringify(settings).replace(/'/g, "''");
-
-  var sqlCheck = "SELECT COUNT(*) AS CNT FROM " + SETTINGS_TABLE + " WHERE ZZC_Code = 'SETTINGS'";
-  executeSqlViaHost(sqlCheck).then(function(msg) {
-    var result = JSON.parse(msg.result);
-    var count = (result.results && result.results[0] && result.results[0].rows) ? result.results[0].rows[0][0] : 0;
-    var sql;
-    if (count > 0) {
-      sql = "UPDATE " + SETTINGS_TABLE + " SET ZZC_Description = '" + jsonSafe + "', ZZC_DateModified = '" + dateStr + "' WHERE ZZC_Code = 'SETTINGS'";
-    } else {
-      sql = "INSERT INTO " + SETTINGS_TABLE + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified) VALUES ('SETTINGS', '" + jsonSafe + "', '" + dateStr + "', '" + dateStr + "')";
+  function p2(n) { return (n < 10 ? '0' : '') + n; }
+  var dateStr = now.getFullYear() + '-' + p2(now.getMonth()+1) + '-' + p2(now.getDate()) + ' ' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + ':' + p2(now.getSeconds());
+  var rows = packRows(settings);
+  var stmts = ['DELETE FROM ' + SETTINGS_TABLE + ';'];
+  rows.forEach(function(r) {
+    var codeSafe = String(r[0]).replace(/'/g, "''");
+    var valSafe = String(r[1]).replace(/'/g, "''");
+    if (valSafe.length > 390) {
+      addLog('Row ' + r[0] + ' too long (' + valSafe.length + ' chars) - skipped to protect NVARCHAR(400)', 'log-err');
+      return;
     }
-    return executeSqlViaHost(sql);
-  }).then(function() {
-    showToast('Settings saved to Alaya DB');
-    addLog('Settings saved to UDF table', 'log-ok');
+    stmts.push("INSERT INTO " + SETTINGS_TABLE + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified) VALUES ('" + codeSafe + "', '" + valSafe + "', '" + dateStr + "', '" + dateStr + "');");
+  });
+
+  executeSqlViaHost(stmts.join('')).then(function(msg) {
+    if (msg.error) throw new Error(msg.error);
+    showToast('Settings saved (' + rows.length + ' rows to Alaya DB)');
+    addLog('Settings saved to UDF table (' + rows.length + ' rows) + local backup', 'log-ok');
     testBackendConnection();
   }).catch(function(err) {
-    showToast('Save failed: ' + err.message, true);
-    addLog('Save settings to UDF failed: ' + err.message, 'log-err');
+    showToast('UDF save failed, kept local backup: ' + err.message, true);
+    addLog('Save to UDF failed (' + err.message + '). Local backup kept. To enable server storage, create a UDF module with code ALAYATOSQL in Module Editor.', 'log-err');
   });
 }
 
@@ -586,6 +868,15 @@ function loadCompaniesFromApi() {
       var data = (resp && resp.data) || [];
       companies = data;
       addLog('Loaded ' + data.length + ' companies from Alaya', 'log-ok');
+      var sel = $('#alaya-company-select');
+      sel.empty();
+      if (!data.length) sel.append('<option value="">No companies found</option>');
+      data.forEach(function(c) {
+        var id = c.CO_ID, code = String(c.CO_Code || '').trim();
+        sel.append('<option value="' + id + '">' + escHtml(code) + ' - ' + escHtml(c.CO_Name || '') + '</option>');
+      });
+      var savedId = (settings && settings.alayaCompanyId) || defaultSettings.alayaCompanyId;
+      if (savedId && sel.find('option[value="' + savedId + '"]').length) sel.val(String(savedId));
       loadSqlCompanies();
     },
     error: function (r) {
@@ -633,6 +924,154 @@ function testBackendConnection() {
     }
   });
 }
+
+// ΓöÇΓöÇ Company selector ΓöÇΓöÇ
+function currentAlayaCompanyID() {
+  return parseInt($('#alaya-company-select').val(), 10) || settings.alayaCompanyId || defaultSettings.alayaCompanyId || 0;
+}
+$('#alaya-company-select').on('change', function() {
+  var id = parseInt($(this).val(), 10) || 0;
+  var txt = $(this).find('option:selected').text();
+  settings.alayaCompanyId = id;
+  addLog('Alaya company selected: ' + txt + ' (ID ' + id + ') - click Refresh buttons to reload mappings', 'log-info');
+});
+
+// ΓöÇΓöÇ Mapping tables render ΓöÇΓöÇ
+function renderPaymodeTable(list) {
+  var tb = $('#paymode-tbody').empty();
+  if (!list.length) { tb.append('<tr><td colspan="2" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Payment Mode" to load.</td></tr>'); return; }
+  list.forEach(function(pm) {
+    var tr = $('<tr>').attr('data-pm-code', pm.code);
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').text(pm.code));
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
+      $('<input type="text" class="pm-acct" placeholder="e.g. 310-000">').val(pm.acct || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+    ));
+    tb.append(tr);
+  });
+}
+
+function renderBranchTable(list) {
+  var tb = $('#branch-tbody').empty();
+  if (!list.length) { tb.append('<tr><td colspan="4" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Sales Branch Code" to load.</td></tr>'); return; }
+  list.forEach(function(b) {
+    var tr = $('<tr>').attr('data-br-code', b.code);
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').text(b.code));
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
+      $('<input type="text" class="br-cash" placeholder="Cash Sales A/C">').val(b.cashAcct || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+    ));
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
+      $('<input type="text" class="br-acct" placeholder="Acct Code">').val(b.acct || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+    ));
+    var cb = $('<input type="checkbox" class="br-ig">').prop('checked', !!b.itemGroup);
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(cb));
+    tb.append(tr);
+  });
+}
+
+function renderDivisionTable(list) {
+  var tb = $('#division-tbody').empty();
+  if (!list.length) { tb.append('<tr class="dv-empty"><td colspan="3" style="padding:10px;color:#6b7280;">No divisions yet. Refresh or add manually.</td></tr>'); }
+  list.forEach(function(d) { appendDivisionRow(d.code, d.itemGroup); });
+}
+
+function appendDivisionRow(code, itemGroup) {
+  $('#division-tbody .dv-empty').remove();
+  var tr = $('<tr>');
+  tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
+    $('<input type="text" class="dv-code" placeholder="Division code">').val(code || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+  ));
+  tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(
+    $('<input type="checkbox" class="dv-ig">').prop('checked', !!itemGroup)
+  ));
+  var del = $('<button class="btn-secondary" style="padding:4px 10px;">Del</button>').on('click', function() { tr.remove(); });
+  tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(del));
+  $('#division-tbody').append(tr);
+}
+
+// ΓöÇΓöÇ Refresh mappings from Alaya API ΓöÇΓöÇ
+$('#btn-refresh-paymodes').on('click', function() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  var btn = $(this).prop('disabled', true).text('Loading...');
+  addLog('POST api/PaymentMode/GetAllPaymentMode (company ' + cid + ')');
+  $.ajax({
+    url: apiUrl + 'api/PaymentMode/GetAllPaymentMode', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: cid, MaxID: 0 }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      var saved = {};
+      (settings.paymodes || []).forEach(function(p) { saved[p.code] = p.acct; });
+      renderPaymodeTable(data.map(function(p) {
+        var code = String(p.PM_Code || '').trim();
+        return { code: code, acct: saved[code] || '' };
+      }));
+      addLog('Loading Done. ' + data.length + ' payment modes (remember to Save)', 'log-ok');
+      showToast('Loading Done. ' + data.length + ' payment modes');
+    },
+    error: function(xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ')', 'log-err'); showToast('Refresh failed', true); },
+    complete: function() { btn.prop('disabled', false).text('Refresh Alaya Payment Mode'); }
+  });
+});
+
+$('#btn-refresh-branches').on('click', function() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  var btn = $(this).prop('disabled', true).text('Loading...');
+  addLog('POST api/SalesBranch/GetAllSalesBranch (company ' + cid + ')');
+  $.ajax({
+    url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      var saved = {};
+      (settings.branches || []).forEach(function(b) { saved[b.code] = b; });
+      renderBranchTable(data.map(function(b) {
+        var code = String(b.SB_Code || '').trim();
+        var prev = saved[code] || {};
+        return { code: code, cashAcct: prev.cashAcct || '', acct: prev.acct || '', itemGroup: !!prev.itemGroup };
+      }));
+      addLog('Refresh Done. ' + data.length + ' sales branches (remember to Save)', 'log-ok');
+      showToast('Refresh Done. ' + data.length + ' sales branches');
+    },
+    error: function(xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ')', 'log-err'); showToast('Refresh failed', true); },
+    complete: function() { btn.prop('disabled', false).text('Refresh Alaya Sales Branch Code'); }
+  });
+});
+
+$('#btn-refresh-divisions').on('click', function() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  var btn = $(this).prop('disabled', true).text('Loading...');
+  addLog('POST api/PurchaseDivision/GetAllPurchaseDivision (company ' + cid + ')');
+  $.ajax({
+    url: apiUrl + 'api/PurchaseDivision/GetAllPurchaseDivision', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      if (!data.length) { addLog('No divisions from API - add manually', 'log-info'); }
+      else {
+        var saved = {};
+        (settings.divisions || []).forEach(function(d) { saved[d.code] = d.itemGroup; });
+        renderDivisionTable(data.map(function(d) {
+          var code = String(d.PD_Code || d.Code || d.code || '').trim();
+          return { code: code, itemGroup: !!saved[code] };
+        }));
+        addLog('Refresh Done. ' + data.length + ' purchase divisions (remember to Save)', 'log-ok');
+      }
+      showToast('Refresh Done.');
+    },
+    error: function(xhr) {
+      addLog('GetAllPurchaseDivision not available (' + xhr.status + ') - add divisions manually', 'log-warn');
+      showToast('API not available, add manually', true);
+    },
+    complete: function() { btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code'); }
+  });
+});
+
+$('#btn-add-division').on('click', function() { appendDivisionRow('', false); });
 
 // ΓöÇΓöÇ Execute SQL via host eval bridge ΓöÇΓöÇ
 function executeSqlViaHost(sql) {
@@ -742,17 +1181,64 @@ $('#btn-load-data').on('click', function() {
     }
     
     $('#btn-load-data').prop('disabled', false).text('Load Alaya Data');
-    showToast('Alaya data loaded successfully');
-    renderPreview();
+    var advType = $('input[name="adv-type"]:checked').val() || 'customer';
+    if (advType === 'vendor') {
+      var vendorSql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AP_SUPPLIER WHERE STATUS = 'Active' ORDER BY CODE";
+      executeSqlViaHost(vendorSql).then(function(vmsg) {
+        try {
+          var vresult = JSON.parse(vmsg.result);
+          if (vresult.success && vresult.results && vresult.results[0]) {
+            alayaData.vendors = vresult.results[0].rows || [];
+            addLog('Loaded ' + alayaData.vendors.length + ' vendors from Alaya', 'log-ok');
+          }
+        } catch(e) { addLog('Parse vendors error: ' + e.message, 'log-err'); }
+        showToast('Alaya data loaded successfully');
+        renderPreview();
+      }).catch(function(err) {
+        addLog('Load vendors error: ' + err.message, 'log-err');
+        renderPreview();
+      });
+    } else {
+      showToast('Alaya data loaded successfully');
+      renderPreview();
+    }
   }).catch(function(err) {
     addLog('Load data error: ' + err.message, 'log-err');
     $('#btn-load-data').prop('disabled', false).text('Load Alaya Data');
   });
 });
 
+// ΓöÇΓöÇ Advanced Reload (Preview tab) ΓöÇΓöÇ
+$('#btn-adv-reload').on('click', function() {
+  settings.advType = $('input[name="adv-type"]:checked').val() || 'customer';
+  settings.advDoc = $('#adv-doc-type').val() || 'CASH SALES';
+  addLog('Advanced reload: type=' + settings.advType + ' doc=' + settings.advDoc, 'log-info');
+  $('#btn-load-data').trigger('click');
+  $('.tab-btn[data-tab="preview"]').trigger('click');
+});
+$('input[name="adv-type"]').on('change', function() {
+  settings.advType = $(this).val();
+});
+
 // ΓöÇΓöÇ Render preview ΓöÇΓöÇ
 function renderPreview() {
-  var html = '<h3 style="margin-bottom:10px;">Customers (' + alayaData.customers.length + ')</h3>';
+  var advType = $('input[name="adv-type"]:checked').val() || 'customer';
+  var advDoc = $('#adv-doc-type').val() || 'CASH SALES';
+  var html = '<div style="font-size:0.8rem;color:#6b7280;margin-bottom:12px;">Type: <b>' + escHtml(advType) + '</b> | Doc: <b>' + escHtml(advDoc) + '</b></div>';
+  if (advType === 'vendor' && alayaData.vendors.length) {
+    html += '<h3 style="margin-bottom:10px;">Vendors (' + alayaData.vendors.length + ')</h3>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:20px;">';
+    html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Name</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Credit Term</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Credit Limit</th></tr></thead>';
+    html += '<tbody>';
+    alayaData.vendors.slice(0, 50).forEach(function(v) {
+      html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(v[0] || '') + '</td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(v[1] || '') + '</td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(v[2] || '') + '</td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (v[3] || 0) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  } else {
+    html += '<h3 style="margin-bottom:10px;">Customers (' + alayaData.customers.length + ')</h3>';
   html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:20px;">';
   html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Name</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Credit Term</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Credit Limit</th></tr></thead>';
   html += '<tbody>';
@@ -775,6 +1261,7 @@ function renderPreview() {
     html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (item[3] || 0) + '</td></tr>';
   });
   html += '</tbody></table>';
+  }
   
   $('#preview-content').html(html);
 }
@@ -799,6 +1286,8 @@ $('#btn-transfer').on('click', function() {
   if ($('#t-vendor').is(':checked')) transfers.push('vendor');
   if ($('#t-cn').is(':checked')) transfers.push('creditnote');
   if ($('#t-payment').is(':checked')) transfers.push('payment');
+  if ($('#t-cashpurch').is(':checked')) transfers.push('cashpurchases');
+  if ($('#t-vendorinv').is(':checked')) transfers.push('vendorinvoice');
 
   if (transfers.length === 0) {
     showToast('No transfer options selected', true);
@@ -815,7 +1304,8 @@ $('#btn-transfer').on('click', function() {
     $('#progress-text').text(Math.round(progress) + '%');
   }, 500);
 
-  // Call backend
+  // Call backend (mappings included; backend may ignore unknown fields for now)
+  var maps = collectMappingsFromUI();
   $.ajax({
     url: BACKEND_URL + '/api/transfer',
     type: 'POST',
@@ -824,7 +1314,31 @@ $('#btn-transfer').on('click', function() {
       fromdate: from,
       todate: to,
       companycode: company,
-      transfers: transfers
+      alayaCompanyId: currentAlayaCompanyID(),
+      transferMethod: $('#transfer-method').val(),
+      docType: $('#adv-doc-type').val(),
+      transfers: transfers,
+      options: {
+        cashsalesMethod: $('#s-cashsales-method').val(),
+        cashsalesPrefix: $('#s-cashsales-prefix').val(),
+        acCashsales: $('#s-ac-cashsales').val(),
+        acCashrounding: $('#s-ac-cashrounding').val(),
+        acCreditsales: $('#s-ac-creditsales').val(),
+        acCreditrounding: $('#s-ac-creditrounding').val(),
+        acServicecharge: $('#s-ac-servicecharge').val(),
+        descCashsales: $('#s-desc-cashsales').val(),
+        descCreditsales: $('#s-desc-creditsales').val(),
+        acPurchase: $('#s-ac-purchase').val(),
+        acPurchRounding: $('#s-ac-purchrounding').val(),
+        descPurchase: $('#s-desc-purchase').val(),
+        projPurchase: $('#s-proj-purchase').val(),
+        acCreditnote: $('#s-ac-creditnote').val(),
+        descCreditnote: $('#s-desc-creditnote').val(),
+        pmByBranch: $('#s-pm-bybranch').is(':checked')
+      },
+      paymodes: maps.paymodes,
+      branches: maps.branches,
+      divisions: maps.divisions
     }),
     success: function(r) {
       clearInterval(iv);
