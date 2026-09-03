@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alaya to SQL Transfer - Module Editor Plugin</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5; color: #1a1a1a; min-height: 100vh; padding: 24px 20px; line-height: 1.5;
+    }
+    .card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06); padding: 24px 28px; max-width: 1280px; margin: 0 auto 16px auto;
+    }
+    h1 { font-size: 1.3rem; font-weight: 800; color: #111827; }
+    h2 { font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 12px; }
+    .sub { font-size: 0.82rem; color: #6b7280; margin-bottom: 14px; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    .badge-fail { background:#fee2e2; color:#991b1b; }
+    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#6b7280; }
+    .hero-card { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .hero-title-row { display:flex; align-items:center; gap:12px; }
+    .hero-icon {
+      flex-shrink:0; width:42px; height:42px; border-radius:11px;
+      background: linear-gradient(135deg, #1565c0, #1e88e5);
+      display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:#fff;
+    }
+    button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .btn-primary { background:#1565c0; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#0d47a1; }
+    .btn-secondary { background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
+    .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
+    .btn-success { background:#16a34a; color:#fff; }
+    .btn-success:hover:not(:disabled) { background:#15803d; }
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
+
+    /* Tab bar */
+    .tab-bar { display:flex; gap:2px; border-bottom:2px solid #e5e7eb; margin-bottom:20px; }
+    .tab-btn {
+      padding:10px 18px; background:transparent; border:none; border-bottom:2px solid transparent;
+      margin-bottom:-2px; font-size:0.85rem; font-weight:600; color:#6b7280; cursor:pointer; font-family:inherit;
+    }
+    .tab-btn.active { color:#1565c0; border-bottom-color:#1565c0; }
+    .tab-btn:hover:not(.active) { color:#374151; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    /* Form */
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-group label { font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
+    .form-group input, .form-group select {
+      border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.85rem; color:#111827; outline:none;
+      font-family:inherit; transition:border-color 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus { border-color:#1565c0; box-shadow:0 0 0 3px rgba(21,101,192,0.1); }
+
+    /* Transfer list */
+    .transfer-item {
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px 16px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px;
+      background:#fafafa;
+    }
+    .transfer-item .info { flex:1; }
+    .transfer-item .name { font-size:0.88rem; font-weight:600; color:#111827; }
+    .transfer-item .detail { font-size:0.75rem; color:#6b7280; }
+    .transfer-item .status { font-size:0.75rem; font-weight:600; }
+    .transfer-item .status.pending { color:#92400e; }
+    .transfer-item .status.done { color:#166534; }
+    .transfer-item .status.error { color:#991b1b; }
+
+    /* Log panel */
+    .log-panel {
+      background:#1e293b; color:#e2e8f0; border-radius:10px; padding:14px 16px;
+      font-family:'JetBrains Mono', 'Fira Code', monospace; font-size:0.72rem;
+      max-height:300px; overflow-y:auto; line-height:1.6;
+    }
+    .log-panel .log-entry { margin-bottom:2px; }
+    .log-panel .log-time { color:#64748b; }
+    .log-panel .log-ok { color:#4ade80; }
+    .log-panel .log-err { color:#f87171; }
+    .log-panel .log-info { color:#60a5fa; }
+
+    /* Progress */
+    .progress-bar { background:#e5e7eb; border-radius:999px; height:8px; overflow:hidden; margin-top:10px; }
+    .progress-fill { background:#1565c0; height:100%; width:0%; transition:width 0.3s; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ HERO ═══ -->
+<div class="card hero-card">
+  <div class="hero-title-row">
+    <div class="hero-icon">📊</div>
+    <div>
+      <h1>Alaya to SQL Account Transfer</h1>
+      <div class="sub">Transfer data from Alaya to SQL Accounting via Backend API</div>
+    </div>
+  </div>
+  <div class="status-row">
+    <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span>
+    <span id="backend-badge" class="badge badge-waiting">Backend: checking...</span>
+  </div>
+</div>
+
+<!-- ═══ MAIN CONTENT ═══ -->
+<div class="card">
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="transfer">Transfer</button>
+    <button class="tab-btn" data-tab="preview">Preview</button>
+    <button class="tab-btn" data-tab="log">Log</button>
+  </div>
+
+  <!-- ── Transfer Tab ── -->
+  <div id="tab-transfer" class="tab-panel active">
+    <div class="form-row">
+      <div class="form-group">
+        <label>From Date</label>
+        <input type="date" id="from-date" />
+      </div>
+      <div class="form-group">
+        <label>To Date</label>
+        <input type="date" id="to-date" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>SQL Account Company</label>
+        <select id="sql-company">
+          <option value="">Loading companies...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Transfer Method</label>
+        <select id="transfer-method">
+          <option value="itemize">By Item</option>
+          <option value="summary">Summary</option>
+        </select>
+      </div>
+    </div>
+
+    <h2 style="margin-top:16px;">Transfer Options</h2>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-customer" /> Transfer Customer
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-vendor" /> Transfer Vendor
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-cashsales" checked /> Transfer Cash Sales
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-invoice" checked /> Transfer Invoice
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-cn" /> Transfer Credit Note
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" id="t-payment" /> Transfer Payment
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button id="btn-transfer" class="btn-primary">Transfer</button>
+      <button id="btn-load-data" class="btn-secondary">Load Alaya Data</button>
+    </div>
+
+    <div id="transfer-progress" style="margin-top:16px;display:none;">
+      <div style="font-size:0.82rem;color:#6b7280;margin-bottom:8px;">Transferring... <span id="progress-text"></span></div>
+      <div class="progress-bar">
+        <div id="progress-bar" class="progress-fill"></div>
+      </div>
+    </div>
+
+    <div id="transfer-results" style="margin-top:16px;display:none;">
+      <h2>Transfer Results</h2>
+      <div id="results-list"></div>
+    </div>
+  </div>
+
+  <!-- ── Preview Tab ── -->
+  <div id="tab-preview" class="tab-panel">
+    <h2>Alaya Data Preview</h2>
+    <div id="preview-content" style="max-height:400px;overflow-y:auto;">
+      <p style="color:#6b7280;font-size:0.85rem;">Click "Load Alaya Data" to preview data from Alaya.</p>
+    </div>
+  </div>
+
+  <!-- ── Log Tab ── -->
+  <div id="tab-log" class="tab-panel">
+    <div class="btn-row" style="margin-bottom:12px;">
+      <button id="btn-clear-log" class="btn-secondary">Clear Log</button>
+    </div>
+    <div id="log-panel" class="log-panel">
+      <div class="log-entry"><span class="log-time">[--:--:--]</span> <span class="log-info">Plugin loaded. Waiting for ALAYA_INIT...</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   ALAYA MODULE EDITOR PLUGIN - ALAYA TO SQL TRANSFER
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── Config ──
+var DEV_KEY = '5hL7jK3wX9';
+var BACKEND_URL = 'http://localhost:3100';
+var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
+
+// ── State ──
+var hostOrigin = '';
+var apiUrl = '';
+var nonce = '';
+var clientId = '';
+var username = '';
+var authToken = '';
+var companies = [];
+var alayaData = { customers: [], items: [], sales: [] };
+var pendingDcbCallbacks = {};
+
+// ── Logging ──
+function addLog(msg, cls) {
+  var now = new Date();
+  var ts = [now.getHours(), now.getMinutes(), now.getSeconds()].map(function(n){ return n<10?'0'+n:n; }).join(':');
+  var c = cls || '';
+  $('#log-panel').append('<div class="log-entry"><span class="log-time">[' + ts + ']</span> <span class="' + c + '">' + escHtml(msg) + '</span></div>');
+  var el = document.getElementById('log-panel');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Toast ──
+function showToast(msg, isError) {
+  var existing = $('#toast-msg');
+  if (existing.length) existing.parent().remove();
+  var bg = isError ? '#fee2e2' : '#dcfce7';
+  var fg = isError ? '#991b1b' : '#166534';
+  var html = '<div id="toast-msg" style="position:fixed;bottom:24px;right:24px;background:'+bg+';color:'+fg+';padding:12px 20px;border-radius:10px;font-size:0.82rem;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);">'+escHtml(msg)+'</div>';
+  $('body').append(html);
+  setTimeout(function(){ $('#toast-msg').parent().remove(); }, 4000);
+}
+
+// ── postMessage helpers ──
+function postToParent(type, data) {
+  window.parent.postMessage(Object.assign({ type: type, source: 'alaya-to-sql' }, data || {}), '*');
+}
+
+// ── ALAYA_INIT handshake ──
+$(window).on('message', function(e) {
+  var msg = e.originalEvent.data;
+  if (!msg) return;
+
+  if (msg.type === 'ALAYA_INIT') {
+    hostOrigin = e.originalEvent.origin || '';
+    var payload = msg.data !== undefined ? msg.data : msg;
+    addLog('Received <- ALAYA_INIT');
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    
+    if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
+    if (payload && payload.nonce) nonce = payload.nonce;
+    if (payload && payload.client) clientId = payload.client;
+    if (payload && payload.username) username = payload.username;
+    
+    addLog('api=' + apiUrl + ' client=' + clientId + ' user=' + username);
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+    
+    if (apiUrl && nonce && clientId && username) requestToken();
+    
+    // Pre-load hidden memoQuery iframe
+    if (hostOrigin) {
+      window.top.postMessage({ target: hostOrigin, eval:
+        '(function(){' +
+        'if(document.getElementById("hidden-memo-frame"))return;' +
+        'var f=document.createElement("iframe");' +
+        'f.id="hidden-memo-frame";' +
+        'f.style.display="none";' +
+        'f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+        'document.body.appendChild(f);' +
+        '})();'
+      }, '*');
+      addLog('Pre-loading hidden memoQuery iframe');
+    }
+    
+    // Test backend connection
+    testBackendConnection();
+  }
+
+  if (msg.type === 'alaya-dcb-result' && msg.requestId) {
+    var cb = pendingDcbCallbacks[msg.requestId];
+    if (cb) {
+      delete pendingDcbCallbacks[msg.requestId];
+      clearTimeout(cb.timer);
+      cb.resolve(msg);
+    }
+  }
+});
+
+// ── Authentication ──
+function requestToken() {
+  addLog('POST ' + apiUrl + 'token');
+  $.ajax({
+    url: apiUrl + 'token', type: 'POST', cache: false,
+    data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+    success: function (r) {
+      authToken = r.token_type + ' ' + r.access_token;
+      addLog('Token obtained', 'log-ok');
+      loadCompaniesFromApi();
+    },
+    error: function (r) {
+      var msg = '';
+      try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch (e) { msg = r.responseText || 'Unknown'; }
+      addLog('Token failed: ' + msg, 'log-err');
+    }
+  });
+}
+
+// ── Load companies from Alaya API ──
+function loadCompaniesFromApi() {
+  if (!apiUrl || !authToken) return;
+  var endpoint = apiUrl + 'api/Company/GetAllCompany';
+  addLog('GET ' + endpoint);
+  $.ajax({
+    url: endpoint, type: 'GET', cache: false,
+    headers: { 'Authorization': authToken },
+    success: function (resp) {
+      var data = (resp && resp.data) || [];
+      companies = data;
+      addLog('Loaded ' + data.length + ' companies from Alaya', 'log-ok');
+      loadSqlCompanies();
+    },
+    error: function (r) {
+      addLog('Load companies failed: ' + r.status, 'log-err');
+    }
+  });
+}
+
+// ── Load SQL Account companies from backend ──
+function loadSqlCompanies() {
+  addLog('Loading SQL Account companies from backend...', 'log-info');
+  $.ajax({
+    url: BACKEND_URL + '/api/companies',
+    type: 'GET',
+    success: function(r) {
+      if (r.success && r.data) {
+        var sel = $('#sql-company');
+        sel.empty();
+        sel.append('<option value="">Select company...</option>');
+        r.data.forEach(function(c) {
+          sel.append('<option value="' + escHtml(c.CODE) + '">' + escHtml(c.CODE) + ' - ' + escHtml(c.NAME) + '</option>');
+        });
+        addLog('Loaded ' + r.data.length + ' SQL companies', 'log-ok');
+      }
+    },
+    error: function(xhr) {
+      addLog('Backend unreachable: ' + BACKEND_URL, 'log-err');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+    }
+  });
+}
+
+// ── Test backend connection ──
+function testBackendConnection() {
+  $.ajax({
+    url: BACKEND_URL + '/api/health',
+    type: 'GET',
+    success: function(r) {
+      addLog('Backend healthy', 'log-ok');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-received').text('Backend: online');
+    },
+    error: function(xhr) {
+      addLog('Backend unreachable', 'log-err');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+    }
+  });
+}
+
+// ── Execute SQL via host eval bridge ──
+function executeSqlViaHost(sql) {
+  return new Promise(function (resolve, reject) {
+    if (!hostOrigin) { reject(new Error('Host origin unknown - ALAYA_INIT not received yet')); return; }
+    var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    var timer = setTimeout(function () {
+      delete pendingDcbCallbacks[requestId];
+      reject(new Error('Database callback timed out after 60s'));
+    }, 60000);
+    pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+    var evalScript =
+      '(function(){' +
+      'try{' +
+        'var sql=result.sql, reqId=result.requestId;' +
+        'function findMemoFrame(win){' +
+          'try{ if(typeof win.memoQuery==="object" && typeof win.WebForm_DoCallback==="function") return win; }catch(e){}' +
+          'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){}' +
+          'return null;' +
+        '}' +
+        'function bcast(m){' +
+          'function postAll(win){' +
+            'try{ win.postMessage(m,"*"); }catch(e){}' +
+            'try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}' +
+          '}' +
+          'postAll(window);' +
+        '}' +
+        'function runOnMemo(mf){' +
+          'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+          'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+          'var arg="RunQuery|"+JSON.stringify(hdr);' +
+          'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+          'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+          'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+        '}' +
+        'var mf=findMemoFrame(window);' +
+        'if(mf){ runOnMemo(mf); return; }' +
+        'var hidden=document.getElementById("hidden-memo-frame");' +
+        'if(hidden && hidden.contentWindow){' +
+          'try{ if(typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+        '}' +
+        'if(!hidden){' +
+          'hidden=document.createElement("iframe");' +
+          'hidden.id="hidden-memo-frame";' +
+          'hidden.style.display="none";' +
+          'hidden.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+          'document.body.appendChild(hidden);' +
+        '}' +
+        'var attempts=0;' +
+        'function poll(){' +
+          'attempts++;' +
+          'try{ if(hidden.contentWindow && typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+          'if(attempts<40){ setTimeout(poll,500); }' +
+          'else { bcast({source:"alaya-dcb-result",requestId:reqId,error:"memoQuery not available after 20s"}); }' +
+        '}' +
+        'poll();' +
+      '}catch(e){ bcast({source:"alaya-dcb-result",requestId:result.requestId,error:e.message}); }' +
+      '})();';
+    window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
+    addLog('POST eval-bridge RunQuery (sql ' + sql.length + ' chars)', 'log-info');
+  });
+}
+
+// ── Load Alaya data ──
+$('#btn-load-data').on('click', function() {
+  if (!hostOrigin) {
+    showToast('Not connected to Alaya (ALAYA_INIT pending)', true);
+    return;
+  }
+  
+  addLog('Loading Alaya data...', 'log-info');
+  $(this).prop('disabled', true).text('Loading...');
+  
+  // Load customers
+  var sql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AR_CUSTOMER WHERE STATUS = 'Active' ORDER BY CODE";
+  executeSqlViaHost(sql).then(function(msg) {
+    if (msg.error) {
+      addLog('Load customers failed: ' + msg.error, 'log-err');
+      return;
+    }
+    try {
+      var result = JSON.parse(msg.result);
+      if (result.success && result.results && result.results[0]) {
+        alayaData.customers = result.results[0].rows || [];
+        addLog('Loaded ' + alayaData.customers.length + ' customers from Alaya', 'log-ok');
+      }
+    } catch(e) {
+      addLog('Parse customers error: ' + e.message, 'log-err');
+    }
+    
+    // Load items
+    var itemSql = "SELECT CODE, DESCRIPTION, UOM, SELLPRICE FROM ITEMMASTER WHERE STATUS = 'Active' ORDER BY CODE";
+    return executeSqlViaHost(itemSql);
+  }).then(function(msg) {
+    if (msg.error) {
+      addLog('Load items failed: ' + msg.error, 'log-err');
+      return;
+    }
+    try {
+      var result = JSON.parse(msg.result);
+      if (result.success && result.results && result.results[0]) {
+        alayaData.items = result.results[0].rows || [];
+        addLog('Loaded ' + alayaData.items.length + ' items from Alaya', 'log-ok');
+      }
+    } catch(e) {
+      addLog('Parse items error: ' + e.message, 'log-err');
+    }
+    
+    $('#btn-load-data').prop('disabled', false).text('Load Alaya Data');
+    showToast('Alaya data loaded successfully');
+    renderPreview();
+  }).catch(function(err) {
+    addLog('Load data error: ' + err.message, 'log-err');
+    $('#btn-load-data').prop('disabled', false).text('Load Alaya Data');
+  });
+});
+
+// ── Render preview ──
+function renderPreview() {
+  var html = '<h3 style="margin-bottom:10px;">Customers (' + alayaData.customers.length + ')</h3>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:20px;">';
+  html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Name</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Credit Term</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Credit Limit</th></tr></thead>';
+  html += '<tbody>';
+  alayaData.customers.slice(0, 20).forEach(function(c) {
+    html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[0] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[1] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[2] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (c[3] || 0) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  
+  html += '<h3 style="margin-bottom:10px;">Items (' + alayaData.items.length + ')</h3>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+  html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Description</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">UOM</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Sell Price</th></tr></thead>';
+  html += '<tbody>';
+  alayaData.items.slice(0, 20).forEach(function(item) {
+    html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[0] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[1] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[2] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (item[3] || 0) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  
+  $('#preview-content').html(html);
+}
+
+// ── Transfer ──
+$('#btn-transfer').on('click', function() {
+  var from = $('#from-date').val();
+  var to = $('#to-date').val();
+  var company = $('#sql-company').val();
+
+  if (!from || !to) { showToast('Please select date range', true); return; }
+  if (!company) { showToast('Please select SQL Account company', true); return; }
+
+  addLog('Starting transfer: ' + from + ' ~ ' + to + ' to ' + company, 'log-info');
+  $('#transfer-progress').show();
+  $('#btn-transfer').prop('disabled', true);
+
+  var transfers = [];
+  if ($('#t-cashsales').is(':checked')) transfers.push('cashsales');
+  if ($('#t-invoice').is(':checked')) transfers.push('invoice');
+  if ($('#t-customer').is(':checked')) transfers.push('customer');
+  if ($('#t-vendor').is(':checked')) transfers.push('vendor');
+  if ($('#t-cn').is(':checked')) transfers.push('creditnote');
+  if ($('#t-payment').is(':checked')) transfers.push('payment');
+
+  if (transfers.length === 0) {
+    showToast('No transfer options selected', true);
+    $('#transfer-progress').hide();
+    $('#btn-transfer').prop('disabled', false);
+    return;
+  }
+
+  // Progress animation
+  var progress = 0;
+  var iv = setInterval(function() {
+    progress = Math.min(progress + Math.random() * 15, 90);
+    $('#progress-bar').css('width', progress + '%');
+    $('#progress-text').text(Math.round(progress) + '%');
+  }, 500);
+
+  // Call backend
+  $.ajax({
+    url: BACKEND_URL + '/api/transfer',
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({
+      fromdate: from,
+      todate: to,
+      companycode: company,
+      transfers: transfers
+    }),
+    success: function(r) {
+      clearInterval(iv);
+      $('#progress-bar').css('width', '100%');
+      $('#progress-text').text('100%');
+      addLog('Transfer completed: ' + JSON.stringify(r), 'log-ok');
+      showToast('Transfer completed');
+      showTransferResults(r.data);
+      setTimeout(function() { $('#transfer-progress').hide(); }, 2000);
+      $('#btn-transfer').prop('disabled', false);
+    },
+    error: function(xhr) {
+      clearInterval(iv);
+      $('#progress-bar').css('width', '0%');
+      addLog('Transfer FAILED: ' + xhr.status, 'log-err');
+      showToast('Transfer failed', true);
+      $('#transfer-progress').hide();
+      $('#btn-transfer').prop('disabled', false);
+    }
+  });
+});
+
+// ── Show transfer results ──
+function showTransferResults(results) {
+  var html = '';
+  results.forEach(function(r) {
+    var statusClass = r.success ? 'done' : 'error';
+    var statusText = r.success ? 'OK' : 'Failed';
+    html += '<div class="transfer-item">';
+    html += '<div class="info"><div class="name">' + escHtml(r.type) + '</div>';
+    html += '<div class="detail">' + (r.message || r.count || '') + '</div></div>';
+    html += '<div class="status ' + statusClass + '">' + statusText + '</div>';
+    html += '</div>';
+  });
+  $('#results-list').html(html);
+  $('#transfer-results').show();
+}
+
+// ── Tab switching ──
+$('.tab-btn').on('click', function() {
+  var tab = $(this).data('tab');
+  $('.tab-btn').removeClass('active');
+  $(this).addClass('active');
+  $('.tab-panel').removeClass('active');
+  $('#tab-' + tab).addClass('active');
+});
+
+// ── Clear log ──
+$('#btn-clear-log').on('click', function() {
+  $('#log-panel').empty();
+  addLog('Log cleared', 'log-info');
+});
+
+// ── Set default dates ──
+var today = new Date().toISOString().slice(0, 10);
+$('#from-date').val(today);
+$('#to-date').val(today);
+
+addLog('Plugin initialized - listening for ALAYA_INIT', 'log-info');
+</script>
+</body>
+</html>
