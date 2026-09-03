@@ -505,6 +505,34 @@
   </div>
 </div>
 
+<!-- Payment Mode modal - shown before Copy To Sales posts, so the user picks how
+     the Cash Sales was actually paid instead of it silently defaulting to Cash. -->
+<div class="modal-overlay" id="paymode-modal">
+  <div class="modal" style="max-width:420px;">
+    <h2>Select Payment Mode</h2>
+    <div class="form-group" style="margin-top:10px;">
+      <label>Payment Mode<span class="required-mark">*</span></label>
+      <select id="paymode-select" style="width:100%;"></select>
+    </div>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button class="btn-primary" id="btn-paymode-ok" type="button">Continue</button>
+      <button class="btn-secondary" id="btn-paymode-cancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Copy To Sales success modal - the created Cash Sales Doc No is a hard-to-miss
+     confirmation of a real, posted accounting document, not just a toast. -->
+<div class="modal-overlay" id="cs-success-modal">
+  <div class="modal" style="max-width:420px; text-align:center;">
+    <div style="font-size:2rem; color:#16a34a;">&#10003;</div>
+    <h2 style="margin:8px 0 4px;">Cash Sales Created</h2>
+    <div class="sub" style="margin-bottom:4px;">Document No.</div>
+    <div id="cs-success-docno" style="font-size:1.4rem; font-weight:800; color:#111827; margin-bottom:16px;"></div>
+    <button class="btn-primary" id="btn-cs-success-ok" type="button" style="width:100%;">OK</button>
+  </div>
+</div>
+
 <!-- Equipment modal - mirrors legacy desktop Service Report popup (Description, Brand, Model, Serial No., Symptom, Remark) -->
 <div class="modal-overlay" id="equip-modal">
   <div class="modal" style="max-width:560px;">
@@ -1724,8 +1752,7 @@
       d.BinLocationID = String((a && a.binLocationID) || branch.binLocationID);
     });
 
-    var cashMode = paymentModes.filter(function (p) { return (p.code || '').toUpperCase().indexOf('CASH') >= 0; })[0] || paymentModes[0];
-    if (!cashMode) { showToast('No Payment Mode loaded for this company yet - try again in a moment', true); return; }
+    if (!paymentModes.length) { showToast('No Payment Mode loaded for this company yet - try again in a moment', true); return; }
 
     var payTerm = companyPaymentTerms.filter(function (t) { return t.active; })[0] || companyPaymentTerms[0];
 
@@ -1773,7 +1800,6 @@
       TaxItemize: 'false', InclusiveTax: 'False', Rounding_YN: 'False', RoundingAmount: '0.0000', FooterDiscount: footerDiscount.toFixed(4),
       SalesAgentID: '', Total: total.toFixed(4), TotalPoint: '0.0000',
       SalesDTL: dtl,
-      SalesPayment: [{ PaymentModeID: String(cashMode.id), Remarks: '', ChequeNo: null, PaymentAmount: total.toFixed(4), Currency: 'RINGGIT MALAYSIA', CurrencyRate: '1.00', Reason: '', RedeemPoint: '0' }],
     };
     // Attach batch/serial child arrays under multiple possible keys for API compatibility
     if (salesBatches.length) {
@@ -1783,19 +1809,42 @@
       body.SalesSN = salesSNs; body.CashSalesSN = salesSNs; body.DetailSN = salesSNs; body.SerialList = salesSNs;
     }
 
-    if (!confirm('This creates a REAL posted Cash Sales document for ' + custRecord.name + ' totalling RM' + total.toFixed(2) + '. This cannot be undone (only reversed via a Sales Return). Continue?')) return;
+    // Payment Mode is picked interactively (see #paymode-modal) rather than
+    // silently defaulting to whichever mode's code contains "CASH".
+    pendingCashSales = { body: body, total: total, custRecord: custRecord, companyID: companyID, branch: branch };
+    var $sel = $('#paymode-select').empty();
+    paymentModes.forEach(function (p) { $sel.append($('<option>').val(p.id).text(p.code)); });
+    var defaultMode = paymentModes.filter(function (p) { return (p.code || '').toUpperCase().indexOf('CASH') >= 0; })[0];
+    if (defaultMode) $sel.val(defaultMode.id);
+    $('#paymode-modal').addClass('show');
+  }
+  var pendingCashSales = null;
+  function closePaymodeModal() { $('#paymode-modal').removeClass('show'); pendingCashSales = null; }
+  $('#btn-paymode-cancel').on('click', closePaymodeModal);
+  $('#paymode-modal').on('click', function (e) { if (e.target.id === 'paymode-modal') closePaymodeModal(); });
+  $('#btn-paymode-ok').on('click', function () {
+    if (!pendingCashSales) return;
+    var modeID = $('#paymode-select').val();
+    var mode = paymentModes.filter(function (p) { return String(p.id) === String(modeID); })[0];
+    if (!mode) { showToast('Please select a Payment Mode', true); return; }
+    var ctx = pendingCashSales;
+    ctx.body.SalesPayment = [{ PaymentModeID: String(mode.id), Remarks: '', ChequeNo: null, PaymentAmount: ctx.total.toFixed(4), Currency: 'RINGGIT MALAYSIA', CurrencyRate: '1.00', Reason: '', RedeemPoint: '0' }];
+    closePaymodeModal();
 
-    addLog('POST api/CashSales/PostCashSales (company ' + companyID + ', branch ' + branch.id + ', total ' + total.toFixed(2) + ')');
+    if (!confirm('This creates a REAL posted Cash Sales document for ' + ctx.custRecord.name + ' totalling RM' + ctx.total.toFixed(2) + ' (' + mode.code + '). This cannot be undone (only reversed via a Sales Return). Continue?')) return;
+
+    addLog('POST api/CashSales/PostCashSales (company ' + ctx.companyID + ', branch ' + ctx.branch.id + ', total ' + ctx.total.toFixed(2) + ', mode ' + mode.code + ')');
     $.ajax({
       url: apiUrl + 'api/CashSales/PostCashSales', type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken }, data: JSON.stringify(body),
+      headers: { 'Authorization': authToken }, data: JSON.stringify(ctx.body),
       success: function (resp) {
         if (resp && resp.success !== false && resp.data) {
           addLog('Cash Sales posted OK: ' + resp.data);
-          showToast('Cash Sales ' + resp.data + ' created');
           editingReport.ref = editingReport.ref ? editingReport.ref + ' / CS:' + resp.data : 'CS:' + resp.data;
           $('#d-ref').val(editingReport.ref);
           markDirty('copy to sales');
+          $('#cs-success-docno').text(resp.data);
+          $('#cs-success-modal').addClass('show');
         } else {
           addLog('Cash Sales post FAILED: ' + JSON.stringify(resp).slice(0, 300));
           showToast('Copy to Sales failed: ' + ((resp && resp.msg) || 'unknown error'), true);
@@ -1806,7 +1855,8 @@
         showToast('Copy to Sales failed (' + xhr.status + ')', true);
       }
     });
-  }
+  });
+  $('#btn-cs-success-ok').on('click', function () { $('#cs-success-modal').removeClass('show'); });
   function fmtCashSalesDate(d) {
     function p(n) { return (n < 10 ? '0' : '') + n; }
     return p(d.getMonth() + 1) + '/' + p(d.getDate()) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
