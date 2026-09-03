@@ -362,14 +362,35 @@ var authToken = '';
 var companies = [];
 var alayaData = { customers: [], items: [], sales: [] };
 var pendingDcbCallbacks = {};
+var SETTINGS_TABLE = 'ZZT_ALAYATOSQL';
 var settings = {};
 
-// ΓöÇΓöÇ Load/Save Settings ΓöÇΓöÇ
+// ΓöÇΓöÇ Load/Save Settings (UDF table) ΓöÇΓöÇ
 function loadSettings() {
-  try {
-    var saved = localStorage.getItem('alaya-to-sql-settings');
-    settings = saved ? JSON.parse(saved) : {};
-  } catch(e) { settings = {}; }
+  var sql = "SELECT ZZC_Description FROM " + SETTINGS_TABLE + " WHERE ZZC_Code = 'SETTINGS'";
+  executeSqlViaHost(sql).then(function(msg) {
+    try {
+      var result = JSON.parse(msg.result);
+      if (result.success && result.results && result.results[0] && result.results[0].rows && result.results[0].rows[0]) {
+        settings = JSON.parse(result.results[0].rows[0][0]);
+        addLog('Settings loaded from UDF table', 'log-ok');
+      } else {
+        settings = {};
+        addLog('No saved settings found, using defaults', 'log-info');
+      }
+    } catch(e) {
+      settings = {};
+      addLog('Parse settings error: ' + e.message, 'log-warn');
+    }
+    applySettings();
+  }).catch(function(err) {
+    addLog('Load settings from UDF failed: ' + err.message + ', using defaults', 'log-warn');
+    settings = {};
+    applySettings();
+  });
+}
+
+function applySettings() {
   var s = $.extend({}, defaultSettings, settings);
   $('#s-backend-url').val(s.backendUrl);
   $('#s-alaya-company').val(s.alayaCompany);
@@ -421,7 +442,6 @@ function saveSettings() {
     tInvoice: $('#s-t-invoice').is(':checked'),
     tCn: $('#s-t-cn').is(':checked')
   };
-  localStorage.setItem('alaya-to-sql-settings', JSON.stringify(settings));
   BACKEND_URL = settings.backendUrl;
   $('#t-customer').prop('checked', settings.tCustomer);
   $('#t-vendor').prop('checked', settings.tVendor);
@@ -429,9 +449,30 @@ function saveSettings() {
   $('#t-invoice').prop('checked', settings.tInvoice);
   $('#t-cn').prop('checked', settings.tCn);
   $('#t-payment').prop('checked', settings.tCashpayment);
-  showToast('Settings saved');
-  addLog('Settings saved to localStorage', 'log-ok');
-  testBackendConnection();
+
+  var now = new Date();
+  var dateStr = now.getFullYear() + '-' + ('0'+(now.getMonth()+1)).slice(-2) + '-' + ('0'+now.getDate()).slice(-2) + ' ' + ('0'+now.getHours()).slice(-2) + ':' + ('0'+now.getMinutes()).slice(-2) + ':' + ('0'+now.getSeconds()).slice(-2);
+  var jsonSafe = JSON.stringify(settings).replace(/'/g, "''");
+
+  var sqlCheck = "SELECT COUNT(*) AS CNT FROM " + SETTINGS_TABLE + " WHERE ZZC_Code = 'SETTINGS'";
+  executeSqlViaHost(sqlCheck).then(function(msg) {
+    var result = JSON.parse(msg.result);
+    var count = (result.results && result.results[0] && result.results[0].rows) ? result.results[0].rows[0][0] : 0;
+    var sql;
+    if (count > 0) {
+      sql = "UPDATE " + SETTINGS_TABLE + " SET ZZC_Description = '" + jsonSafe + "', ZZC_DateModified = '" + dateStr + "' WHERE ZZC_Code = 'SETTINGS'";
+    } else {
+      sql = "INSERT INTO " + SETTINGS_TABLE + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified) VALUES ('SETTINGS', '" + jsonSafe + "', '" + dateStr + "', '" + dateStr + "')";
+    }
+    return executeSqlViaHost(sql);
+  }).then(function() {
+    showToast('Settings saved to Alaya DB');
+    addLog('Settings saved to UDF table', 'log-ok');
+    testBackendConnection();
+  }).catch(function(err) {
+    showToast('Save failed: ' + err.message, true);
+    addLog('Save settings to UDF failed: ' + err.message, 'log-err');
+  });
 }
 
 // ΓöÇΓöÇ Logging ΓöÇΓöÇ
@@ -499,6 +540,9 @@ $(window).on('message', function(e) {
     
     // Test backend connection
     testBackendConnection();
+    
+    // Load settings from UDF table (needs host bridge)
+    setTimeout(function() { loadSettings(); }, 500);
   }
 
   if (msg.type === 'alaya-dcb-result' && msg.requestId) {
@@ -844,7 +888,6 @@ var today = new Date().toISOString().slice(0, 10);
 $('#from-date').val(today);
 $('#to-date').val(today);
 
-loadSettings();
 addLog('Plugin initialized - listening for ALAYA_INIT', 'log-info');
 </script>
 </body>
