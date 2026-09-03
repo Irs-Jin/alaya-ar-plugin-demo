@@ -180,6 +180,7 @@
         <select id="alaya-company-select">
           <option value="">Loading companies...</option>
         </select>
+        <div id="company-scope-note" style="font-size:0.72rem;color:#6b7280;margin-top:4px;"></div>
       </div>
       <div class="form-group">
         <label>SQL Account Company</label>
@@ -962,6 +963,8 @@ function loadCompaniesFromApi() {
         }
       }
       applyUserCompanyFilter();
+      window._companyScopeMode = 'full list';
+      setScopeNote();
       loadSqlCompanies();
     },
     error: function (r) {
@@ -1041,7 +1044,7 @@ function applyUserCompanyFilter() {
       var r = JSON.parse(msg.result);
       rows = (r.results && r.results[0] && r.results[0].rows) ? r.results[0].rows : [];
     } catch(e) { throw e; }
-    if (!rows.length) { addLog('No company mapping rows for ' + username + ' - keeping full list', 'log-info'); return; }
+    if (!rows.length) { addLog('No company mapping rows for ' + username + ' - keeping full list', 'log-info'); window._companyScopeMode = 'full list - no mapping rows'; setScopeNote(); return; }
     var allowed = {};
     rows.forEach(function(row) {
       var nm = String(row[0] || '').trim().toUpperCase();
@@ -1061,9 +1064,13 @@ function applyUserCompanyFilter() {
     if (kept === 0 || kept >= total) {
       addLog('Mapping inconclusive (' + names.length + ' rows) - keeping full list', 'log-info');
       sel.html(fullHtml);
+      window._companyScopeMode = 'full list - mapping inconclusive';
+      setScopeNote();
       return;
     }
     addLog('Company list filtered to ' + kept + ' companies for ' + username, 'log-ok');
+    window._companyScopeMode = 'filtered for ' + username;
+    setScopeNote();
     var picked = pickDefaultCompany(companies.filter(function(c) {
       return sel.find('option[value="' + c.CO_ID + '"]').length > 0;
     }));
@@ -1072,8 +1079,17 @@ function applyUserCompanyFilter() {
       settings.alayaCompanyId = picked;
     }
   }).catch(function(err) {
-    addLog('Company access filter unavailable (' + String(err.message || err).slice(0, 100) + ') - keeping full list', 'log-info');
+    var short = String(err.message || err).slice(0, 100);
+    addLog('Company access filter unavailable (' + short + ') - keeping full list', 'log-info');
+    window._companyScopeMode = 'full list - filter unavailable';
+    setScopeNote();
   });
+}
+
+function setScopeNote() {
+  var n = $('#alaya-company-select').find('option').length;
+  var mode = window._companyScopeMode || 'full list';
+  $('#company-scope-note').text(n + ' companies (' + mode + ')');
 }
 
 function showCompanyRetry(msg) {
