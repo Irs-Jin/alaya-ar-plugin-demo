@@ -426,6 +426,7 @@
   <!-- Tabbed like the sample's "Action Taken" / "Remark" panel (Remark already lives in the
        left column above, so this tab strip only needs Action Taken for now). -->
   <div class="section-title">Action Taken</div>
+  <div class="sub" id="action-branch-wh-hint" style="display:none; color:#dc2626; margin-bottom:6px;">Select Sales Branch and Warehouse above before adding/editing items.</div>
   <table class="sub-grid-table" id="action-table">
     <thead><tr><th style="width:12%">Item No</th><th style="width:22%">Description</th><th style="width:14%">Bin Location</th><th style="width:8%">UOM</th><th style="width:8%">Qty</th><th style="width:12%">Price</th><th style="width:14%">Batch / Serial</th><th style="width:10%"></th></tr></thead>
     <tbody id="action-tbody"></tbody>
@@ -465,13 +466,14 @@
         <div class="picker-empty" id="batch-empty" style="display:none;">No batch available</div>
       </div>
       <input type="hidden" id="batch-input" />
-      <div style="margin-top:6px;" class="sub" id="batch-manual-hint">Tick a batch above to select it and set Qty, or type one manually below.</div>
+      <div style="margin-top:6px;" class="sub" id="batch-manual-hint">Tick one or more batches above and set each Qty, or type a single batch manually below.</div>
       <div style="margin-top:6px; display:flex; gap:8px; align-items:center;">
         <label style="font-size:0.82rem; font-weight:600;">Manual Batch No:</label>
         <input type="text" id="batch-input-manual" placeholder="e.g. G0046-231001" style="flex:1; border:1px solid #d1d5db; border-radius:6px; padding:7px 10px;" />
         <label style="font-size:0.82rem; font-weight:600;">Qty:</label>
         <input type="number" id="batch-qty" min="0" step="1" style="width:80px; border:1px solid #d1d5db; border-radius:6px; padding:7px 10px;" />
       </div>
+      <div style="margin-top:6px;" class="sub"><b>Total selected: <span id="batch-total-selected">0</span></b></div>
     </div>
     <div id="batch-serial-section" style="display:none;">
       <div style="display:flex; flex-direction:column; gap:6px;">
@@ -983,6 +985,10 @@
     var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
     editingReport.salesBranchCode = branch ? branch.code : '';
     renderWarehouseOptions(branchID);
+    // renderWarehouseOptions may pre-select the branch's default warehouse -
+    // sync editingReport.warehouseID and refresh Action Taken gating/Bin Location.
+    editingReport.warehouseID = parseInt($('#d-warehouse').val(), 10) || null;
+    renderActionTable();
     markDirty('sales branch');
   });
   $('#d-warehouse').on('change', function () {
@@ -1357,7 +1363,7 @@
         actionRows.forEach(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           if (!meta.docCode) return;
-          (actionByDoc[meta.docCode] = actionByDoc[meta.docCode] || []).push({ item: meta.item || '', desc: meta.desc || '', uom: meta.uom || '', qty: meta.qty || 0, price: meta.price || 0, batchNo: meta.batchNo || '', serialNos: meta.serialNos || [] });
+          (actionByDoc[meta.docCode] = actionByDoc[meta.docCode] || []).push({ item: meta.item || '', desc: meta.desc || '', uom: meta.uom || '', qty: meta.qty || 0, price: meta.price || 0, batchNo: meta.batchNo || '', batches: meta.batches || [], serialNos: meta.serialNos || [], binLocationID: meta.binLocationID || null, binLocationCode: meta.binLocationCode || '' });
         });
         reports = headerRows.map(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
@@ -1368,6 +1374,7 @@
             custCode: meta.custCode || '', custName: meta.custName || '', custPhone: meta.custPhone || '', custAddress: meta.custAddress || '',
             custAddr1: meta.custAddr1 || '', custAddr2: meta.custAddr2 || '', custAddr3: meta.custAddr3 || '', custAddr4: meta.custAddr4 || '',
             ref: meta.ref || '', receivedBy: meta.receivedBy || '', servicedBy: meta.servicedBy || '', remark: meta.remark || '',
+            salesBranchID: meta.salesBranchID || '', salesBranchCode: meta.salesBranchCode || '', warehouseID: meta.warehouseID || null,
             equipment: equipByDoc[code] || [], actionTaken: actionByDoc[code] || [],
             createdAt: meta.createdAt || '', createdBy: meta.createdBy || ''
           });
@@ -1502,6 +1509,8 @@
     if (editingReport.salesBranchID) {
       $('#d-sales-branch').val(editingReport.salesBranchID);
       renderWarehouseOptions(editingReport.salesBranchID);
+      if (editingReport.warehouseID) $('#d-warehouse').val(editingReport.warehouseID);
+      else editingReport.warehouseID = parseInt($('#d-warehouse').val(), 10) || null;
     } else if (salesBranches.length === 1) {
       $('#d-sales-branch').val(salesBranches[0].id).trigger('change');
     }
@@ -1549,6 +1558,8 @@
     if (editingReport.salesBranchID) {
       $('#d-sales-branch').val(editingReport.salesBranchID);
       renderWarehouseOptions(editingReport.salesBranchID);
+      if (editingReport.warehouseID) $('#d-warehouse').val(editingReport.warehouseID);
+      else editingReport.warehouseID = parseInt($('#d-warehouse').val(), 10) || null;
     }
     $('#cust-lookup-status').text('');
     renderEquipTable();
@@ -1632,7 +1643,7 @@
     lines.forEach(function (a) {
       var im = items.filter(function (x) { return x.code === a.item; })[0];
       if (!im) return;
-      if (im.batchControl && !a.batchNo) batchErrors.push(a.item + ' (batch required)');
+      if (im.batchControl && !a.batchNo && !(a.batches && a.batches.length)) batchErrors.push(a.item + ' (batch required)');
       if (im.serialControl) {
         var need = parseInt(a.qty, 10) || 0;
         var have = (a.serialNos || []).length;
@@ -1659,8 +1670,10 @@
         SubTotal: total, TaxAmt: '0.0000', TaxableAmt: total, Total: total, TaxCode: '',
         TaxableExcFooterDisc: total, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
       };
-      // Inline batch/serial fields for APIs that expect them on the DTL
-      if (a.batchNo) { obj.BatchNo = a.batchNo; obj.CSB_BatchNo = a.batchNo; }
+      // Inline batch/serial fields for APIs that expect them on the DTL (first
+      // batch only - the full per-batch split lives in CashSalesBatch below)
+      var firstBatchNo = (a.batches && a.batches.length) ? a.batches[0].batchNo : a.batchNo;
+      if (firstBatchNo) { obj.BatchNo = firstBatchNo; obj.CSB_BatchNo = firstBatchNo; }
       if (a.serialNos && a.serialNos.length) { obj.SerialNo = a.serialNos[0]; obj.CSSN_SerialNo = a.serialNos[0]; }
       return obj;
     }).filter(Boolean);
@@ -1690,18 +1703,24 @@
       var grp = 'G' + (idx + 1);
       var lineBinID = String(a.binLocationID || branch.binLocationID);
       var lineWhID = String(editingReport.warehouseID || branch.warehouseID);
-      if (im2.batchControl && a.batchNo) {
-        salesBatches.push({
-          GroupID: grp, ItemID: String(im2.id), BatchNo: a.batchNo, Qty: a.qty.toFixed(4), BaseQty: a.qty.toFixed(4),
-          BinLocationID: lineBinID, WarehouseID: lineWhID,
-          CSB_BatchNo: a.batchNo, CSB_Qty: a.qty.toFixed(4), CSB_GroupID: grp
+      // Multiple batches can fund one Action Taken line - emit one CashSalesBatch
+      // per batch, all sharing the same GroupID so they sum up to the line's Qty.
+      var lineBatches = (a.batches && a.batches.length) ? a.batches : (a.batchNo ? [{ batchNo: a.batchNo, qty: a.qty }] : []);
+      if (im2.batchControl && lineBatches.length) {
+        lineBatches.forEach(function (b) {
+          var q = (typeof b.qty === 'number' ? b.qty : parseFloat(b.qty) || 0).toFixed(4);
+          salesBatches.push({
+            GroupID: grp, ItemID: String(im2.id), BatchNo: b.batchNo, Qty: q, BaseQty: q,
+            BinLocationID: lineBinID, WarehouseID: lineWhID,
+            CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: grp
+          });
         });
       }
       if (im2.serialControl && a.serialNos) {
         a.serialNos.forEach(function (sn) {
           salesSNs.push({
-            GroupID: grp, ItemID: String(im2.id), SerialNo: sn, BatchNo: a.batchNo || '',
-            CSSN_SerialNo: sn, CSSN_BatchNo: a.batchNo || '', BinLocationID: lineBinID
+            GroupID: grp, ItemID: String(im2.id), SerialNo: sn, BatchNo: (lineBatches[0] && lineBatches[0].batchNo) || '',
+            CSSN_SerialNo: sn, CSSN_BatchNo: (lineBatches[0] && lineBatches[0].batchNo) || '', BinLocationID: lineBinID
           });
         });
       }
@@ -1928,34 +1947,44 @@
             .append($('<td>').append($qtyInput))
             .append($('<td>').text(expStr))
             .append($('<td>').text(r[3] || ''));
+          function recalcTotal() {
+            var sum = 0;
+            $('#batch-tbody .batch-row-check:checked').each(function () {
+              sum += parseFloat($(this).closest('tr').find('.batch-row-qty').val()) || 0;
+            });
+            $('#batch-total-selected').text(sum);
+            $('#batch-qty').val(sum);
+          }
           $check.on('change', function () {
-            // Single-select: this row supports one batch per Action Taken line,
-            // so ticking one row unchecks/clears every other row.
-            $('#batch-tbody .batch-row-check').not(this).prop('checked', false);
-            $('#batch-tbody .batch-row-qty').not($qtyInput).val('').prop('disabled', true);
+            // Multi-select: one Action Taken line can be fulfilled from several
+            // batches (e.g. 5 from ABC + 3 from G1001), each with its own Qty.
             if ($(this).is(':checked')) {
               $qtyInput.prop('disabled', false).val(qtyAvail);
-              $('#batch-input').val(batchNo);
               $('#batch-input-manual').val('');
-              $('#batch-qty').val(qtyAvail);
             } else {
               $qtyInput.prop('disabled', true).val('');
-              $('#batch-input').val('');
             }
+            recalcTotal();
           });
           $qtyInput.on('input', function () {
             var v = parseFloat($(this).val());
             if (v > qtyAvail) { v = qtyAvail; $(this).val(v); showToast('Only ' + qtyAvail + ' available in batch ' + batchNo, true); }
-            $('#batch-qty').val($(this).val());
+            recalcTotal();
           });
           $('#batch-tbody').append($tr);
         });
-        // Pre-check whichever batch this row was already saved with, if any
-        if (row.batchNo) {
+        // Pre-check whichever batch(es) this row was already saved with, if any
+        var savedBatches = (row.batches && row.batches.length) ? row.batches : (row.batchNo ? [{ batchNo: row.batchNo, qty: row.qty }] : []);
+        savedBatches.forEach(function (sb) {
           $('#batch-tbody tr').each(function () {
-            if ($(this).find('td').eq(1).text() === row.batchNo) { $(this).find('.batch-row-check').prop('checked', true).trigger('change'); }
+            if ($(this).find('td').eq(1).text() === sb.batchNo) {
+              $(this).find('.batch-row-check').prop('checked', true);
+              $(this).find('.batch-row-qty').prop('disabled', false).val(sb.qty);
+            }
           });
-        }
+        });
+        $('#batch-tbody .batch-row-check:checked').first().trigger('change');
+        if (savedBatches.length) { var sum = 0; savedBatches.forEach(function (sb) { sum += parseFloat(sb.qty) || 0; }); $('#batch-total-selected').text(sum); $('#batch-qty').val(sum); }
       });
     }
     $('#batch-modal').addClass('show');
@@ -1963,28 +1992,41 @@
   function closeBatchModal() { $('#batch-modal').removeClass('show'); batchEditingIdx = null; }
   $('#btn-batch-cancel').on('click', closeBatchModal);
   $('#batch-modal').on('click', function (e) { if (e.target.id === 'batch-modal') closeBatchModal(); });
-  // Typing a manual Batch No clears any table selection (they're mutually exclusive)
+  // Typing a manual Batch No clears any table selection (mutually exclusive with checked rows)
   $('#batch-input-manual').on('input', function () {
-    if ($(this).val()) { $('#batch-tbody .batch-row-check').prop('checked', false); $('#batch-tbody .batch-row-qty').val('').prop('disabled', true); $('#batch-input').val(''); }
+    if ($(this).val()) {
+      $('#batch-tbody .batch-row-check').prop('checked', false);
+      $('#batch-tbody .batch-row-qty').val('').prop('disabled', true);
+      $('#batch-total-selected').text(0);
+    }
   });
   $('#btn-batch-ok').on('click', function () {
     if (batchEditingIdx === null) return;
     var row = editingReport.actionTaken[batchEditingIdx];
-    var bNo = $.trim($('#batch-input').val()) || $.trim($('#batch-input-manual').val());
-    var qtyVal = parseFloat($('#batch-qty').val());
+    var batches = [];
+    $('#batch-tbody .batch-row-check:checked').each(function () {
+      var $tr = $(this).closest('tr');
+      var bNo = $tr.find('td').eq(1).text();
+      var qty = parseFloat($tr.find('.batch-row-qty').val()) || 0;
+      if (qty > 0) batches.push({ batchNo: bNo, qty: qty });
+    });
+    var manualNo = $.trim($('#batch-input-manual').val());
+    if (!batches.length && manualNo) batches.push({ batchNo: manualNo, qty: parseFloat($('#batch-qty').val()) || row.qty || 0 });
+    var totalQty = batches.reduce(function (s, b) { return s + b.qty; }, 0);
     var sText = $.trim($('#serial-input').val());
     var serials = sText ? sText.split(/\n/).map(function (s) { return $.trim(s); }).filter(Boolean) : [];
-    if (batchNeedBatch && !batchOptional && !bNo) { showToast('Batch No is required for this item - tick a batch above or type one manually', true); return; }
+    if (batchNeedBatch && !batchOptional && !batches.length) { showToast('Batch No is required for this item - tick one or more batches above, or type one manually', true); return; }
+    if (batchNeedBatch && batches.length && totalQty !== parseFloat(row.qty || 0)) {
+      showToast('Selected batch Qty total (' + totalQty + ') must match line Qty (' + row.qty + ')', true); return;
+    }
     if (batchNeedSerial && serials.length !== parseInt(row.qty || 0, 10)) {
       showToast('Serial count (' + serials.length + ') must match Qty (' + row.qty + ')', true); return;
     }
     if (batchNeedSerial && !serials.length) { showToast('Serial No is required', true); return; }
-    row.batchNo = bNo;
+    row.batches = batches;
+    row.batchNo = batches.length ? batches[0].batchNo : '';
     row.serialNos = serials;
-    // Selecting a batch row (with its own Qty Available auto-fill) updates the
-    // outer Action Taken row's Qty too, matching what was actually taken from stock.
-    if (qtyVal > 0) row.qty = qtyVal;
-    addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batch=' + (row.batchNo||'-') + ' qty=' + row.qty + ' serials=' + (row.serialNos||[]).length);
+    addLog('Batch/Serial saved for row ' + (batchEditingIdx+1) + ': batches=' + JSON.stringify(batches) + ' serials=' + (row.serialNos||[]).length);
     closeBatchModal();
     renderActionTable();
     markDirty('batch/serial');
@@ -1992,11 +2034,15 @@
 
   function renderActionTable() {
     var $tb = $('#action-tbody').empty();
+    var branchWhReady = hasBranchAndWarehouse();
+    $('#action-branch-wh-hint').toggle(!branchWhReady);
     (editingReport.actionTaken || []).forEach(function (a, i) {
       var $tr = $('<tr>');
       var $wrap = $('<div class="search-input-wrap">');
       var _itemMatchTimer = null;
       var $itemInput = $('<input list="item-datalist">').val(a.item || '')
+        .prop('disabled', !branchWhReady)
+        .attr('title', branchWhReady ? '' : 'Select Sales Branch and Warehouse first')
         .on('input', function () {
           var raw = $(this).val();
           editingReport.actionTaken[i].item = raw;
@@ -2035,7 +2081,8 @@
             }
           }).fail(function (e) { addLog('Fetch item failed: ' + (e && e.statusText || e)); showToast('Failed to fetch item ' + code, true); });
         });
-      var $searchBtn = $('<button class="search-icon-btn" type="button" title="Search Item">&#128269;</button>').on('click', function () {
+      var $searchBtn = $('<button class="search-icon-btn" type="button" title="Search Item">&#128269;</button>').prop('disabled', !branchWhReady).on('click', function () {
+        if (!branchWhReady) { showToast('Please select Sales Branch and Warehouse first', true); return; }
         if (!items.length) { showToast('Item list still loading - try again in a moment', true); return; }
         openPicker('item', function (im) { applyItemToRow(i, im); });
       });
@@ -2070,14 +2117,15 @@
         var label = '-';
         if (need) {
           var parts = [];
-          if (a.batchNo) parts.push('B:' + a.batchNo);
+          if (a.batches && a.batches.length) parts.push('B:' + a.batches.map(function (b) { return b.batchNo + '(' + b.qty + ')'; }).join('+'));
+          else if (a.batchNo) parts.push('B:' + a.batchNo);
           if (a.serialNos && a.serialNos.length) parts.push('S:' + a.serialNos.length);
           label = parts.length ? parts.join(' ') : '<span style="color:#dc2626;">required</span>';
         }
         var $cell = $('<td>');
         if (need) {
           var $btn = $('<button class="btn-secondary btn-sm" type="button">').html(label).on('click', function () { openBatchModalForRow(i); });
-          if (!a.batchNo && !a.serialNos) $btn.css({ color:'#dc2626', borderColor:'#fecaca' });
+          if (!a.batchNo && !(a.batches && a.batches.length) && !a.serialNos) $btn.css({ color:'#dc2626', borderColor:'#fecaca' });
           $cell.append($btn);
         } else {
           $cell.text(a.item ? '-' : '');
@@ -2089,7 +2137,11 @@
     });
     $('#action-empty').toggle((editingReport.actionTaken || []).length === 0);
   }
-  $('#btn-add-action').on('click', function () { editingReport.actionTaken = editingReport.actionTaken || []; editingReport.actionTaken.push({ item: '', desc: '', uom: '', qty: 1, price: 0 }); renderActionTable(); });
+  function hasBranchAndWarehouse() { return !!(editingReport.salesBranchID && $('#d-warehouse').val()); }
+  $('#btn-add-action').on('click', function () {
+    if (!hasBranchAndWarehouse()) { showToast('Please select Sales Branch and Warehouse first', true); return; }
+    editingReport.actionTaken = editingReport.actionTaken || []; editingReport.actionTaken.push({ item: '', desc: '', uom: '', qty: 1, price: 0 }); renderActionTable();
+  });
 
   function nextDocCode() {
     var max = 0;
@@ -2168,6 +2220,7 @@
         custCode: r.custCode || '', custName: r.custName || '', custPhone: r.custPhone || '', custAddress: r.custAddress || '',
         custAddr1: r.custAddr1 || '', custAddr2: r.custAddr2 || '', custAddr3: r.custAddr3 || '', custAddr4: r.custAddr4 || '',
         ref: r.ref || '', receivedBy: r.receivedBy || '', servicedBy: r.servicedBy || '', remark: r.remark || '',
+        salesBranchID: r.salesBranchID || '', salesBranchCode: r.salesBranchCode || '', warehouseID: r.warehouseID || null,
         createdAt: r.createdAt || '', createdBy: r.createdBy || ''
       };
       lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now));
@@ -2177,7 +2230,7 @@
         lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now));
       });
       (r.actionTaken || []).forEach(function (a, i) {
-        var payload = { docCode: r.code, item: a.item || '', desc: a.desc || '', uom: a.uom || '', qty: a.qty || 0, price: a.price || 0, batchNo: a.batchNo || '', serialNos: a.serialNos || [] };
+        var payload = { docCode: r.code, item: a.item || '', desc: a.desc || '', uom: a.uom || '', qty: a.qty || 0, price: a.price || 0, batchNo: a.batchNo || '', batches: a.batches || [], serialNos: a.serialNos || [], binLocationID: a.binLocationID || null, binLocationCode: a.binLocationCode || '' };
         lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now));
       });
     });
