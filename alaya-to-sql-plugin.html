@@ -177,6 +177,7 @@
     <div class="form-row">
       <div class="form-group">
         <label>Alaya Company</label>
+        <input type="text" id="alaya-company-filter" placeholder="Type to filter (e.g. JIN6)..." style="margin-bottom:6px;" />
         <select id="alaya-company-select">
           <option value="">Loading companies...</option>
         </select>
@@ -955,6 +956,7 @@ function loadCompaniesFromApi() {
       var hadSaved = !!((settings && settings.alayaCompanyId));
       var picked = pickDefaultCompany(data);
       if (picked) {
+        clearCompanyFilter();
         sel.val(String(picked));
         settings.alayaCompanyId = picked;
         addLog('Default company auto-selected: ' + sel.find('option:selected').text(), 'log-ok');
@@ -1012,6 +1014,7 @@ function probeDefaultCompanyByStaff(pickedId) {
         id = (r.results && r.results[0] && r.results[0].rows && r.results[0].rows[0]) ? parseInt(r.results[0].rows[0][0], 10) : 0;
       } catch(e) { throw e; }
       if (!id || !$('#alaya-company-select option[value="' + id + '"]').length) { tryComp(linkCol, j + 1); return; }
+      clearCompanyFilter();
       $('#alaya-company-select').val(String(id));
       settings.alayaCompanyId = id;
       settings.alayaCompany = currentAlayaCompanyCode();
@@ -1070,6 +1073,7 @@ function applyUserCompanyFilter() {
     }
     addLog('Company list filtered to ' + kept + ' companies for ' + username, 'log-ok');
     window._companyScopeMode = 'filtered for ' + username;
+    clearCompanyFilter();
     setScopeNote();
     var picked = pickDefaultCompany(companies.filter(function(c) {
       return sel.find('option[value="' + c.CO_ID + '"]').length > 0;
@@ -1086,10 +1090,27 @@ function applyUserCompanyFilter() {
   });
 }
 
-function setScopeNote() {
+// Company dropdown text filter (682-row SIT list is unusable without it)
+$('#alaya-company-filter').on('input', function() {
+  var q = $.trim($(this).val()).toUpperCase();
+  var shown = 0, total = 0;
+  $('#alaya-company-select option').each(function() {
+    total++;
+    var hit = !q || $(this).text().toUpperCase().indexOf(q) >= 0 || String($(this).val()).toUpperCase().indexOf(q) >= 0;
+    $(this).toggle(hit);
+    if (hit) shown++;
+  });
+  if (q) setScopeNote(shown + ' match');
+});
+function clearCompanyFilter() {
+  $('#alaya-company-filter').val('');
+  $('#alaya-company-select option').show();
+}
+
+function setScopeNote(extra) {
   var n = $('#alaya-company-select').find('option').length;
   var mode = window._companyScopeMode || 'full list';
-  $('#company-scope-note').text(n + ' companies (' + mode + ')');
+  $('#company-scope-note').text(n + ' companies (' + mode + ')' + (extra ? ' - ' + extra : ''));
 }
 
 function showCompanyRetry(msg) {
