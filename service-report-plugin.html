@@ -2293,6 +2293,19 @@
         var whID = parseInt($('#d-warehouse').val(), 10);
         var wh = warehouses.filter(function (w) { return w.id === whID; })[0];
         var bins = wh ? (wh.bins || []) : [];
+        // Auto-default the row bin so it is rarely left empty: saved value >
+        // branch default bin > the warehouse's only bin. Silent fill (no dirty
+        // mark) since this also runs on plain open/render, not just user edits.
+        var curBranch = salesBranches.filter(function (b) { return String(b.id) === String(editingReport.salesBranchID); })[0];
+        var defBinID = null;
+        if (a.binLocationID && bins.some(function (bl) { return bl.id === a.binLocationID; })) defBinID = a.binLocationID;
+        else if (curBranch && curBranch.binLocationID && bins.some(function (bl) { return bl.id === curBranch.binLocationID; })) defBinID = curBranch.binLocationID;
+        else if (bins.length === 1) defBinID = bins[0].id;
+        if (defBinID && defBinID !== a.binLocationID) {
+          a.binLocationID = defBinID;
+          var _dbl = bins.filter(function (bl) { return bl.id === defBinID; })[0];
+          a.binLocationCode = _dbl ? _dbl.code : '';
+        }
         var $binSel = $('<select>').append($('<option value="">-- Select --</option>'));
         bins.forEach(function (bl) { $binSel.append($('<option>').val(bl.id).text(bl.code + ' - ' + bl.name)); });
         if (a.binLocationID && bins.some(function (bl) { return bl.id === a.binLocationID; })) $binSel.val(a.binLocationID);
