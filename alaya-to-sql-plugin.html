@@ -773,13 +773,12 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 
 // ΓöÇΓöÇ Toast ΓöÇΓöÇ
 function showToast(msg, isError) {
-  var existing = $('#toast-msg');
-  if (existing.length) existing.parent().remove();
+  $('#toast-msg').remove();
   var bg = isError ? '#fee2e2' : '#dcfce7';
   var fg = isError ? '#991b1b' : '#166534';
   var html = '<div id="toast-msg" style="position:fixed;bottom:24px;right:24px;background:'+bg+';color:'+fg+';padding:12px 20px;border-radius:10px;font-size:0.82rem;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);">'+escHtml(msg)+'</div>';
-  $('body').append(html);
-  setTimeout(function(){ $('#toast-msg').parent().remove(); }, 4000);
+  var $t = $(html).appendTo('body');
+  setTimeout(function(){ $t.remove(); }, 4000);
 }
 
 // ΓöÇΓöÇ postMessage helpers ΓöÇΓöÇ
