@@ -237,9 +237,14 @@
           <input type="text" id="cfg-alaya-api" value="https://api.irsbizsuite.com.my/sit/" />
         </div>
         <div class="form-group" style="margin-bottom:10px;">
-          <label>Company ID</label>
-          <input type="text" id="cfg-company-id" value="" />
+          <label>Client ID</label>
+          <input type="text" id="cfg-alaya-clientid" value="qa3" />
         </div>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>Username</label>
+          <input type="text" id="cfg-alaya-username" value="jin1" />
+        </div>
+        <button id="btn-test-alaya" class="btn-secondary">Test Alaya Connection</button>
       </div>
     </div>
     <div class="btn-row" style="margin-top:16px;">
@@ -419,6 +424,33 @@ $('#btn-test-backend').on('click', function() {
       addLog('Backend test FAILED', 'log-err');
       $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
       showToast('Backend unreachable', true);
+    }
+  });
+});
+
+$('#btn-test-alaya').on('click', function() {
+  var apiUrl = $('#cfg-alaya-api').val();
+  var clientId = $('#cfg-alaya-clientid').val();
+  var username = $('#cfg-alaya-username').val();
+  
+  if (!apiUrl) {
+    showToast('Please enter Alaya API URL', true);
+    return;
+  }
+  
+  addLog('Testing Alaya API connection...', 'log-info');
+  $.ajax({
+    url: backendUrl + '/api/alaya/test',
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ apiUrl: apiUrl, clientId: clientId, username: username }),
+    success: function(r) {
+      addLog('Alaya API connection successful', 'log-ok');
+      showToast('Alaya API connected');
+    },
+    error: function(xhr) {
+      addLog('Alaya API test FAILED: ' + (xhr.responseJSON?.error || xhr.statusText), 'log-err');
+      showToast('Alaya API connection failed', true);
     }
   });
 });
