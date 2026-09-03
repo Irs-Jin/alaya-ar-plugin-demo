@@ -1005,7 +1005,10 @@
     }).then(function (r3) {
       var data = (r3.resp && r3.resp.data) || [];
       if (r3.ok) {
-        companyPaymentTerms = data.map(function (t) { return { id: t.CPT_ID, active: t.CPT_Active_YN }; });
+        // Real keys are CompanyPaymentTermID / PT_Active_YN (NOT CPT_ID - that
+        // mapping sent the literal string "undefined" and the server died with
+        // "Value cannot be null. Parameter name: source"). Verified live 03/Sep.
+        companyPaymentTerms = data.map(function (t) { return { id: t.CompanyPaymentTermID, active: t.PT_Active_YN }; });
         addLog('Loaded ' + companyPaymentTerms.length + ' company payment terms for company ' + companyID);
       } else { addLog('GetAllCompanyPaymentTerm FAILED for company ' + companyID + ' (kept previous list)'); }
     }).always(function () {
@@ -1830,7 +1833,7 @@
     // The known-good tc010 post always carried a real term ID; sending '' dies
     // server-side ("Value cannot be null. Parameter name: source"). Block with a
     // clear message instead - usually just a rate-limited term list, retry helps.
-    if (!payTerm) { showToast('No Company Payment Term loaded for company ' + companyID + ' - click Copy To Sales again to retry (or create an active term)', true); addLog('Copy To Sales blocked: no payment term for company ' + companyID); return; }
+    if (!payTerm || !payTerm.id) { showToast('No Company Payment Term loaded for company ' + companyID + ' - click Copy To Sales again to retry (or create an active term)', true); addLog('Copy To Sales blocked: no payment term for company ' + companyID); return; }
 
     // Build child arrays for batch/serial items (CashSalesBatch / CashSalesSN). GroupID links to SalesDTL.
     var salesBatches = [], salesSNs = [];
@@ -1947,6 +1950,18 @@
     closePaymodeModal();
 
     if (!confirm('This creates a REAL posted Cash Sales document for ' + ctx.custRecord.name + ' totalling RM' + ctx.total.toFixed(2) + ' (' + mode.code + '). This cannot be undone (only reversed via a Sales Return). Continue?')) return;
+
+    // Last net: no ID field may ever go out as the literal string "undefined"
+    // (a wrong API field mapping once did exactly that for CompanyPaymentTermID
+    // and the server died with "Value cannot be null. Parameter name: source").
+    var bodyJson = JSON.stringify(ctx.body);
+    var badKey = (bodyJson.match(/"([A-Za-z]+ID)"\s*:\s*"undefined"/) || [])[1];
+    if (badKey) {
+      addLog('Copy To Sales blocked: ' + badKey + ' is undefined in request body');
+      addLog('Blocked request body: ' + bodyJson.slice(0, 2000));
+      showToast('Cannot Copy To Sales: ' + badKey + ' failed to resolve - reload and retry', true);
+      return;
+    }
 
     addLog('POST api/CashSales/PostCashSales (company ' + ctx.companyID + ', branch ' + ctx.branch.id + ', total ' + ctx.total.toFixed(2) + ', mode ' + mode.code + ')');
     $.ajax({
