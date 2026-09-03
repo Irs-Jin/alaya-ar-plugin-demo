@@ -2220,9 +2220,28 @@
     function p(n) { return (n < 10 ? '0' : '') + n; }
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
-  function sqlInsertLine(tableCode, code, payload, dateCreated, now, oversized) {
+  /* ZZC_Description has a hard NVARCHAR(400) cap that cannot be widened (Alaya's
+     own SQL Query Tool refuses ALTER/CREATE/DROP/TRUNCATE outright). Rather than
+     let an occasional long Remark/Reference silently fail the whole Save at the
+     server (SQL error 8152), trim the given free-text keys - in priority order -
+     until the payload fits, so Save always succeeds even if some text gets cut. */
+  function fitPayloadToLimit(payload, truncatableKeys, code, oversized) {
     var json = JSON.stringify(payload);
-    if (json.length > 400 && oversized) oversized.push(code + ' (' + json.length + ' chars)');
+    var truncatedAny = false;
+    for (var k = 0; k < truncatableKeys.length && json.length > 400; k++) {
+      var key = truncatableKeys[k];
+      while (json.length > 400 && payload[key] && payload[key].length > 0) {
+        payload[key] = payload[key].slice(0, Math.max(0, payload[key].length - 20));
+        truncatedAny = true;
+        json = JSON.stringify(payload);
+      }
+    }
+    if (json.length > 400 && oversized) oversized.push(code + ' (' + json.length + ' chars, could not fit)');
+    else if (truncatedAny && oversized) oversized.push(code + ' (text shortened to fit)');
+    return json;
+  }
+  function sqlInsertLine(tableCode, code, payload, dateCreated, now, oversized, truncatableKeys) {
+    var json = fitPayloadToLimit(payload, truncatableKeys || [], code, oversized);
     var sqlSafe = json.replace(/'/g, "''");
     var codeSafe = (code || '').replace(/'/g, "''");
     return "INSERT INTO ZZT_" + tableCode
@@ -2261,11 +2280,11 @@
         sbi: r.salesBranchID || '', sbc: r.salesBranchCode || '', wid: r.warehouseID || null,
         ca: r.createdAt || '', cb: r.createdBy || ''
       };
-      lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now, oversized));
+      lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now, oversized, ['rm', 'rf', 'a4', 'a3', 'cn']));
 
       (r.equipment || []).forEach(function (eq, i) {
         var payload = { dc: r.code, ds: eq.desc || '', br: eq.brand || '', md: eq.model || '', sn: eq.sn || '', sy: eq.symptom || '', rm: eq.remark || '' };
-        lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now, oversized));
+        lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now, oversized, ['rm', 'sy', 'ds']));
       });
       (r.actionTaken || []).forEach(function (a, i) {
         var payload = {
@@ -2273,11 +2292,11 @@
           bt: (a.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty }; }),
           sn: a.serialNos || [], bl: a.binLocationID || null
         };
-        lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now, oversized));
+        lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now, oversized, ['ds']));
       });
     });
     if (oversized.length) {
-      showToast('Warning: ' + oversized.length + ' line(s) still exceed 400 chars and will fail to save - shorten Remark/Description/Address text: ' + oversized.join(', '), true);
+      showToast('Note: some text was shortened to fit the 400-char field limit, or a line has too many batches to fit - ' + oversized.join('; '), true);
     }
     return lines.join('\n');
   }
