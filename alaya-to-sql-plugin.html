@@ -1033,12 +1033,14 @@ function refreshPaymodesForCompany(cid, btn) {
     headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: cid, MaxID: 0 }),
     success: function(resp) {
       var data = (resp && resp.data) || [];
+      try { addLog('PayMode raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
       var saved = {};
       (settings.paymodes || []).forEach(function(p) { saved[p.code] = p.acct; });
       renderPaymodeTable(data.map(function(p) {
-        var code = String(p.PM_Code || '').trim();
+        if (typeof p === 'string') return { code: p, acct: saved[p] || '' };
+        var code = String(pick(p, ['PM_Code', 'Code', 'PaymentModeCode', 'Description']) || '').trim();
         return { code: code, acct: saved[code] || '' };
-      }));
+      }).filter(function(r) { return r.code; }));
       addLog('Loading Done. ' + data.length + ' payment modes (remember to Save)', 'log-ok');
       showToast('Loading Done. ' + data.length + ' payment modes');
     },
@@ -1062,13 +1064,18 @@ function refreshBranchesForCompany(cid, btn) {
     headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
     success: function(resp) {
       var data = (resp && resp.data) || [];
+      try { addLog('Branch raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
       var saved = {};
       (settings.branches || []).forEach(function(b) { saved[b.code] = b; });
       renderBranchTable(data.map(function(b) {
-        var code = String(b.SB_Code || '').trim();
+        if (typeof b === 'string') {
+          var prev0 = saved[b] || {};
+          return { code: b, cashAcct: prev0.cashAcct || '', acct: prev0.acct || '', itemGroup: !!prev0.itemGroup };
+        }
+        var code = String(pick(b, ['SB_Code', 'Code', 'BranchCode']) || '').trim();
         var prev = saved[code] || {};
         return { code: code, cashAcct: prev.cashAcct || '', acct: prev.acct || '', itemGroup: !!prev.itemGroup };
-      }));
+      }).filter(function(r) { return r.code; }));
       addLog('Refresh Done. ' + data.length + ' sales branches (remember to Save)', 'log-ok');
       showToast('Refresh Done. ' + data.length + ' sales branches');
     },
@@ -1088,30 +1095,48 @@ $('#btn-refresh-divisions').on('click', function() {
   if (!cid) { showToast('Select an Alaya company first', true); return; }
   if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
   var btn = $(this).prop('disabled', true).text('Loading...');
-  addLog('POST api/PurchaseDivision/GetAllPurchaseDivision (company ' + cid + ')');
-  $.ajax({
-    url: apiUrl + 'api/PurchaseDivision/GetAllPurchaseDivision', type: 'POST', cache: false, contentType: 'application/json',
-    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
-    success: function(resp) {
-      var data = (resp && resp.data) || [];
-      if (!data.length) { addLog('No divisions from API - add manually', 'log-info'); }
-      else {
+  // Desktop has no dedicated division URL; it likely uses the generic
+  // SyncData/SyncByTable. Probe body variants in sequence.
+  var bodies = [
+    { CompanyID: cid, TableName: 'PurchaseDivision' },
+    { CompanyID: cid, Table: 'PurchaseDivision' },
+    { companyID: cid, tableName: 'PurchaseDivision' }
+  ];
+  var bi = 0;
+  function tryNext() {
+    if (bi >= bodies.length) {
+      addLog('GetAllPurchaseDivision/SyncByTable all failed - add divisions manually', 'log-warn');
+      showToast('API not available, add manually', true);
+      btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+      return;
+    }
+    var body = bodies[bi++];
+    addLog('POST api/SyncData/SyncByTable ' + JSON.stringify(body));
+    $.ajax({
+      url: apiUrl + 'api/SyncData/SyncByTable', type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify(body),
+      success: function(resp) {
+        var data = (resp && (resp.data || resp.Obj || resp.Result)) || [];
+        if (!Array.isArray(data)) data = data ? [data] : [];
+        try { addLog('Division raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
+        if (!data.length) { tryNext(); return; }
         var saved = {};
         (settings.divisions || []).forEach(function(d) { saved[d.code] = d.itemGroup; });
         renderDivisionTable(data.map(function(d) {
-          var code = String(d.PD_Code || d.Code || d.code || '').trim();
+          var code = (typeof d === 'string') ? d : String(pick(d, ['Code', 'DivisionCode', 'PD_Code', 'Name']) || '').trim();
           return { code: code, itemGroup: !!saved[code] };
-        }));
+        }).filter(function(r) { return r.code; }));
         addLog('Refresh Done. ' + data.length + ' purchase divisions (remember to Save)', 'log-ok');
+        showToast('Refresh Done.');
+        btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+      },
+      error: function(xhr) {
+        addLog('SyncByTable variant failed (' + xhr.status + '), trying next...', 'log-info');
+        tryNext();
       }
-      showToast('Refresh Done.');
-    },
-    error: function(xhr) {
-      addLog('GetAllPurchaseDivision not available (' + xhr.status + ') - add divisions manually', 'log-warn');
-      showToast('API not available, add manually', true);
-    },
-    complete: function() { btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code'); }
-  });
+    });
+  }
+  tryNext();
 });
 
 $('#btn-add-division').on('click', function() { appendDivisionRow('', false); });
