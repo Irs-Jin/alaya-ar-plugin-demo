@@ -143,6 +143,7 @@
     <div>
       <h1>Alaya to SQL Account Transfer</h1>
       <div class="sub">Transfer data from Alaya POS to SQL Account via Backend API</div>
+      <div class="sub" style="margin-bottom:0;color:#9ca3af;font-size:0.7rem;">build: <span id="build-tag">…</span></div>
     </div>
   </div>
   <div class="status-row">
@@ -1817,6 +1818,11 @@ function normPurchaseDoc(raw) {
 function fetchDocType(type, endpoint, cid, from, to, cb) {
   var body = { CompanyID: cid, DateFrom: from, DateTo: to };
   addLog('POST ' + endpoint + ' ' + JSON.stringify(body));
+  function errDetail(xhr) {
+    var t = '';
+    try { t = ' ' + String(xhr.responseText || '').slice(0, 200); } catch(e) {}
+    return xhr.status + t;
+  }
   function handle(resp, rawMode) {
     var arr = (resp && resp.data) || resp.Obj || resp.Result || [];
     if (!Array.isArray(arr)) arr = arr ? [arr] : [];
@@ -1840,10 +1846,10 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
           url: apiUrl + endpoint, type: 'POST', cache: false, contentType: 'application/json',
           headers: { 'Authorization': authToken }, data: sq,
           success: function(resp2) { handle(resp2, true); },
-          error: function(xhr2) { addLog(type + ' fetch failed (' + xhr2.status + ')', 'log-err'); cb([]); }
+          error: function(xhr2) { addLog(type + ' fetch failed (' + errDetail(xhr2) + ')', 'log-err'); cb([]); }
         });
       } else {
-        addLog(type + ' fetch failed (' + xhr.status + ')', 'log-err');
+        addLog(type + ' fetch failed (' + errDetail(xhr) + ')', 'log-err');
         cb([]);
       }
     }
@@ -2121,6 +2127,7 @@ $('#btn-save-settings').on('click', function() {
 var today = new Date().toISOString().slice(0, 10);
 $('#from-date').val(today);
 $('#to-date').val(today);
+try { $('#build-tag').text(new Date(document.lastModified).toLocaleString()); } catch(e) {}
 
 addLog('Plugin initialized - listening for ALAYA_INIT', 'log-info');
 </script>
