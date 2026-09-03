@@ -1873,11 +1873,13 @@
       headers: { 'Authorization': authToken }, data: JSON.stringify(ctx.body),
       success: function (resp) {
         if (resp && resp.success !== false && resp.data) {
-          addLog('Cash Sales posted OK: ' + resp.data);
-          editingReport.ref = editingReport.ref ? editingReport.ref + ' / CS:' + resp.data : 'CS:' + resp.data;
+          // data is {id, docNo} - not a plain string (confirmed live).
+          var docNo = (typeof resp.data === 'object') ? (resp.data.docNo || resp.data.DocNo || resp.data.id) : resp.data;
+          addLog('Cash Sales posted OK: ' + docNo);
+          editingReport.ref = editingReport.ref ? editingReport.ref + ' / CS:' + docNo : 'CS:' + docNo;
           $('#d-ref').val(editingReport.ref);
           markDirty('copy to sales');
-          $('#cs-success-docno').text(resp.data);
+          $('#cs-success-docno').text(docNo);
           $('#cs-success-modal').addClass('show');
         } else {
           addLog('Cash Sales post FAILED: ' + JSON.stringify(resp).slice(0, 300));
