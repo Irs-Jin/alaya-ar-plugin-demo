@@ -30,9 +30,9 @@
     .hero-title-row { display:flex; align-items:center; gap:12px; }
     .hero-icon {
       flex-shrink:0; width:42px; height:42px; border-radius:11px;
-      background: linear-gradient(135deg, #1565c0, #1e88e5);
-      display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:#fff;
+      overflow:hidden; display:flex; align-items:center; justify-content:center;
     }
+    .hero-icon img { width:100%; height:100%; object-fit:cover; }
     button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
     button:disabled { opacity:0.45; cursor:not-allowed; }
     .btn-primary { background:#1565c0; color:#fff; }
@@ -100,7 +100,7 @@
 <!-- ΓòÉΓòÉΓòÉ HERO ΓòÉΓòÉΓòÉ -->
 <div class="card hero-card">
   <div class="hero-title-row">
-    <div class="hero-icon">≡ƒôè</div>
+    <div class="hero-icon"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwohu2a14wJ2VCdknSG1n4Fz1hqtCK9BRQFh5WlXxrnA&s" alt="Logo"></div>
     <div>
       <h1>Alaya to SQL Account Transfer</h1>
       <div class="sub">Transfer data from Alaya to SQL Accounting via Backend API</div>
