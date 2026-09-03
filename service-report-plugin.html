@@ -1720,6 +1720,10 @@
     }
 
     var unresolvedItems = [];
+    // GroupID must be a real GUID ("Guid should contain 32 digits with 4 dashes"),
+    // not a plain "G1"/"G2" label - one per line, shared between SalesDTL and its
+    // matching CashSalesBatch/CashSalesSN rows so they link back to the right line.
+    var lineGroupIds = lines.map(function () { return makeGuid(); });
     var dtl = lines.map(function (a, idx) {
       var itemRecord = items.filter(function (im) { return im.code === a.item; })[0];
       if (!itemRecord || !itemRecord.id) { unresolvedItems.push(a.item); return null; }
@@ -1729,7 +1733,7 @@
       // while NewUnitPrice is rounded to 99.99).
       var unitPrice = parseFloat((a.price || 0).toFixed(2));
       var qty = a.qty.toFixed(4), total = (a.qty * unitPrice).toFixed(4);
-      var grp = 'G' + (idx + 1);
+      var grp = lineGroupIds[idx];
       var obj = {
         Description: itemRecord.desc || a.desc || '', Qty: qty, ItemID: String(itemRecord.id), ItemUOMID: String(itemRecord.uomID || ''),
         UnitPrice: unitPrice.toFixed(6), NewUnitPrice: unitPrice.toFixed(2), DiscountAmt: '0.00', DiscountFormula: '', ItemTypeID: String(itemRecord.typeID || ''),
@@ -1766,7 +1770,7 @@
     lines.forEach(function (a, idx) {
       var im2 = items.filter(function (x) { return x.code === a.item; })[0];
       if (!im2) return;
-      var grp = 'G' + (idx + 1);
+      var grp = lineGroupIds[idx];
       var lineBinID = String(a.binLocationID || branch.binLocationID);
       var lineWhID = String(editingReport.warehouseID || branch.warehouseID);
       // Multiple batches can fund one Action Taken line - emit one CashSalesBatch
@@ -1890,6 +1894,12 @@
   function fmtCashSalesDate(d) {
     function p(n) { return (n < 10 ? '0' : '') + n; }
     return p(d.getMonth() + 1) + '/' + p(d.getDate()) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  function makeGuid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
   }
   $('#btn-copy-to-sales').on('click', copyToCashSales);
 
