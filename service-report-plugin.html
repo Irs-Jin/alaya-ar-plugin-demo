@@ -1796,6 +1796,13 @@
         var have = (a.serialNos || []).length;
         if (!have || have !== need) batchErrors.push(a.item + ' (need ' + need + ' serial(s))');
       }
+      // Package components may have unmet batch/serial requirements if the row
+      // was loaded from a save made before this validation existed, or the
+      // modal was somehow bypassed - re-check here rather than trust the modal alone.
+      (a.packageComponents || []).forEach(function (c) {
+        if (c.batchControl && !(c.batches && c.batches.length)) batchErrors.push(a.item + ' > ' + c.code + ' (batch required)');
+        if (c.serialControl && !(c.serialNos && c.serialNos.length)) batchErrors.push(a.item + ' > ' + c.code + ' (serial required)');
+      });
     });
     if (batchErrors.length) {
       showToast('Please enter item batch/serial: ' + batchErrors.join(', '), true);
