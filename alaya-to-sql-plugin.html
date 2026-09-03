@@ -100,6 +100,37 @@
     .settings-col { display:flex; gap:20px; }
     .settings-col > div { flex:1; }
     .settings-col h4 { font-size:0.82rem; font-weight:600; color:#374151; margin-bottom:8px; }
+
+    /* Account Codes: two independent, visually separated columns */
+    .acct-cols { display:flex; gap:16px; margin-bottom:16px; align-items:flex-start; }
+    .acct-col { flex:1; border:1px solid #e5e7eb; border-radius:10px; padding:14px 16px; background:#fafbfc; }
+    .acct-col h4 {
+      font-size:0.78rem; font-weight:700; color:#1565c0; text-transform:uppercase; letter-spacing:0.04em;
+      margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #e5e7eb;
+    }
+    .acct-col .form-group { margin-bottom:10px; }
+    .acct-col .form-group:last-child { margin-bottom:0; }
+
+    /* Checkbox option grid (Transfer Options) */
+    .opt-grid {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:8px 16px;
+      border:1px solid #e5e7eb; border-radius:10px; background:#fafbfc; padding:14px 16px;
+    }
+    .opt-grid label {
+      display:flex; align-items:center; gap:7px; font-size:0.82rem; color:#374151; cursor:pointer;
+      padding:4px 0; min-width:0;
+    }
+    .opt-grid label input[type="checkbox"] { flex-shrink:0; }
+    .opt-grid label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* Vertical checkbox list (Transfer Options, grouped by Customer/Vendor) */
+    .opt-list { display:flex; flex-direction:column; gap:2px; }
+    .opt-list label { display:flex; align-items:center; gap:7px; font-size:0.82rem; color:#374151; cursor:pointer; padding:4px 0; }
+
+    /* Mapping section toolbar: actions row + description on its own line */
+    .map-toolbar { margin-bottom:12px; }
+    .map-toolbar .map-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+    .map-toolbar .map-desc { font-size:0.75rem; color:#6b7280; }
   </style>
 </head>
 <body>
@@ -177,35 +208,9 @@
       </div>
     </div>
 
-    <h2 style="margin-top:16px;">Transfer Options</h2>
-    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px;">
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="t-customer" /> Transfer Customer
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="t-vendor" /> Transfer Vendor
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="t-cashsales" checked /> Transfer Cash Sales
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="t-invoice" checked /> Transfer Invoice
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="t-cn" /> Transfer Credit Note
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="t-payment" /> Transfer Payment
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="t-cashpurch" /> Transfer Cash Purchases
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="t-vendorinv" /> Transfer Vendor Invoice
-      </label>
-    </div>
+    <div class="sub" style="margin-top:4px;">Which documents get transferred is controlled by <b>Transfer Options</b> on the Settings tab.</div>
 
-    <div class="btn-row">
+    <div class="btn-row" style="align-items:center;margin-top:12px;">
       <button id="btn-transfer" class="btn-primary">Transfer</button>
       <button id="btn-load-data" class="btn-secondary">Load Alaya Data</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-left:8px;">
@@ -248,7 +253,10 @@
         </div>
       </div>
     </div>
-    <div style="font-size:0.75rem;color:#6b7280;margin-bottom:10px;">Doc type follows the "Doc Type (for Preview / Advanced)" selection on the Transfer tab.</div>
+    <div style="font-size:0.75rem;color:#6b7280;margin-bottom:10px;">Doc type follows the "Doc Type (for Preview / Advanced)" selection on the Transfer tab. Tick rows to transfer; unticked rows are skipped.</div>
+    <div id="adv-doc-grid" style="margin-bottom:16px;">
+      <p style="color:#6b7280;font-size:0.85rem;">Click "Reload Data" to load documents.</p>
+    </div>
     <div id="preview-content" style="max-height:400px;overflow-y:auto;">
       <p style="color:#6b7280;font-size:0.85rem;">Click "Load Alaya Data" or "Reload Data" to preview data from Alaya.</p>
     </div>
@@ -273,6 +281,58 @@
       </div>
     </div>
 
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">SQL Account Connection</h3>
+    <div class="sub" style="margin-top:-4px;">
+      Changes here are saved straight to the backend (<code>config.json</code>) via <code>btn-save-connection</code>,
+      not to the Alaya UDF settings table. Fields left blank keep their current backend value.
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>SQL Account Company</label>
+        <select id="s-sql-company">
+          <option value="">Loading companies...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Default.DCF Path</label>
+        <input type="text" id="s-dcf-path" placeholder="C:\eStream\SQLAccounting\Share\Default.DCF" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Firebird Host</label>
+        <input type="text" id="s-fb-host" placeholder="127.0.0.1" />
+      </div>
+      <div class="form-group">
+        <label>Firebird Port</label>
+        <input type="text" id="s-fb-port" placeholder="3050" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Firebird Username</label>
+        <input type="text" id="s-fb-user" placeholder="SYSDBA" />
+      </div>
+      <div class="form-group">
+        <label>Firebird Password</label>
+        <input type="password" id="s-fb-password" placeholder="(unchanged)" autocomplete="new-password" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Estream Login Username</label>
+        <input type="text" id="s-estream-user" placeholder="ADMIN" />
+      </div>
+      <div class="form-group">
+        <label>Estream Login Password</label>
+        <input type="password" id="s-estream-password" placeholder="(unchanged)" autocomplete="new-password" />
+      </div>
+    </div>
+    <div class="btn-row" style="margin-bottom:8px;">
+      <button id="btn-save-connection" class="btn-secondary">Save Connection Settings</button>
+      <span id="connection-save-status" style="font-size:0.78rem;color:#6b7280;"></span>
+    </div>
+
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Settings</h3>
     <div class="form-row">
       <div class="form-group">
@@ -289,61 +349,61 @@
     </div>
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Account Codes</h3>
-    <div style="display:flex;gap:16px;margin-bottom:16px;">
-      <div style="flex:1;">
-        <h4 style="font-size:0.82rem;font-weight:600;color:#374151;margin-bottom:8px;">Customer</h4>
-        <div class="form-group" style="margin-bottom:8px;">
+    <div class="acct-cols">
+      <div class="acct-col">
+        <h4>Customer</h4>
+        <div class="form-group">
           <label>Cash Sales A/C</label>
           <input type="text" id="s-ac-cashsales" placeholder="500-000" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Cash Sales Rounding A/C</label>
           <input type="text" id="s-ac-cashrounding" placeholder="500-000" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Credit Sales A/C</label>
           <input type="text" id="s-ac-creditsales" placeholder="500-000" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Credit Sales Rounding A/C</label>
           <input type="text" id="s-ac-creditrounding" placeholder="500-000" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Service Charge A/C</label>
           <input type="text" id="s-ac-servicecharge" placeholder="500-000" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Cash Sales Description</label>
           <input type="text" id="s-desc-cashsales" placeholder="CASH SALES - BY ITEMIZED" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Credit Sales Description</label>
           <input type="text" id="s-desc-creditsales" placeholder="INVOICE" />
         </div>
       </div>
-      <div style="flex:1;">
-        <h4 style="font-size:0.82rem;font-weight:600;color:#374151;margin-bottom:8px;">Vendor</h4>
-        <div class="form-group" style="margin-bottom:8px;">
+      <div class="acct-col">
+        <h4>Vendor</h4>
+        <div class="form-group">
           <label>Purchase A/C</label>
           <input type="text" id="s-ac-purchase" placeholder="610-000" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Purchase Rounding A/C</label>
           <input type="text" id="s-ac-purchrounding" placeholder="610-000" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Purchase Description (Max 70 Char.)</label>
           <input type="text" id="s-desc-purchase" placeholder="INVOICE - BY ITEMIZE" maxlength="70" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Purchase Project Code (max 20 char.)</label>
           <input type="text" id="s-proj-purchase" placeholder="e.g. JIN6-PROJ" maxlength="20" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Credit Note A/C</label>
           <input type="text" id="s-ac-creditnote" placeholder="612-000" />
         </div>
-        <div class="form-group" style="margin-bottom:8px;">
+        <div class="form-group">
           <label>Credit Note Description (Max 150 Char.)</label>
           <input type="text" id="s-desc-creditnote" placeholder="RETURN" maxlength="150" />
         </div>
@@ -351,43 +411,55 @@
     </div>
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Options</h3>
-    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-customer" /> Transfer Customer Data
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-vendor" /> Transfer Vendor Data
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-cashsales" checked /> Transfer Cash Sales
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-cashpayment" /> Transfer Cash Sales Payment
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-invoice" checked /> Transfer Invoice
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-cn" /> Transfer Credit Note
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-cashpurch" /> Transfer Cash Purchases
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-cashpurchpay" /> Transfer Cash Purchases Payment
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-t-vendorinv" /> Transfer Vendor Invoice
-      </label>
+    <div class="acct-cols">
+      <div class="acct-col">
+        <h4>Customer</h4>
+        <div class="opt-list">
+          <label>
+            <input type="checkbox" id="s-t-customer" /> <span>Transfer Customer Data</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashsales" checked /> <span>Transfer Cash Sales</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpayment" /> <span>Transfer Cash Sales Payment</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-invoice" checked /> <span>Transfer Invoice</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cn" /> <span>Transfer Credit Note</span>
+          </label>
+        </div>
+      </div>
+      <div class="acct-col">
+        <h4>Vendor</h4>
+        <div class="opt-list">
+          <label>
+            <input type="checkbox" id="s-t-vendor" /> <span>Transfer Vendor Data</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpurch" /> <span>Transfer Cash Purchases</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpurchpay" /> <span>Transfer Cash Purchases Payment</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-vendorinv" /> <span>Transfer Vendor Invoice</span>
+          </label>
+        </div>
+      </div>
     </div>
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Payment Mode Mapping</h3>
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-      <button id="btn-refresh-paymodes" class="btn-secondary">Refresh Alaya Payment Mode</button>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" id="s-pm-bybranch" /> Payment Mode by Sales Branch
-      </label>
-      <span style="font-size:0.75rem;color:#6b7280;">Map each Alaya payment mode to its Control Account in SQL Acct</span>
+    <div class="map-toolbar">
+      <div class="map-actions">
+        <button id="btn-refresh-paymodes" class="btn-secondary">Refresh Alaya Payment Mode</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+          <input type="checkbox" id="s-pm-bybranch" /> Payment Mode by Sales Branch
+        </label>
+      </div>
+      <div class="map-desc">Map each Alaya payment mode to its Control Account in SQL Acct</div>
     </div>
     <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
       <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
@@ -402,9 +474,11 @@
     </div>
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Sales Branch Mapping</h3>
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-      <button id="btn-refresh-branches" class="btn-secondary">Refresh Alaya Sales Branch Code</button>
-      <span style="font-size:0.75rem;color:#6b7280;">Per-branch Cash Sales A/C, Acct Code, and Item-Group A/C flag</span>
+    <div class="map-toolbar">
+      <div class="map-actions">
+        <button id="btn-refresh-branches" class="btn-secondary">Refresh Alaya Sales Branch Code</button>
+      </div>
+      <div class="map-desc">Per-branch Cash Sales A/C, Acct Code, and Item-Group A/C flag</div>
     </div>
     <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
       <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
@@ -421,10 +495,12 @@
     </div>
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Purchase Division Mapping</h3>
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-      <button id="btn-refresh-divisions" class="btn-secondary">Refresh Alaya Purchase Division Code</button>
-      <button id="btn-add-division" class="btn-secondary">+ Add Row</button>
-      <span style="font-size:0.75rem;color:#6b7280;">Tick = use Purchase A/C Code (Item Group) in Alaya</span>
+    <div class="map-toolbar">
+      <div class="map-actions">
+        <button id="btn-refresh-divisions" class="btn-secondary">Refresh Alaya Purchase Division Code</button>
+        <button id="btn-add-division" class="btn-secondary">+ Add Row</button>
+      </div>
+      <div class="map-desc">Tick = use Purchase A/C Code (Item Group) in Alaya</div>
     </div>
     <div style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
       <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
@@ -667,14 +743,6 @@ function applySettings() {
   $('#s-t-cashpurch').prop('checked', s.tCashpurch);
   $('#s-t-cashpurchpay').prop('checked', s.tCashpurchpay);
   $('#s-t-vendorinv').prop('checked', s.tVendorinv);
-  $('#t-customer').prop('checked', s.tCustomer);
-  $('#t-vendor').prop('checked', s.tVendor);
-  $('#t-cashsales').prop('checked', s.tCashsales);
-  $('#t-invoice').prop('checked', s.tInvoice);
-  $('#t-cn').prop('checked', s.tCn);
-  $('#t-payment').prop('checked', s.tCashpayment);
-  $('#t-cashpurch').prop('checked', s.tCashpurch);
-  $('#t-vendorinv').prop('checked', s.tVendorinv);
   $('input[name="adv-type"][value="' + (s.advType || 'customer') + '"]').prop('checked', true);
   $('#adv-doc-type').val(s.advDoc || 'CASH SALES');
   if (s.alayaCompanyId) $('#alaya-company-select').val(String(s.alayaCompanyId));
@@ -722,14 +790,6 @@ function saveSettings() {
     advDoc: $('#adv-doc-type').val() || 'CASH SALES'
   };
   BACKEND_URL = settings.backendUrl;
-  $('#t-customer').prop('checked', settings.tCustomer);
-  $('#t-vendor').prop('checked', settings.tVendor);
-  $('#t-cashsales').prop('checked', settings.tCashsales);
-  $('#t-invoice').prop('checked', settings.tInvoice);
-  $('#t-cn').prop('checked', settings.tCn);
-  $('#t-payment').prop('checked', settings.tCashpayment);
-  $('#t-cashpurch').prop('checked', settings.tCashpurch);
-  $('#t-vendorinv').prop('checked', settings.tVendorinv);
 
   // Always keep a local backup
   try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
@@ -985,11 +1045,14 @@ function loadSqlCompanies() {
     type: 'GET',
     success: function(r) {
       if (r.success && r.data) {
-        var sel = $('#sql-company');
-        sel.empty();
-        sel.append('<option value="">Select company...</option>');
-        r.data.forEach(function(c) {
-          sel.append('<option value="' + escHtml(c.CODE) + '">' + escHtml(c.CODE) + ' - ' + escHtml(c.NAME) + '</option>');
+        [$('#sql-company'), $('#s-sql-company')].forEach(function(sel) {
+          var current = sel.val();
+          sel.empty();
+          sel.append('<option value="">Select company...</option>');
+          r.data.forEach(function(c) {
+            sel.append('<option value="' + escHtml(c.CODE) + '">' + escHtml(c.CODE) + ' - ' + escHtml(c.NAME) + '</option>');
+          });
+          if (current) sel.val(current);
         });
         addLog('Loaded ' + r.data.length + ' SQL companies', 'log-ok');
       }
@@ -1014,6 +1077,76 @@ function testBackendConnection() {
       addLog('Backend unreachable', 'log-err');
       $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
     }
+  });
+}
+
+// ΓöÇΓöÇ SQL Account connection settings (backend config.json, not Alaya UDF) ΓöÇΓöÇ
+function loadConnectionSettings() {
+  $.ajax({
+    url: BACKEND_URL + '/api/settings/connection',
+    type: 'GET',
+    success: function(r) {
+      if (!r.success) return;
+      var d = r.data;
+      $('#s-dcf-path').val(d.dcfPath || '');
+      $('#s-fb-host').val(d.host || '');
+      $('#s-fb-port').val(d.port || '');
+      $('#s-fb-user').val(d.user || '');
+      $('#s-fb-password').val(d.password || '');
+      $('#s-estream-user').val(d.estreamUsername || '');
+      $('#s-estream-password').val(d.estreamPassword || '');
+    },
+    error: function() { addLog('Could not load connection settings from backend', 'log-err'); }
+  });
+}
+
+function saveConnectionSettings() {
+  var body = {
+    dcfPath: $('#s-dcf-path').val(),
+    host: $('#s-fb-host').val(),
+    port: $('#s-fb-port').val(),
+    user: $('#s-fb-user').val(),
+    password: $('#s-fb-password').val(),
+    estreamUsername: $('#s-estream-user').val(),
+    estreamPassword: $('#s-estream-password').val()
+  };
+  $('#connection-save-status').text('Saving...').css('color', '#6b7280');
+  $.ajax({
+    url: BACKEND_URL + '/api/settings/connection',
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify(body),
+    success: function(r) {
+      if (r.success) {
+        $('#connection-save-status').text('Saved.').css('color', '#16a34a');
+        addLog('SQL Account connection settings saved to backend', 'log-ok');
+      } else {
+        $('#connection-save-status').text('Error: ' + r.error).css('color', '#dc2626');
+      }
+    },
+    error: function(xhr) {
+      $('#connection-save-status').text('Save failed (backend unreachable)').css('color', '#dc2626');
+      addLog('Failed to save connection settings', 'log-err');
+    }
+  });
+}
+
+function selectActiveCompany(code) {
+  if (!code) return;
+  $.ajax({
+    url: BACKEND_URL + '/api/settings/company',
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ code: code }),
+    success: function(r) {
+      if (r.success) {
+        addLog('Backend now writing to company ' + code + ' (' + r.data.database + ')', 'log-ok');
+        $('#sql-company, #s-sql-company').val(code);
+      } else {
+        addLog('Could not switch company: ' + r.error, 'log-err');
+      }
+    },
+    error: function() { addLog('Failed to switch active company (backend unreachable)', 'log-err'); }
   });
 }
 
@@ -1414,13 +1547,82 @@ $('#btn-load-data').on('click', function() {
   });
 });
 
-// ΓöÇΓöÇ Advanced Reload (Preview tab) ΓöÇΓöÇ
-$('#btn-adv-reload').on('click', function() {
+// ΓöÇΓöÇ Advanced doc grid (desktop Advanced dialog port) ΓöÇΓöÇ
+function advDocTypeToTransfer() {
+  var d = $('#adv-doc-type').val() || 'CASH SALES';
+  var map = { 'CASH SALES': 'cashsales', 'INVOICE': 'invoice', 'CREDIT NOTE': 'creditnote',
+              'PAYMENT': 'payment', 'CASH PURCHASES': 'cashpurchases', 'VENDOR INVOICE': 'vendorinvoice' };
+  return map[d] || 'cashsales';
+}
+function advGridKey(cid, from, to, type) { return cid + '|' + from + '|' + to + '|' + type; }
+
+function renderAdvGrid(docs, type, key) {
+  window._advGrid = { key: key, type: type, docs: docs || [] };
+  var box = $('#adv-doc-grid').empty();
+  if (!docs || !docs.length) {
+    box.html('<p style="color:#6b7280;font-size:0.85rem;">No ' + escHtml(type) + ' documents found for the selected dates.</p>');
+    return;
+  }
+  var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice');
+  var html = '<div style="font-size:0.82rem;color:#374151;margin-bottom:8px;"><b>' + docs.length +
+             '</b> ' + escHtml(type) + ' docs (ticked = transfer) | <a href="#" id="adv-tick-all">tick all</a> / <a href="#" id="adv-untick-all">untick all</a></div>';
+  html += '<div style="max-height:300px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px;">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;white-space:nowrap;">';
+  html += '<thead><tr style="background:#f9fafb;position:sticky;top:0;">';
+  html += '<th style="padding:6px 8px;border-bottom:2px solid #e5e7eb;">Select</th>';
+  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">Doc No</th>';
+  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">Date</th>';
+  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">' + (isPurch ? 'Supplier' : 'Customer') + '</th>';
+  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">' + (isPurch ? 'Division' : 'Branch') + '</th>';
+  html += '<th style="padding:6px 8px;text-align:right;border-bottom:2px solid #e5e7eb;">Total</th></tr></thead><tbody>';
+  docs.forEach(function(d, i) {
+    var code = isPurch ? (d.suppcode || '') : (d.custcode || '');
+    var sub = isPurch ? (d.division || '') : (d.branch || '');
+    html += '<tr><td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">' +
+            '<input type="checkbox" class="adv-tick" data-i="' + i + '"' + (d._ticked ? ' checked' : '') + '></td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(d.docno || '') + '</td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(d.docdate || '') + '</td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(code) + '</td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(sub) + '</td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + escHtml(d.total) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  box.html(html);
+  box.find('.adv-tick').on('change', function() {
+    var i = parseInt($(this).data('i'), 10);
+    if (window._advGrid && window._advGrid.docs[i]) window._advGrid.docs[i]._ticked = $(this).is(':checked');
+  });
+  $('#adv-tick-all').on('click', function(e) { e.preventDefault(); setAllAdvTicks(true); });
+  $('#adv-untick-all').on('click', function(e) { e.preventDefault(); setAllAdvTicks(false); });
+}
+function setAllAdvTicks(v) {
+  if (!window._advGrid) return;
+  window._advGrid.docs.forEach(function(d) { d._ticked = v; });
+  $('#adv-doc-grid .adv-tick').prop('checked', v);
+}
+
+// Reload docs for the Preview/Advanced grid (desktop Reload Data)
+function loadAdvDocs() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  var type = advDocTypeToTransfer();
+  var from = $('#from-date').val(), to = $('#to-date').val();
+  if (!from || !to) { showToast('Please select date range on the Transfer tab', true); return; }
   settings.advType = $('input[name="adv-type"]:checked').val() || 'customer';
   settings.advDoc = $('#adv-doc-type').val() || 'CASH SALES';
-  addLog('Advanced reload: type=' + settings.advType + ' doc=' + settings.advDoc, 'log-info');
-  $('#btn-load-data').trigger('click');
-  $('.tab-btn[data-tab="preview"]').trigger('click');
+  addLog('Advanced reload: ' + type + ' ' + from + ' ~ ' + to + ' company ' + cid, 'log-info');
+  $('#adv-doc-grid').html('<p style="color:#6b7280;font-size:0.85rem;">Loading...</p>');
+  fetchAllSourceDocs([type], from, to, cid, function(out) {
+    var docs = out[type] || [];
+    renderAdvGrid(docs, type, advGridKey(cid, from, to, type));
+    addLog('Advanced grid: ' + docs.length + ' ' + type + ' docs (all ticked)', 'log-ok');
+  });
+}
+
+// ΓöÇΓöÇ Advanced Reload (Preview tab) ΓöÇΓöÇ
+$('#btn-adv-reload').on('click', function() {
+  loadAdvDocs();
 });
 $('input[name="adv-type"]').on('change', function() {
   settings.advType = $(this).val();
@@ -1505,6 +1707,31 @@ function findFirstArray(obj) {
   return [];
 }
 
+// Split nested arrays into item-lines vs payment-lines by shape
+function splitNested(raw) {
+  var items = [], payments = [];
+  if (!raw || typeof raw !== 'object') return { items: items, payments: payments };
+  Object.keys(raw).forEach(function(k) {
+    var arr = raw[k];
+    if (!Array.isArray(arr) || !arr.length) return;
+    var first = arr[0] || {};
+    var kl = Object.keys(first).map(function(x) { return String(x).toLowerCase(); });
+    var hasQty = kl.some(function(x) { return x.indexOf('qty') >= 0 || x.indexOf('itemcode') >= 0 || x.indexOf('item_code') >= 0; });
+    var hasPay = kl.some(function(x) { return x.indexOf('paymode') >= 0 || x.indexOf('pay_mode') >= 0 || x.indexOf('paymentmode') >= 0; });
+    if (hasQty && !hasPay) items = arr;
+    else if (hasPay) payments = arr;
+    else if (!items.length) items = arr; // unknown shape defaults to items
+  });
+  return { items: items, payments: payments };
+}
+
+function normPay(raw) {
+  return {
+    mode: pick(raw, ['PaymentMode', 'PayMode', 'Mode', 'PaymentModeCode', 'Code']),
+    amount: parseFloat(pick(raw, ['Amount', 'PaymentAmt', 'PaymentAmount', 'PaidAmount'])) || 0
+  };
+}
+
 function normItem(raw) {
   var qty = parseFloat(pick(raw, ['QTY', 'Quantity'])) || 0;
   var price = parseFloat(pick(raw, ['UNITPRICE', 'UnitPrice', 'Price', 'Rate'])) || 0;
@@ -1519,29 +1746,39 @@ function normItem(raw) {
 }
 
 function normSalesDoc(raw) {
-  return {
-    docdate: (pick(raw, ['DocDate', 'CSH_DocDate', 'SIH_DocDate', 'SRH_DocDate', 'Date', 'TxDate']) || '').slice(0, 10),
-    custcode: pick(raw, ['CustCode', 'CSH_CustomerCode', 'SIH_CustomerCode', 'SRH_CustomerCode', 'CustomerCode', 'Code', 'AccountCode']),
+  var split = splitNested(raw);
+  var doc = {
+    docno: pick(raw, ['DocNo', 'CSH_DocNo', 'SIH_DocNo', 'SRH_DocNo']),
+    docdate: (pick(raw, ['DocDate', 'CSH_DocDate', 'SIH_DocDate', 'SRH_DocDate', 'PostingDate', 'CSH_PostingDate', 'Date', 'TxDate']) || '').slice(0, 10),
+    custcode: pick(raw, ['CustCode', 'CustomerCode', 'CSH_CustomerCode', 'SIH_CustomerCode', 'SRH_CustomerCode', 'CSH_CustCode', 'Code', 'AccountCode', 'CustomerReferenceNo', 'CSH_CustomerReferenceNo']),
     custname: pick(raw, ['CustName', 'CustomerName', 'CompanyName', 'Name']),
-    branch: pick(raw, ['Branch', 'CSH_SalesBranchCode', 'SIH_SalesBranchCode', 'SRH_SalesBranchCode', 'SalesBranchCode', 'BranchCode']),
-    paymode: pick(raw, ['PayMode', 'PaymentMode', 'CSH_PaymentMode', 'SIH_PaymentMode']),
-    description: pick(raw, ['Description', 'CSH_Description', 'SIH_Description', 'Remark', 'Remarks']),
-    rounding: parseFloat(pick(raw, ['Rounding', 'RoundingAmt'])) || 0,
-    total: parseFloat(pick(raw, ['Total', 'DocAmt', 'CSH_DocAmt', 'SIH_DocAmt', 'Amount'])) || 0,
-    items: findFirstArray(raw).map(normItem)
+    branch: pick(raw, ['Branch', 'CSH_SalesBranchCode', 'SIH_SalesBranchCode', 'SRH_SalesBranchCode', 'SalesBranchCode', 'BranchCode', 'SalesBranch']),
+    paymode: pick(raw, ['PayMode', 'PaymentMode', 'CSH_PaymentMode', 'SIH_PaymentMode', 'SRH_PaymentMode']),
+    description: pick(raw, ['Description', 'CSH_Description', 'SIH_Description', 'SRH_Description', 'Remark', 'Remarks']),
+    rounding: parseFloat(pick(raw, ['Rounding', 'RoundingAmt', 'CSH_RoundAmount', 'SIH_RoundAmount', 'SRH_RoundAmount', 'RoundAmount'])) || 0,
+    total: parseFloat(pick(raw, ['Total', 'DocAmt', 'CSH_Total', 'SIH_Total', 'SRH_Total', 'CSH_DocAmt', 'Amount'])) || 0,
+    items: split.items.map(normItem),
+    payments: split.payments.map(normPay),
+    _ticked: true
   };
+  if (!doc.paymode && doc.payments.length) doc.paymode = doc.payments[0].mode || '';
+  return doc;
 }
 
 function normPurchaseDoc(raw) {
+  var split = splitNested(raw);
   return {
-    docdate: (pick(raw, ['DocDate', 'CPH_DocDate', 'PIH_DocDate', 'PRH_DocDate', 'Date', 'InvoiceDate']) || '').slice(0, 10),
-    suppcode: pick(raw, ['SuppCode', 'SupplierCode', 'CPH_SupplierCode', 'PIH_SupplierCode', 'PRH_SupplierCode', 'VendorCode', 'Code', 'AccountCode']),
+    docno: pick(raw, ['DocNo', 'CPH_DocNo', 'PIH_DocNo', 'PRH_DocNo']),
+    docdate: (pick(raw, ['DocDate', 'CPH_DocDate', 'PIH_DocDate', 'PRH_DocDate', 'PostingDate', 'Date', 'InvoiceDate']) || '').slice(0, 10),
+    suppcode: pick(raw, ['SuppCode', 'SupplierCode', 'CPH_SupplierCode', 'PIH_SupplierCode', 'PRH_SupplierCode', 'VendorCode', 'Code', 'AccountCode', 'SupplierReferenceNo']),
     suppname: pick(raw, ['SuppName', 'SupplierName', 'CompanyName', 'Name']),
-    division: pick(raw, ['Division', 'PurchaseDivision', 'DivisionCode']),
-    description: pick(raw, ['Description', 'Remark', 'Remarks']),
-    rounding: parseFloat(pick(raw, ['Rounding', 'RoundingAmt'])) || 0,
-    total: parseFloat(pick(raw, ['Total', 'DocAmt', 'Amount'])) || 0,
-    items: findFirstArray(raw).map(normItem)
+    division: pick(raw, ['Division', 'PurchaseDivision', 'DivisionCode', 'CPH_DivisionCode', 'PIH_DivisionCode']),
+    description: pick(raw, ['Description', 'CPH_Description', 'PIH_Description', 'Remark', 'Remarks']),
+    rounding: parseFloat(pick(raw, ['Rounding', 'RoundingAmt', 'RoundAmount'])) || 0,
+    total: parseFloat(pick(raw, ['Total', 'DocAmt', 'CPH_Total', 'PIH_Total', 'Amount'])) || 0,
+    items: split.items.map(normItem),
+    payments: split.payments.map(normPay),
+    _ticked: true
   };
 }
 
@@ -1622,10 +1859,18 @@ function fetchAllSourceDocs(transfers, from, to, cid, done) {
     if (i >= steps.length) { done(out); return; }
     var s = steps[i++];
     if (s.kind === 'rest') {
-      fetchDocType(s.type, s.ep, cid, from, to, function(docs) {
-        out[s.type] = docs;
-        setTimeout(next, 300);
-      });
+      var g = window._advGrid;
+      if (g && g.type === s.type && g.key === advGridKey(cid, from, to, s.type)) {
+        var ticked = (g.docs || []).filter(function(d) { return d._ticked !== false; });
+        addLog(s.type + ': using ' + ticked.length + '/' + g.docs.length + ' ticked grid rows (no API refetch)', 'log-ok');
+        out[s.type] = ticked;
+        setTimeout(next, 100);
+      } else {
+        fetchDocType(s.type, s.ep, cid, from, to, function(docs) {
+          out[s.type] = docs;
+          setTimeout(next, 300);
+        });
+      }
     } else {
       fetchPaymentsViaBridge(s.vendor, from, to, function(rows) {
         out[s.vendor ? 'vendorpayment' : 'payment'] = rows;
@@ -1652,14 +1897,14 @@ $('#btn-transfer').on('click', function() {
   $('#btn-transfer').prop('disabled', true);
 
   var transfers = [];
-  if ($('#t-cashsales').is(':checked')) transfers.push('cashsales');
-  if ($('#t-invoice').is(':checked')) transfers.push('invoice');
-  if ($('#t-customer').is(':checked')) transfers.push('customer');
-  if ($('#t-vendor').is(':checked')) transfers.push('vendor');
-  if ($('#t-cn').is(':checked')) transfers.push('creditnote');
-  if ($('#t-payment').is(':checked')) transfers.push('payment');
-  if ($('#t-cashpurch').is(':checked')) transfers.push('cashpurchases');
-  if ($('#t-vendorinv').is(':checked')) transfers.push('vendorinvoice');
+  if ($('#s-t-cashsales').is(':checked')) transfers.push('cashsales');
+  if ($('#s-t-invoice').is(':checked')) transfers.push('invoice');
+  if ($('#s-t-customer').is(':checked')) transfers.push('customer');
+  if ($('#s-t-vendor').is(':checked')) transfers.push('vendor');
+  if ($('#s-t-cn').is(':checked')) transfers.push('creditnote');
+  if ($('#s-t-cashpayment').is(':checked')) transfers.push('payment');
+  if ($('#s-t-cashpurch').is(':checked')) transfers.push('cashpurchases');
+  if ($('#s-t-vendorinv').is(':checked')) transfers.push('vendorinvoice');
 
   if (transfers.length === 0) {
     showToast('No transfer options selected', true);
@@ -1696,6 +1941,18 @@ $('#btn-transfer').on('click', function() {
   addLog('Fetching source docs from Alaya for company ' + alayaCid + '...', 'log-info');
   $('#progress-text').text('fetching docs...');
   fetchAllSourceDocs(transfers, from, to, alayaCid, function(srcDocs) {
+  // Show fetched docs in the Advanced grid (unless grid already matches = user ticks preserved)
+  var restTypes = ['cashsales', 'invoice', 'creditnote', 'cashpurchases', 'vendorinvoice'];
+  for (var gi = 0; gi < restTypes.length; gi++) {
+    var gt = restTypes[gi];
+    if (srcDocs[gt] && srcDocs[gt].length && transfers.indexOf(gt) >= 0) {
+      var eg = window._advGrid;
+      if (!eg || eg.type !== gt || eg.key !== advGridKey(alayaCid, from, to, gt)) {
+        renderAdvGrid(srcDocs[gt], gt, advGridKey(alayaCid, from, to, gt));
+      }
+      break;
+    }
+  }
   $.ajax({
     url: BACKEND_URL + '/api/transfer',
     type: 'POST',
@@ -1771,12 +2028,25 @@ function showTransferResults(results) {
 }
 
 // ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
+var connectionSettingsLoaded = false;
 $('.tab-btn').on('click', function() {
   var tab = $(this).data('tab');
   $('.tab-btn').removeClass('active');
   $(this).addClass('active');
   $('.tab-panel').removeClass('active');
   $('#tab-' + tab).addClass('active');
+  if (tab === 'settings' && !connectionSettingsLoaded) {
+    connectionSettingsLoaded = true;
+    loadConnectionSettings();
+  }
+});
+
+// ΓöÇΓöÇ SQL Account connection settings UI ΓöÇΓöÇ
+$('#btn-save-connection').on('click', function() {
+  saveConnectionSettings();
+});
+$('#sql-company, #s-sql-company').on('change', function() {
+  selectActiveCompany($(this).val());
 });
 
 // ΓöÇΓöÇ Clear log ΓöÇΓöÇ
