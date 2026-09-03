@@ -427,7 +427,7 @@
        left column above, so this tab strip only needs Action Taken for now). -->
   <div class="section-title">Action Taken</div>
   <table class="sub-grid-table" id="action-table">
-    <thead><tr><th style="width:13%">Item No</th><th style="width:28%">Description</th><th style="width:10%">UOM</th><th style="width:10%">Qty</th><th style="width:14%">Price</th><th style="width:15%">Batch / Serial</th><th style="width:10%"></th></tr></thead>
+    <thead><tr><th style="width:12%">Item No</th><th style="width:22%">Description</th><th style="width:14%">Bin Location</th><th style="width:8%">UOM</th><th style="width:8%">Qty</th><th style="width:12%">Price</th><th style="width:14%">Batch / Serial</th><th style="width:10%"></th></tr></thead>
     <tbody id="action-tbody"></tbody>
   </table>
   <datalist id="item-datalist"></datalist>
@@ -828,8 +828,12 @@
       headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: companyID }),
       success: function (resp) {
         var data = (resp && resp.data) || [];
-        warehouses = data.map(function (w) { return { id: w.WH_ID, code: w.WH_Code, name: w.WH_Name }; });
+        warehouses = data.map(function (w) {
+          var bins = (w.BinLocation || []).map(function (bl) { return { id: bl.BL_ID, code: bl.BL_Code, name: bl.BL_Name }; });
+          return { id: w.WH_ID, code: w.WH_Code, name: w.WH_Name, bins: bins };
+        });
         addLog('Loaded ' + warehouses.length + ' warehouses for company ' + companyID);
+        renderActionTable(); // refresh Bin Location dropdowns now that bin data exists
       },
       error: function (xhr) { addLog('GetAllWarehouse failed (' + xhr.status + ') for company ' + companyID); }
     });
@@ -980,6 +984,11 @@
     editingReport.salesBranchCode = branch ? branch.code : '';
     renderWarehouseOptions(branchID);
     markDirty('sales branch');
+  });
+  $('#d-warehouse').on('change', function () {
+    editingReport.warehouseID = parseInt($(this).val(), 10) || null;
+    renderActionTable(); // Bin Location options depend on the selected warehouse
+    markDirty('warehouse');
   });
   $('#sel-company-filter').on('change', function () { loadScopedListsForCurrentCompany(); });
   $('#btn-search-list').on('click', renderList);
@@ -1662,7 +1671,11 @@
     var branch = branchID ? salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0] : null;
     if (!branch) branch = salesBranches.filter(function (b) { return b.warehouseID; })[0];
     if (!branch) { showToast('No Sales Branch loaded for this company yet - try again in a moment', true); return; }
-    dtl.forEach(function (d) { d.WarehouseID = String(branch.warehouseID); d.BinLocationID = String(branch.binLocationID); });
+    dtl.forEach(function (d, idx) {
+      var a = lines[idx];
+      d.WarehouseID = String(editingReport.warehouseID || branch.warehouseID);
+      d.BinLocationID = String((a && a.binLocationID) || branch.binLocationID);
+    });
 
     var cashMode = paymentModes.filter(function (p) { return (p.code || '').toUpperCase().indexOf('CASH') >= 0; })[0] || paymentModes[0];
     if (!cashMode) { showToast('No Payment Mode loaded for this company yet - try again in a moment', true); return; }
@@ -1675,10 +1688,12 @@
       var im2 = items.filter(function (x) { return x.code === a.item; })[0];
       if (!im2) return;
       var grp = 'G' + (idx + 1);
+      var lineBinID = String(a.binLocationID || branch.binLocationID);
+      var lineWhID = String(editingReport.warehouseID || branch.warehouseID);
       if (im2.batchControl && a.batchNo) {
         salesBatches.push({
           GroupID: grp, ItemID: String(im2.id), BatchNo: a.batchNo, Qty: a.qty.toFixed(4), BaseQty: a.qty.toFixed(4),
-          BinLocationID: String(branch.binLocationID), WarehouseID: String(branch.warehouseID),
+          BinLocationID: lineBinID, WarehouseID: lineWhID,
           CSB_BatchNo: a.batchNo, CSB_Qty: a.qty.toFixed(4), CSB_GroupID: grp
         });
       }
@@ -1686,7 +1701,7 @@
         a.serialNos.forEach(function (sn) {
           salesSNs.push({
             GroupID: grp, ItemID: String(im2.id), SerialNo: sn, BatchNo: a.batchNo || '',
-            CSSN_SerialNo: sn, CSSN_BatchNo: a.batchNo || '', BinLocationID: String(branch.binLocationID)
+            CSSN_SerialNo: sn, CSSN_BatchNo: a.batchNo || '', BinLocationID: lineBinID
           });
         });
       }
@@ -2027,6 +2042,25 @@
       $wrap.append($itemInput).append($searchBtn);
       $tr.append($('<td>').append($wrap));
       $tr.append($('<td>').append($('<input>').val(a.desc || '').on('input', function () { editingReport.actionTaken[i].desc = $(this).val(); })));
+      (function () {
+        // Bin Location per line - previously hardcoded to the Sales Branch's single
+        // default bin for every line (same bug class as the Warehouse dropdown fix).
+        // Options come from the currently-selected header Warehouse's own bin list
+        // (GetAllWarehouseAndBinLocationByCompanyID's nested BinLocation array).
+        var whID = parseInt($('#d-warehouse').val(), 10);
+        var wh = warehouses.filter(function (w) { return w.id === whID; })[0];
+        var bins = wh ? (wh.bins || []) : [];
+        var $binSel = $('<select>').append($('<option value="">-- Select --</option>'));
+        bins.forEach(function (bl) { $binSel.append($('<option>').val(bl.id).text(bl.code + ' - ' + bl.name)); });
+        if (a.binLocationID && bins.some(function (bl) { return bl.id === a.binLocationID; })) $binSel.val(a.binLocationID);
+        $binSel.on('change', function () {
+          var id = parseInt($(this).val(), 10) || null;
+          editingReport.actionTaken[i].binLocationID = id;
+          var bl = bins.filter(function (b) { return b.id === id; })[0];
+          editingReport.actionTaken[i].binLocationCode = bl ? bl.code : '';
+        });
+        $tr.append($('<td>').append($binSel));
+      })();
       $tr.append($('<td>').append($('<input>').val(a.uom || '').on('input', function () { editingReport.actionTaken[i].uom = $(this).val(); })));
       $tr.append($('<td>').append($('<input type="number" step="1" min="0">').val(a.qty || 0).on('input', function () { editingReport.actionTaken[i].qty = parseFloat($(this).val()) || 0; })));
       $tr.append($('<td>').append($('<input type="number" step="0.01" min="0">').val(a.price || 0).on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; })));
