@@ -1566,8 +1566,11 @@ $('#btn-add-division').on('click', function() { appendDivisionRow('', false); })
 // ΓöÇΓöÇ Execute SQL via host eval bridge ΓöÇΓöÇ
 // The host's memoQuery callback control can only have ONE WebForm_DoCallback in
 // flight at a time - firing a second one before the first resolves silently
-// cancels/clobbers the first (its promise never settles until the 60s timeout).
-// Queue every call through here so they run strictly one-at-a-time.
+// cancels/clobbers the first (its promise never settles until it times out).
+// Queue every call through here so they run strictly one-at-a-time. Keep the
+// per-call timeout short (see executeSqlViaHostImpl) - under strict queueing, one
+// slow/stuck call blocks every call queued behind it, so a long timeout here
+// would make unrelated features (e.g. Settings load) feel hung for no reason.
 var _dcbQueue = Promise.resolve();
 function executeSqlViaHost(sql) {
   var result = _dcbQueue.then(function () { return executeSqlViaHostImpl(sql); });
@@ -1580,8 +1583,8 @@ function executeSqlViaHostImpl(sql) {
     var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     var timer = setTimeout(function () {
       delete pendingDcbCallbacks[requestId];
-      reject(new Error('Database callback timed out after 60s'));
-    }, 60000);
+      reject(new Error('Database callback timed out after 10s'));
+    }, 10000);
     pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
     var evalScript =
       '(function(){' +
