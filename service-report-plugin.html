@@ -2476,6 +2476,18 @@
      buildPackageDtlLines() below since deviating risks yet another opaque
      server-side validation error. */
   var packageEditingIdx = null;
+  /* First component still missing required batch/serial, or -1 when all filled -
+     drives the auto-popup so batch/serial entry opens by itself, same as it
+     does for directly-keyed lines (user requirement). */
+  function firstMissingComponentIdx(row) {
+    var comps = (row && row.packageComponents) || [];
+    for (var i = 0; i < comps.length; i++) {
+      var c = comps[i];
+      if ((c.batchControl && !(c.batches && c.batches.length)) ||
+          (c.serialControl && !(c.serialNos && c.serialNos.length))) return i;
+    }
+    return -1;
+  }
   function openPackageModalForRow(idx) {
     var row = editingReport.actionTaken[idx];
     var itemRec = items.filter(function (im) { return $.trim(im.code) === row.item; })[0];
@@ -2517,6 +2529,11 @@
         renderPackageTable();
       }
       $('#package-modal').addClass('show');
+      // Auto-popup batch/serial entry for the first component that needs it -
+      // mirrors the direct-line auto-popup in applyItemToRow. Skipped when
+      // everything is already filled (e.g. re-opening a confirmed package).
+      var firstMissing = firstMissingComponentIdx(editingReport.actionTaken[idx]);
+      if (firstMissing >= 0) openBatchModalForComponent(idx, firstMissing);
     }).fail(function (e) {
       addLog('Package component fetch failed: ' + (e && e.statusText || e));
       showToast('Failed to load package components', true);
@@ -2591,8 +2608,15 @@
     var comps = row.packageComponents || [];
     var missingBatch = comps.filter(function (c) { return c.batchControl && !(c.batches && c.batches.length); }).map(function (c) { return c.code; });
     var missingSerial = comps.filter(function (c) { return c.serialControl && !(c.serialNos && c.serialNos.length); }).map(function (c) { return c.code; });
-    if (missingBatch.length) { showToast('Please select batch for: ' + missingBatch.join(', '), true); return; }
-    if (missingSerial.length) { showToast('Please enter serial for: ' + missingSerial.join(', '), true); return; }
+    // Blocked OK auto-opens the entry screen for the first missing component
+    // instead of just toasting - same auto-popup requirement as direct lines.
+    var stillMissing = firstMissingComponentIdx(row);
+    if (missingBatch.length || missingSerial.length) {
+      var allMissing = missingBatch.concat(missingSerial.filter(function (c) { return missingBatch.indexOf(c) < 0; }));
+      showToast('Please enter batch/serial for: ' + allMissing.join(', '), true);
+      if (stillMissing >= 0) openBatchModalForComponent(packageEditingIdx, stillMissing);
+      return;
+    }
     var mult = parseInt($('#package-total-multiplier').val(), 10) || 1;
     var total = comps.reduce(function (s, c) { return s + (c.qty || 0) * (c.price || 0); }, 0);
     row.totalPackage = mult;
