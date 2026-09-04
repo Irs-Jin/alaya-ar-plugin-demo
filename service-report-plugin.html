@@ -1599,6 +1599,12 @@
       if (canSaveEdit) $icons.append($('<button class="row-icon-btn" title="Edit">&#9998;</button>').on('click', function (e) { e.stopPropagation(); openDetail(r.code); }));
       if (canDelete) $icons.append($('<button class="row-icon-btn danger" title="Move to Deleted">&#128465;</button>').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); }));
       if (canCopy) $icons.append($('<button class="row-icon-btn" title="Copy Document">&#128203;</button>').on('click', function (e) { e.stopPropagation(); copyReport(r.code); }));
+      // Deleted rows are restore-only (via the Doc No link): dim + disable the
+      // row action icons so a deleted document can't be edited/copied/deleted again.
+      if ((r.status || '') === 'deleted') {
+        $icons.css({ opacity: 0.35 }).attr('title', 'Deleted - click the Doc No to view or restore');
+        $icons.find('button').prop('disabled', true);
+      }
       $tr.append($('<td>').append($icons));
       $tr.append($('<td>').append($('<a class="doc-link" href="#">').text(r.code || '[unsaved]').on('click', function (e) { e.preventDefault(); openDetail(r.code); })));
       $tr.append($('<td>').text(fmtDate(r.date)));
@@ -1653,8 +1659,8 @@
     var found = code ? reports.filter(function (r) { return r.code === code; })[0] : null;
     editingReport = found ? $.extend(true, {}, found) : blankReport();
     editingCode = found ? code : null;
-    // DELETED is list-filter-only (no dropdown option here): a deleted record
-    // shows a title marker, and picking any status + Save restores it.
+    // Deleted records are view + print ONLY: no dropdown option here, a title
+    // marker instead, and everything else locked below. Restore is not offered.
     var isDeletedDoc = !!(found && (found.status || '') === 'deleted');
     $('#detail-title').text(found ? ('Service Report ' + code + (isDeletedDoc ? ' (Deleted)' : '')) : 'New Service Report');
     $('#btn-delete-report').toggle(!!found && canDelete);
@@ -1691,6 +1697,11 @@
     $('#d-footer-discount').val(editingReport.footerDiscount || 0);
     renderEquipTable();
     renderActionTable();
+    // Deleted = frozen: lock every field/button inside the detail view, then
+    // re-enable Back / Print / Cancel (pure navigation + printing). The Doc No
+    // link from the list stays the only way in.
+    $('#view-detail').find('input,select,textarea,button').prop('disabled', !!isDeletedDoc);
+    if (isDeletedDoc) $('#btn-back-to-list, #btn-print-report, #btn-cancel-detail').prop('disabled', false);
     $('#view-list').hide();
     $('#view-detail').show();
   }
@@ -1816,6 +1827,7 @@
     });
   }
   function doCopyToCashSales() {
+    if ((editingReport.status || '') === 'deleted') { showToast('Deleted documents cannot be copied to Sales', true); return; }
     var custCode = $('#d-cust-code').val().trim();
     var custRecord = customers.filter(function (c) { return c.code === custCode; })[0];
     if (!custRecord || !custRecord.id) { showToast('Customer must be looked up from the company list first (F11 Lookup or pick from the datalist)', true); return; }
@@ -2201,6 +2213,7 @@
   /* ── Equipment modal (mirrors legacy desktop popup) ── */
   var equipEditingIdx = null;
   function openEquipModal(idx) {
+    if ((editingReport.status || '') === 'deleted') return; // frozen doc (row dblclick path)
     equipEditingIdx = idx;
     var eq = idx !== null && editingReport.equipment[idx] ? editingReport.equipment[idx] : { desc:'', brand:'', model:'', sn:'', symptom:'', remark:'' };
     $('#equip-modal-title').text(idx !== null ? 'Edit Equipment' : 'Add Equipment');
@@ -2849,6 +2862,7 @@
      the host toolbar Save" step) - the host toolbar Save button isn't reliably
      available in every embedding, so this plugin drives its own persistence. */
   function saveDetailAndPersist() {
+    if ((editingReport.status || '') === 'deleted') { showToast('Deleted documents cannot be modified - view and print only', true); return; }
     if (!$('#d-date').val()) { showToast('Date is required', true); return; }
     if (!$('#d-cust-code').val().trim()) { showToast('Customer Account Code is required', true); return; }
     if (!$('#d-sales-branch').val()) { showToast('Please select a Sales Branch before saving', true); return; }
