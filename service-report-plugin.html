@@ -702,16 +702,19 @@
     if (payload && payload.nonce) nonce = payload.nonce;
     if (payload && payload.client) clientId = payload.client;
     if (payload && payload.username) username = payload.username;
-    // Read permissions from Plugin View Editor (View / Save-Edit / Delete / Copy)
-    if (payload) {
-      if (payload.canSaveEdit !== undefined) canSaveEdit = !!payload.canSaveEdit;
-      if (payload.canDelete !== undefined) canDelete = !!payload.canDelete;
-      if (payload.canCopy !== undefined) canCopy = !!payload.canCopy;
-      addLog('Permissions: saveEdit=' + canSaveEdit + ' delete=' + canDelete + ' copy=' + canCopy);
-      $('#perm-debug').text('S:' + canSaveEdit + ' D:' + canDelete + ' C:' + canCopy).show();
+    // Read permissions from Plugin View Editor via menuInfo.ListAccess
+    // Fields: VIEW, ADD (=save-edit), DELETE, COPY
+    if (payload && payload.menuInfo && payload.menuInfo.ListAccess) {
+      var la = payload.menuInfo.ListAccess;
+      canView = !!la.VIEW;
+      canSaveEdit = !!la.ADD;
+      canDelete = !!la.DELETE;
+      canCopy = !!la.COPY;
+      addLog('Permissions: view=' + canView + ' saveEdit=' + canSaveEdit + ' delete=' + canDelete + ' copy=' + canCopy);
+      $('#perm-debug').text('V:' + canView + ' S:' + canSaveEdit + ' D:' + canDelete + ' C:' + canCopy).show();
     } else {
-      addLog('Permissions: no payload — all default true');
-      $('#perm-debug').text('S:true D:true C:true (no payload)').show();
+      addLog('Permissions: no menuInfo.ListAccess — all default true');
+      $('#perm-debug').text('V:true S:true D:true C:true (no payload)').show();
     }
     postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
     if (apiUrl && nonce && clientId && username) requestToken();
@@ -1681,7 +1684,11 @@
         $icons.find('button').prop('disabled', true);
       }
       $tr.append($('<td>').append($icons));
-      $tr.append($('<td>').append($('<a class="doc-link" href="#">').text(r.code || '[unsaved]').on('click', function (e) { e.preventDefault(); openDetail(r.code); })));
+      if (canView) {
+        $tr.append($('<td>').append($('<a class="doc-link" href="#">').text(r.code || '[unsaved]').on('click', function (e) { e.preventDefault(); openDetail(r.code); })));
+      } else {
+        $tr.append($('<td>').text(r.code || '[unsaved]'));
+      }
       $tr.append($('<td>').text(fmtDate(r.date)));
       $tr.append($('<td>').text(r.custName ? (r.custCode + ' - ' + r.custName) : (r.custCode || '-')));
       $tr.append($('<td>').text(r.ref || '-'));
@@ -1695,6 +1702,7 @@
     // table on an empty company made "+ New" disappear along with it).
     $('#empty-state').toggle(filtered.length === 0);
     $('#list-footer').text('Rec: ' + filtered.length);
+    $('#btn-new-report, #btn-new-report-top').toggle(canSaveEdit);
   }
   $('#inp-search').on('input', renderList);
   $('.status-check').on('change', renderList);
