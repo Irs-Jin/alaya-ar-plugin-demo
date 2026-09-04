@@ -834,6 +834,12 @@
      company's. Backs the datalist autocomplete on Customer Account Code and each
      Action Taken row's Item No. */
   var customers = [], items = [], salesBranches = [], paymentModes = [], companyPaymentTerms = [], staffList = [];
+  // IU_ID -> IU_SalesPrice1, loaded via api/ItemUOM/GetAllItemUOMByCompanyID.
+  // Confirmed live: this REST call returns the same IU_SalesPrice1 the slow
+  // host SQL bridge (executeSqlViaHost/memoQuery) reads, but in ~0.1s/page
+  // instead of a multi-second WebForm_DoCallback round trip per item - use it
+  // first, keep the SQL bridge as a fallback for anything this list misses.
+  var itemUomPrice = {};
   function currentFilterCompanyID() {
     return parseInt($('#sel-company-filter').val(), 10) || DEFAULT_COMPANY_ID;
   }
@@ -901,7 +907,11 @@
         }
         if (!acc.length && !r.ok) { addLog('GetAllItemMasterByCompanyID FAILED for company ' + companyID + ' (kept previous list)'); return; }
         items = acc.map(function (im) {
-          return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, salesUomID: im.IM_DefaultSalesUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
+          // itemUomPrice may already be populated (loadItemUOMPages can finish
+          // first) or may still be empty (fills in later, via its own
+          // items.forEach + refreshZeroPrices pass) - covers both orderings.
+          var price = itemUomPrice[im.IM_DefaultSalesUOMID] || itemUomPrice[im.IM_BaseUOMID] || 0;
+          return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, salesUomID: im.IM_DefaultSalesUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: price };
         }).filter(function (im) { return im.code && EXCLUDED_ITEM_TYPE_IDS.indexOf(im.typeID) < 0; });
         addLog('Loaded ' + items.length + ' items for company ' + companyID);
         renderItemDatalist();
@@ -916,6 +926,33 @@
           enrichItemsBatchAndPrice(items.slice(start, start+40));
           setTimeout(function(){ enrichSeq(start+40); }, 800);
         })(0);
+      });
+    })(0, []);
+    // Fast price source: api/ItemUOM/GetAllItemUOMByCompanyID returns the same
+    // IU_SalesPrice1 the slow host SQL bridge reads, ~0.1s/page (100 rows/page,
+    // cursor = MaxID) instead of a multi-second WebForm_DoCallback round trip
+    // per item. Populate itemUomPrice up front so applyItemToRow/refreshZeroPrices
+    // can fill price instantly; lazyFetchPrice's SQL bridge stays as fallback
+    // for anything this list doesn't cover.
+    (function loadItemUOMPages(maxID, acc) {
+      apiPost('api/ItemUOM/GetAllItemUOMByCompanyID', { CompanyID: companyID, MaxID: maxID }).then(function (r) {
+        var data = (r.ok && r.resp && r.resp.data) || [];
+        if (!r.ok) addLog('GetAllItemUOMByCompanyID page FAILED at MaxID ' + maxID + ' for company ' + companyID);
+        acc = acc.concat(data);
+        if (r.ok && data.length >= 100) {
+          var ids = data.map(function (u) { return u.IU_ID; });
+          setTimeout(function () { loadItemUOMPages(Math.max.apply(null, ids) + 1, acc); }, 150);
+          return;
+        }
+        if (!acc.length && !r.ok) { addLog('GetAllItemUOMByCompanyID FAILED for company ' + companyID + ' (no fast price cache; falling back to SQL bridge per item)'); return; }
+        itemUomPrice = {};
+        acc.forEach(function (u) { if (u.IU_SalesPrice1) itemUomPrice[u.IU_ID] = parseFloat(u.IU_SalesPrice1) || 0; });
+        addLog('Loaded ' + acc.length + ' ItemUOM prices for company ' + companyID);
+        items.forEach(function (im) {
+          var p = itemUomPrice[im.salesUomID] || itemUomPrice[im.uomID];
+          if (p) im.price = p;
+        });
+        refreshZeroPrices();
       });
     })(0, []);
     // Load sales branches for detail page (Sales Branch / Warehouse dropdowns)
