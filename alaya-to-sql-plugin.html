@@ -797,7 +797,10 @@ function saveSettings() {
   var maps = collectMappingsFromUI();
   settings = {
     backendUrl: $('#s-backend-url').val() || defaultSettings.backendUrl,
-    alayaCompany: $('#s-alaya-company').val(),
+    // NOTE: #s-alaya-company is the Client ID field (e.g. "qa3"), NOT the selected
+    // company code - keep whatever code btn-save-default-company (or a prior load)
+    // already put in settings.alayaCompany instead of clobbering it here.
+    alayaCompany: settings.alayaCompany || $('#s-alaya-company').val(),
     alayaCompanyId: parseInt($('#alaya-company-select').val(), 10) || 0,
     cashsalesMethod: $('#s-cashsales-method').val(),
     cashsalesPrefix: $('#s-cashsales-prefix').val(),
@@ -1134,14 +1137,19 @@ function applyUserCompanyFilter() {
 // Company dropdown text filter (682-row SIT list is unusable without it)
 $('#alaya-company-filter').on('input', function() {
   var q = $.trim($(this).val()).toUpperCase();
-  var shown = 0, total = 0;
+  var shown = 0, total = 0, matchedVal = null;
   $('#alaya-company-select option').each(function() {
     total++;
     var hit = !q || $(this).text().toUpperCase().indexOf(q) >= 0 || String($(this).val()).toUpperCase().indexOf(q) >= 0;
     $(this).toggle(hit);
-    if (hit) shown++;
+    if (hit) { shown++; matchedVal = $(this).val(); }
   });
   if (q) setScopeNote(shown + ' match');
+  // Single unambiguous match - select it automatically instead of making the user
+  // also click the dropdown to pick the one option left.
+  if (q && shown === 1 && matchedVal) {
+    $('#alaya-company-select').val(matchedVal).trigger('change');
+  }
 });
 function clearCompanyFilter() {
   $('#alaya-company-filter').val('');
