@@ -619,6 +619,7 @@
   var REPORT_TABLE_CODE = 'svcrpt';
   var EQUIP_TABLE_CODE = 'svcrpteq';
   var ACTION_TABLE_CODE = 'svcrptact';
+  var PACKAGE_TABLE_CODE = 'svcrptpkg';
   var DEFAULT_COMPANY_ID = 548; // matches jin's default test company (JIN6 SDN BHD)
   var PACKAGE_ITEM_TYPE_ID = 5; // ItemMaster.IM_Type - confirmed live via item 'A000001'
   var MATRIX_ITEM_TYPE_ID = 4; // ItemMaster.IM_Type - confirmed live via item 841264 ("Matrix Item")
@@ -1461,11 +1462,23 @@
 
   function loadReportsFromDb() {
     if (!apiUrl || !authToken) { addLog('No token yet - cannot load from DB'); return; }
-    addLog('Loading ' + REPORT_TABLE_CODE + ' / ' + EQUIP_TABLE_CODE + ' / ' + ACTION_TABLE_CODE + '...');
+    addLog('Loading ' + REPORT_TABLE_CODE + ' / ' + EQUIP_TABLE_CODE + ' / ' + ACTION_TABLE_CODE + ' / ' + PACKAGE_TABLE_CODE + '...');
     $('#btn-load').prop('disabled', true).text('Loading...');
-    $.when(fetchUdfTable(REPORT_TABLE_CODE), fetchUdfTable(EQUIP_TABLE_CODE), fetchUdfTable(ACTION_TABLE_CODE))
-      .done(function (headerRows, equipRows, actionRows) {
-        var equipByDoc = {}, actionByDoc = {};
+    $.when(fetchUdfTable(REPORT_TABLE_CODE), fetchUdfTable(EQUIP_TABLE_CODE), fetchUdfTable(ACTION_TABLE_CODE), fetchUdfTable(PACKAGE_TABLE_CODE))
+      .done(function (headerRows, equipRows, actionRows, pkgRows) {
+        var equipByDoc = {}, actionByDoc = {}, pkgByLine = {};
+        (pkgRows || []).forEach(function (r) {
+          var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
+          if (!meta.dc || !meta.li) return;
+          var key = meta.dc + '-A' + meta.li;
+          (pkgByLine[key] = pkgByLine[key] || []).push({
+            id: meta.i, code: meta.c || '', desc: meta.d || '', uomID: meta.u, uom: meta.um || '',
+            qty: meta.q || 0, price: meta.p || 0, baseQty: meta.bq || 0, binLocationID: meta.bl || null,
+            batchControl: !!meta.bc, serialControl: !!meta.sc,
+            batches: (meta.bt || []).map(function (b) { return { batchNo: b.n, qty: b.q, expiryDate: b.e || '' }; }),
+            serialNos: meta.sn || []
+          });
+        });
         equipRows.forEach(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           var docCode = meta.dc || meta.docCode;
@@ -1483,7 +1496,17 @@
             batchNo: batches.length ? batches[0].batchNo : (meta.batchNo || ''), batches: batches,
             serialNos: meta.sn || meta.serialNos || [], binLocationID: (meta.bl !== undefined ? meta.bl : meta.binLocationID) || null
           };
-          if (meta.pc && meta.pc.length) {
+          // Package components come from their own svcrptpkg rows (keyed
+          // '<docCode>-A<n>'); the old embedded meta.pc is read as a fallback
+          // for rows saved before the split. Flags/baseQty/multi-batch come
+          // back exactly as saved instead of being guessed on load.
+          var lineNo = parseInt(String(r.ZZC_Code || '').split('-A').pop(), 10) || 0;
+          var lineComps = (lineNo && pkgByLine[docCode + '-A' + lineNo]) || [];
+          if (lineComps.length) {
+            actionRow.totalPackage = meta.pn || 1;
+            actionRow.packageConfirmed = true;
+            actionRow.packageComponents = lineComps;
+          } else if (meta.pc && meta.pc.length) {
             actionRow.totalPackage = meta.pn || 1;
             actionRow.packageConfirmed = true;
             actionRow.packageComponents = meta.pc.map(function (c) {
@@ -1516,7 +1539,7 @@
             createdAt: meta.ca || meta.createdAt || '', createdBy: meta.cb || meta.createdBy || ''
           });
         });
-        addLog('Loaded ' + reports.length + ' service reports (' + equipRows.length + ' equipment, ' + actionRows.length + ' action-taken lines)');
+        addLog('Loaded ' + reports.length + ' service reports (' + equipRows.length + ' equipment, ' + actionRows.length + ' action-taken lines, ' + (pkgRows || []).length + ' package components)');
         renderCompanyFilterOptions();
         renderList();
         clearDirty();
@@ -2886,10 +2909,13 @@
 
   /* ZZC_Description is NVARCHAR(400) - a header row with Equipment/Action Taken
      embedded easily exceeds that (confirmed live: "String or binary data would be
-     truncated", SQL error 8152). Normalised into three tables: svcrpt (compact
+     truncated", SQL error 8152). Normalised into four tables: svcrpt (compact
      header only), svcrpteq, svcrptact (one row per line, keyed
      '<docCode>-E<n>'/'<docCode>-A<n>', each carrying docCode so loadReportsFromDb
-     can regroup them). Short keys (d/st/cid/...) below are load-bearing, not
+     can regroup them), svcrptpkg (one row per PACKAGE component, keyed
+     '<docCode>-A<n>-P<m>' - embedding components in the action row blew the
+     budget again at just a few components, e.g. 468 chars on SR-000026-A1).
+     Short keys (d/st/cid/...) below are load-bearing, not
      cosmetic - the previous long-key format overflowed the 400-char cap as soon
      as Sales Branch/Warehouse/multi-batch fields were added ("String or binary
      data would be truncated", SQL error 8152); this column also can't be widened
@@ -2919,17 +2945,23 @@
         bt: (a.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty }; }),
         sn: a.serialNos || [], bl: a.binLocationID || null
       };
-      if (a.packageComponents && a.packageComponents.length) {
-        // Compact: first batch only per component (multi-batch WITHIN one
-        // package component is rare enough that persisting just one is an
-        // acceptable trade-off against the NVARCHAR(400) budget).
-        payload.pn = a.totalPackage || 0;
-        payload.pc = a.packageComponents.map(function (c) {
-          var b0 = (c.batches && c.batches[0]) || null;
-          return { i: c.id, c: c.code, d: c.desc, u: c.uomID, um: c.uom, q: c.qty, p: c.price, bl: c.binLocationID || null, b: b0 ? b0.batchNo : '', bq: b0 ? b0.qty : 0, be: b0 ? b0.expiryDate : '', s: c.serialNos || [] };
-        });
-      }
+      // Package components live in their OWN rows (svcrptpkg, one per component)
+      // instead of embedded here - embedding blew the NVARCHAR(400) budget as
+      // soon as a package had a few components (confirmed live: 468 chars on
+      // SR-000026-A1, whole Save died with SQL 8152). The action row keeps only
+      // the package multiplier; every batch/serial of every component persists.
+      if (a.packageComponents && a.packageComponents.length) payload.pn = a.totalPackage || 0;
       lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now, oversized, ['ds']));
+      (a.packageComponents || []).forEach(function (c, m) {
+        var cpayload = {
+          dc: r.code, li: i + 1, i: c.id, c: c.code || '', d: c.desc || '', u: c.uomID, um: c.uom || '',
+          q: c.qty || 0, p: c.price || 0, bq: c.baseQty || 0, bl: c.binLocationID || null,
+          bc: c.batchControl ? 1 : 0, sc: c.serialControl ? 1 : 0,
+          bt: (c.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty, e: b.expiryDate || '' }; }),
+          sn: c.serialNos || []
+        };
+        lines.push(sqlInsertLine(PACKAGE_TABLE_CODE, r.code + '-A' + (i + 1) + '-P' + (m + 1), cpayload, dateCreated, now, oversized, ['d']));
+      });
     });
     return lines;
   }
@@ -2938,7 +2970,8 @@
     var lines = [
       'DELETE FROM ZZT_' + REPORT_TABLE_CODE + ';',
       'DELETE FROM ZZT_' + EQUIP_TABLE_CODE + ';',
-      'DELETE FROM ZZT_' + ACTION_TABLE_CODE + ';'
+      'DELETE FROM ZZT_' + ACTION_TABLE_CODE + ';',
+      'DELETE FROM ZZT_' + PACKAGE_TABLE_CODE + ';'
     ];
     var oversized = [];
     reports.forEach(function (r) { lines = lines.concat(buildReportInsertLines(r, now, oversized)); });
@@ -2961,6 +2994,7 @@
       lines.push("DELETE FROM ZZT_" + REPORT_TABLE_CODE + " WHERE ZZC_Code='" + codeSafe + "';");
       lines.push("DELETE FROM ZZT_" + EQUIP_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-E%';");
       lines.push("DELETE FROM ZZT_" + ACTION_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-A%';");
+      lines.push("DELETE FROM ZZT_" + PACKAGE_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-A%';");
       var r = reports.filter(function (rr) { return rr.code === code; })[0];
       if (r) lines = lines.concat(buildReportInsertLines(r, now, oversized));
     });
