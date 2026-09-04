@@ -904,8 +904,17 @@ function saveSettings() {
     stmts.push("INSERT INTO " + SETTINGS_TABLE + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified) VALUES ('" + codeSafe + "', '" + valSafe + "', '" + dateStr + "', '" + dateStr + "');");
   });
 
-  executeSqlViaHost(stmts.join(''), 30000).then(function(msg) {
-    if (msg.error) throw new Error(msg.error);
+  // Fire each statement as its own RunQuery call instead of one big joined
+  // string - the host's memoQuery test-query control appears to only support
+  // a single statement per call; a multi-statement batch never calls back at
+  // all (times out no matter how long we wait), while single statements work.
+  var chain = Promise.resolve();
+  stmts.forEach(function(stmt) {
+    chain = chain.then(function() { return executeSqlViaHost(stmt, 10000); }).then(function(msg) {
+      if (msg.error) throw new Error(msg.error);
+    });
+  });
+  chain.then(function() {
     showToast('Settings saved (' + rows.length + ' rows to Alaya DB)');
     addLog('Settings saved to UDF table (' + rows.length + ' rows) + local backup', 'log-ok');
     testBackendConnection();
