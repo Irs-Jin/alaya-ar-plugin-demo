@@ -1763,6 +1763,7 @@ function loadScopedViaRest(cid, done) {
         return;
       }
       setVendors(data, true);
+      oneDone();
     },
     error: function(xhr) { addLog('GetAllVendor failed (' + xhr.status + ') - vendors via bridge only', 'log-warn'); oneDone(); }
   });
