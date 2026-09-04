@@ -1717,6 +1717,9 @@
     $('#d-footer-discount').val(editingReport.footerDiscount || 0);
     renderEquipTable();
     renderActionTable();
+    // Reopened rows saved with price 0 never got a pick-time fetch - refresh
+    // them now. Deleted docs are frozen views: no fetching, no re-render.
+    if (!isDeletedDoc) refreshZeroPrices();
     // Deleted = frozen: lock every field/button inside the detail view, then
     // re-enable Back / Print / Cancel (pure navigation + printing). The Doc No
     // link from the list stays the only way in.
@@ -1770,6 +1773,9 @@
     $('#d-footer-discount').val(editingReport.footerDiscount || 0);
     renderEquipTable();
     renderActionTable();
+    // Copied rows keep their saved prices, but a 0-price row deserves the same
+    // lazy refresh as a reopened one.
+    refreshZeroPrices();
     $('#view-list').hide();
     $('#view-detail').show();
     markDirty('copied from ' + code);
@@ -2289,7 +2295,45 @@
      header's Customer field. On a matching code (typed or picked from the browser's
      native autocomplete), auto-fill Description + UOM from the cached item list -
      same "only load my own company's list" scoping as GetAllItemMasterByCompanyID. */
-   function applyItemToRow(i, itemRecord) {
+    // Shared lazy price loader: fills an Action Taken row's price from its own
+    // ItemUOM row (IU_SalesPrice1), with one retry. Used both when an item is
+    // picked AND when an existing report is opened - a reopened row saved with
+    // price 0 (fetch failed at pick time) otherwise stays 0 forever.
+    function lazyFetchPrice(idx, im) {
+      var tries = 0;
+      function fetchPrice() {
+        tries++;
+        addLog('Lazy price fetch for item ' + im.code + ' UOM id=' + im.uomID + (tries > 1 ? ' (retry)' : ''));
+        qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ID=" + parseInt(im.uomID,10), 5).then(function (resp) {
+          var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
+          var p = r && parseFloat(r[0]);
+          addLog('ItemUOM price result for ' + im.code + ': ' + p);
+          if (p && p>0) {
+            im.price = p;
+            var row = editingReport.actionTaken[idx];
+            if (row && String(row.item) === String(im.code) && !row.price) { row.price = p; renderActionTable(); }
+          } else if (tries < 2) {
+            setTimeout(fetchPrice, 1500);
+          }
+        }).fail(function(e){
+          addLog('Price fetch failed for ' + im.code + ': ' + (e&&e.statusText||e));
+          if (tries < 2) setTimeout(fetchPrice, 1500);
+        });
+      }
+      fetchPrice();
+    }
+    // Reopened/copied rows saved with price 0 never got a pick-time fetch -
+    // refresh them now from the items cache (same lazy path as picking).
+    function refreshZeroPrices() {
+      (editingReport.actionTaken || []).forEach(function (a, idx) {
+        if (!a.item || a.price) return;
+        var im = items.filter(function (x) { return String(x.code) === String(a.item); })[0];
+        if (!im) return;
+        if (im.price) { a.price = parseFloat(im.price) || 0; renderActionTable(); }
+        else if (im.uomID) lazyFetchPrice(idx, im);
+      });
+    }
+    function applyItemToRow(i, itemRecord) {
     editingReport.actionTaken[i].item = itemRecord.code;
     editingReport.actionTaken[i].desc = itemRecord.desc;
     editingReport.actionTaken[i].uom = itemRecord.uom;
@@ -2314,28 +2358,7 @@
     // varies wildly per UOM (e.g. UNIT vs CTN vs KG can differ 50x), so picking
     // an unfiltered/MIN price previously grabbed the wrong UOM's price entirely.
     if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0) && itemRecord.uomID) {
-      (function (idx, im) {
-        var tries = 0;
-        function fetchPrice() {
-          tries++;
-          addLog('Lazy price fetch for item ' + im.code + ' UOM id=' + im.uomID + (tries > 1 ? ' (retry)' : ''));
-          qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ID=" + parseInt(im.uomID,10), 5).then(function (resp) {
-            var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
-            var p = r && parseFloat(r[0]);
-            addLog('ItemUOM price result for ' + im.code + ': ' + p);
-            if (p && p>0) {
-              im.price = p;
-              if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p; renderActionTable(); }
-            } else if (tries < 2) {
-              setTimeout(fetchPrice, 1500);
-            }
-          }).fail(function(e){
-            addLog('Price fetch failed for ' + im.code + ': ' + (e&&e.statusText||e));
-            if (tries < 2) setTimeout(fetchPrice, 1500);
-          });
-        }
-        fetchPrice();
-      })(i, itemRecord);
+      lazyFetchPrice(i, itemRecord);
     }
     renderActionTable();
     markDirty('item selected');
