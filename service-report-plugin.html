@@ -521,6 +521,14 @@
     <div id="batch-serial-section" style="display:none;">
       <div style="display:flex; flex-direction:column; gap:6px;">
         <label style="font-size:0.82rem; font-weight:600;">Serial No(s) - one per line, count must match Qty</label>
+        <div class="picker-table-wrap" id="serial-table-wrap" style="max-height:180px; display:none;">
+          <table class="picker-table">
+            <thead><tr><th style="width:36px;"></th><th>Serial No</th><th>Bin Location</th></tr></thead>
+            <tbody id="serial-tbody"></tbody>
+          </table>
+          <div class="picker-empty" id="serial-empty" style="display:none;">No serials found - type manually below</div>
+        </div>
+        <div class="sub" id="serial-pick-hint" style="display:none;">Tick serials above to fill, or type manually below.</div>
         <textarea id="serial-input" rows="4" placeholder="Enter serial numbers, one per line" style="border:1px solid #d1d5db; border-radius:6px; padding:8px 10px; font-family:inherit;"></textarea>
         <div class="sub" id="serial-hint"></div>
       </div>
@@ -2389,6 +2397,10 @@
     $('#batch-qty').val(row.qty || 1);
     $('#serial-input').val((row.serialNos || []).join('\n'));
     $('#serial-hint').text(needSerial ? 'Enter ' + (row.qty || 1) + ' serial(s), one per line' : '');
+    $('#serial-tbody').empty();
+    $('#serial-empty').hide();
+    $('#serial-table-wrap, #serial-pick-hint').toggle(!!needSerial);
+    if (needSerial) loadSerialOptions(itemRec, row);
     if (needBatch) {
       $('#batch-tbody').empty();
       $('#batch-empty').hide();
@@ -2464,6 +2476,63 @@
     }
     $('#batch-modal').addClass('show');
   }
+  /* ── Selectable serial list (mirrors native Cash Sales serial popup) ──
+     Ticks fill the textarea (same mutual exclusion as the batch table: typing
+     manually clears the ticks). Column/table names follow the ItemSN usage
+     already proven live in this environment (ISN_ prefix); if the lookup fails
+     for any reason the UI silently stays manual-only, i.e. today's behavior. */
+  function loadSerialOptions(itemRec, row) {
+    var branchID = editingReport.salesBranchID;
+    var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
+    var whID = editingReport.warehouseID || (branch ? branch.warehouseID : 0);
+    var wh = warehouses.filter(function (w) { return w.id === whID; })[0];
+    var binsById = {};
+    (wh ? (wh.bins || []) : []).forEach(function (bl) { binsById[bl.id] = bl; });
+    function renderSerialRows(serials) {
+      $('#serial-tbody').empty();
+      if (!serials.length) { $('#serial-empty').show(); return; }
+      var saved = row.serialNos || [];
+      serials.forEach(function (sn) {
+        var bin = binsById[sn.binID];
+        var $check = $('<input type="checkbox" class="serial-row-check">').prop('checked', saved.indexOf(sn.no) >= 0);
+        var $tr = $('<tr>')
+          .append($('<td>').append($check))
+          .append($('<td>').text(sn.no))
+          .append($('<td>').text(bin ? (bin.code + ' - ' + bin.name) : (sn.binID || '-')));
+        $check.on('change', function () {
+          var picked = [];
+          $('#serial-tbody .serial-row-check:checked').each(function () {
+            picked.push($(this).closest('tr').find('td').eq(1).text());
+          });
+          $('#serial-input').val(picked.join('\n'));
+        });
+        $('#serial-tbody').append($tr);
+      });
+    }
+    function serialQuery(selectList, whereIdCol) {
+      return "SELECT TOP 50 " + selectList + " FROM ItemSN WHERE " + whereIdCol + "=" + parseInt(itemRec.id, 10) +
+        (whID ? " AND " + whereIdCol.replace('ItemID', 'WarehouseID') + "=" + parseInt(whID, 10) : "") +
+        " ORDER BY " + selectList.split(',')[0];
+    }
+    qrySql(serialQuery("ISN_SerialNo, ISN_BinLocationID", "ISN_ItemID"), 50).then(function (resp) {
+      var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+      renderSerialRows(rows.map(function (r) { return { no: r[0], binID: r[1] }; }));
+    }).fail(function () {
+      qrySql(serialQuery("IS_SerialNo, IS_BinLocationID", "IS_ItemID"), 50).then(function (resp2) {
+        var rows2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows || [];
+        renderSerialRows(rows2.map(function (r) { return { no: r[0], binID: r[1] }; }));
+      }).fail(function () {
+        addLog('Serial list unavailable - manual entry only');
+        $('#serial-table-wrap, #serial-pick-hint').hide();
+      });
+    });
+  }
+  // Typing serials manually clears any ticked rows (mutually exclusive, same as batch)
+  $('#serial-input').on('input', function () {
+    if ($(this).val()) {
+      $('#serial-tbody .serial-row-check').prop('checked', false);
+    }
+  });
   function closeBatchModal() { $('#batch-modal').removeClass('show'); batchTarget = null; }
   $('#btn-batch-cancel').on('click', closeBatchModal);
   $('#batch-modal').on('click', function (e) { if (e.target.id === 'batch-modal') closeBatchModal(); });
