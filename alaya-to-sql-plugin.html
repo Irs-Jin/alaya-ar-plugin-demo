@@ -2471,7 +2471,12 @@ $('#btn-browse-dcf').on('click', function() { openDcfBrowser(); });
 
 // ΓöÇΓöÇ Save settings ΓöÇΓöÇ
 $('#btn-save-settings').on('click', function() {
-  saveSettings();
+  try {
+    saveSettings();
+  } catch (e) {
+    showToast('Save crashed before reaching the database: ' + e.message, true);
+    addLog('saveSettings() threw synchronously: ' + (e && e.stack || e), 'log-err');
+  }
 });
 $('#btn-save-default-company').on('click', function() {
   var id = currentAlayaCompanyID();
