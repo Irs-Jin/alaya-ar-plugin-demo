@@ -1804,6 +1804,11 @@
     editingReport.status = 'new';
     editingReport.createdAt = '';
     editingReport.createdBy = username || '';
+    // Batch/serial must be re-selected on copy — physical items are different
+    (editingReport.actionTaken || []).forEach(function (a) {
+      a.batchNo = ''; a.batches = []; a.serialNos = [];
+      (a.packageComponents || []).forEach(function (c) { c.batchNo = ''; c.batches = []; c.serialNos = []; });
+    });
     editingCode = null;
     $('#detail-title').text('New Service Report (copied from ' + code + ')');
     $('#btn-delete-report').hide();
