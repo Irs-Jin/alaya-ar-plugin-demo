@@ -242,6 +242,11 @@
     #log li { padding:2px 0; border-bottom:1px solid #f5f5f5; }
     #log .ts { color:#b0b4bb; margin-right:5px; font-family:monospace; }
 
+    .price-status { margin-top:2px; font-size:0.66rem; line-height:1.2; }
+    .price-status .ps-ok { color:#16a34a; }
+    .price-status .ps-wait { color:#b45309; font-style:italic; }
+    .price-status .ps-fail { color:#dc2626; font-style:italic; }
+
     @media (max-width:900px) { .header-columns { grid-template-columns:1fr; } }
 
     /* ── Print view (browser print/PDF - not native FastReport, but a real printable
@@ -2309,12 +2314,28 @@
     function lazyFetchPrice(idx, im) {
       var uomIds = [];
       [im.salesUomID, im.uomID].forEach(function (u) { if (u && uomIds.indexOf(u) < 0) uomIds.push(parseInt(u, 10)); });
-      if (!uomIds.length) return;
-      var uomIdx = 0, retries = 0;
+      if (!uomIds.length) {
+        var row0 = editingReport && editingReport.actionTaken && editingReport.actionTaken[idx];
+        if (row0) { row0.priceStatus = 'no UOM'; setPriceStatus(idx, row0.priceStatus); }
+        return;
+      }
+      var uomIdx = 0, retries = 0, lastErr = '';
+      // Recording the resolution outcome on the row makes the live cause visible
+      // without mining the Event Log - '5000 (ITEM UOM 154719)', '0 (fallback done)',
+      // 'fetch failed: ...' etc.
+      function setPriceStatus(i, st) {
+        var r = editingReport && editingReport.actionTaken && editingReport.actionTaken[i];
+        if (r) { r.priceStatus = st; }
+        renderActionTable();
+      }
       function fetchPrice() {
-        if (uomIdx >= uomIds.length) return;
+        if (uomIdx >= uomIds.length) {
+          setPriceStatus(idx, (lastErr ? 'fetch failed: ' + lastErr : '0 (all UOMs no price)'));
+          return;
+        }
         var u = uomIds[uomIdx];
         addLog('Lazy price fetch for item ' + im.code + ' UOM id=' + u + (retries ? ' (retry)' : ''));
+        setPriceStatus(idx, 'checking UOM ' + u + (retries ? ' (retry)' : ''));
         qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ID=" + u, 5).then(function (resp) {
           var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
           var p = r && parseFloat(r[0]);
@@ -2322,18 +2343,24 @@
           if (p && p>0) {
             im.price = p;
             var row = editingReport.actionTaken[idx];
-            if (row && String(row.item) === String(im.code) && !row.price) { row.price = p; renderActionTable(); }
+            if (row && String(row.item) === String(im.code)) { row.price = parseFloat(p); }
+            setPriceStatus(idx, p + ' (ItemUOM ' + u + ')');
           } else if (uomIdx < uomIds.length - 1) {
             uomIdx++; retries = 0; setTimeout(fetchPrice, 500);
           } else if (retries < 1) {
             retries++; setTimeout(fetchPrice, 1000);
+          } else {
+            setPriceStatus(idx, '0 (UOM ' + u + ' empty)');
           }
         }).fail(function(e){
-          addLog('Price fetch failed for ' + im.code + ' UOM ' + u + ': ' + (e&&e.statusText||e));
+          lastErr = (e&&e.statusText) || String(e);
+          addLog('Price fetch failed for ' + im.code + ' UOM ' + u + ': ' + lastErr);
           if (uomIdx < uomIds.length - 1) {
             uomIdx++; retries = 0; setTimeout(fetchPrice, 500);
           } else if (retries < 1) {
             retries++; setTimeout(fetchPrice, 1000);
+          } else {
+            setPriceStatus(idx, 'fetch failed: ' + lastErr);
           }
         });
       }
@@ -2350,10 +2377,10 @@
       var dirty = false;
       (editingReport.actionTaken).forEach(function (a, idx) {
         if (!a.item || a.price) return;
-        var im = items.filter(function (x) { return String(x.code) === String(a.item); })[0];
-        if (!im) return;
-        if (im.price) { a.price = parseFloat(im.price) || 0; dirty = true; }
-        else if (im.uomID) lazyFetchPrice(idx, im);
+        var found = items.filter(function (x) { return String(x.code) === String(a.item); })[0];
+        if (!found) { a.priceStatus = 'item not in loaded list yet'; return; }
+        if (found.price) { a.price = parseFloat(found.price) || 0; a.priceStatus = a.price + ' (cache)'; dirty = true; }
+        else if (found.uomID) { a.priceStatus = 'fetching price…'; lazyFetchPrice(idx, found); }
       });
       if (dirty) renderActionTable();
     }
@@ -2376,6 +2403,7 @@
     // Auto-fill price if row has no price yet and item has a price
     if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0) && itemRecord.price) {
       editingReport.actionTaken[i].price = parseFloat(itemRecord.price) || 0;
+      editingReport.actionTaken[i].priceStatus = parseFloat(itemRecord.price) + ' (cache)';
     }
     // If still no price, lazy fetch it - keyed on this item's own ItemUOM row
     // (uomID = IU_ID), NOT just "any UOM of this item": ItemUOM.IU_SalesPrice1
@@ -2832,6 +2860,22 @@
     markDirty('package item');
   });
 
+  // Renders a compact, colour-coded price-resolution hint under each line's
+  // Price input so the live outcome is visible without mining the Event Log:
+  //   green  = resolved non-zero price (and its source: ItemUOM / cache)
+  //   amber  = still checking / queued
+  //   red    = resolved to 0, fetch failed, or item not in loaded list yet
+  function priceStatusHtml(a) {
+    var s = a.priceStatus || '';
+    if (a.price && a.price > 0) return '<span class="ps-ok">' + (a.price) + ' ✓</span>';
+    if (!s) return '';
+    var cls = 'ps-fail';
+    if (/checking|fetching/i.test(s)) cls = 'ps-wait';
+    else if (/fetch failed|0 \(/i.test(s) || /not in loaded/i.test(s)) cls = 'ps-fail';
+    else cls = 'ps-ok';
+    return '<span class="' + cls + '">' + $('<div>').text(s).html() + '</span>';
+  }
+
   function renderActionTable() {
     var $tb = $('#action-tbody').empty();
     var branchWhReady = hasBranchAndWarehouse();
@@ -2949,6 +2993,8 @@
       $tr.append($('<td>').append(
         $('<input type="number" step="0.01" min="0">').val(a.price || 0).prop('disabled', isPackage)
           .on('input', function () { editingReport.actionTaken[i].price = parseFloat($(this).val()) || 0; updateActionTotals(); })
+      ).append(
+        $('<div class="price-status">').html(priceStatusHtml(a))
       ));
       $tr.append($('<td>').append($('<span class="line-total">').text(((a.qty || 0) * (a.price || 0)).toFixed(2))));
       (function () {
