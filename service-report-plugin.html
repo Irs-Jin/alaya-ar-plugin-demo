@@ -695,6 +695,7 @@
     addLog('Received <- ALAYA_INIT');
     hostOrigin = e.originalEvent.origin || '';
     var payload = msg.data !== undefined ? msg.data : msg;
+    addLog('Raw payload: ' + JSON.stringify(payload));
     $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
     if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
     if (payload && payload.nonce) nonce = payload.nonce;
