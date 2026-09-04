@@ -1921,8 +1921,10 @@
       lines.forEach(function (a) {
         (a.packageComponents || []).forEach(function (c) { if (foundIds.indexOf(String(c.id)) < 0) missingCodes.push(a.item + ' > ' + c.code); });
       });
+      // Advisory is log-only (no toast): missing rows no longer stop anything
+      // now that package posting is proven, and a red popup on every Copy
+      // would just be noise. The log line stays for future diagnosis.
       if (missingCodes.length) {
-        showToast('Note: ' + missingCodes.join(', ') + ' has no ItemWarehouse row here - proceeding anyway like native Cash Sales', true);
         addLog('ItemWarehouse advisory: no row for ' + missingCodes.join(', ') + ' (company ' + companyID + ', warehouse ' + headerWhID + ') - proceeding');
       }
       continueCopyToCashSales();
