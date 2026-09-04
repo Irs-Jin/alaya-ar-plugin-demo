@@ -900,6 +900,11 @@
         }).filter(function (im) { return im.code && EXCLUDED_ITEM_TYPE_IDS.indexOf(im.typeID) < 0; });
         addLog('Loaded ' + items.length + ' items for company ' + companyID);
         renderItemDatalist();
+        // A report opened before the paged list finished (842293 sits on page 5
+        // of >4000 items) had its zero-price rows skipped by openDetail's
+        // refreshZeroPrices because the item wasn't in cache yet. Re-run it now
+        // that the full list is here so those rows finally resolve their price.
+        refreshZeroPrices();
         // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
         (function enrichSeq(start){
           if(start>=Math.min(items.length,80)) return;
@@ -2336,14 +2341,21 @@
     }
     // Reopened/copied rows saved with price 0 never got a pick-time fetch -
     // refresh them now from the items cache (same lazy path as picking).
+    // Safe to call before/while the paged item list is still loading: rows whose
+    // item isn't in the cache yet are skipped THIS pass; retriggered once the
+    // full list lands (see loadItemPages) since 842293-style items sit on late
+    // pages and were previously skipped forever when the report opened early.
     function refreshZeroPrices() {
-      (editingReport.actionTaken || []).forEach(function (a, idx) {
+      if (!editingReport || !editingReport.actionTaken) return;
+      var dirty = false;
+      (editingReport.actionTaken).forEach(function (a, idx) {
         if (!a.item || a.price) return;
         var im = items.filter(function (x) { return String(x.code) === String(a.item); })[0];
         if (!im) return;
-        if (im.price) { a.price = parseFloat(im.price) || 0; renderActionTable(); }
+        if (im.price) { a.price = parseFloat(im.price) || 0; dirty = true; }
         else if (im.uomID) lazyFetchPrice(idx, im);
       });
+      if (dirty) renderActionTable();
     }
     function applyItemToRow(i, itemRecord) {
     editingReport.actionTaken[i].item = itemRecord.code;
