@@ -560,6 +560,7 @@
 
 // ΓöÇΓöÇ Config ΓöÇΓöÇ
 var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+var PLUGIN_VERSION = '2026-09-04-dcb-fix';
 var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
 
 // ΓöÇΓöÇ Default Settings ΓöÇΓöÇ
@@ -2510,9 +2511,9 @@ $('#btn-save-default-company').on('click', function() {
 var today = new Date().toISOString().slice(0, 10);
 $('#from-date').val(today);
 $('#to-date').val(today);
-try { $('#build-tag').text(new Date(document.lastModified).toLocaleString()); } catch(e) {}
+try { $('#build-tag').text(new Date(document.lastModified).toLocaleString() + ' [' + PLUGIN_VERSION + ']'); } catch(e) {}
 
-addLog('Plugin initialized - listening for ALAYA_INIT', 'log-info');
+addLog('Plugin initialized ' + PLUGIN_VERSION + ' - listening for ALAYA_INIT', 'log-info');
 </script>
 </body>
 </html>
