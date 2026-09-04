@@ -521,6 +521,7 @@
     <div id="batch-serial-section" style="display:none;">
       <div style="display:flex; flex-direction:column; gap:6px;">
         <label style="font-size:0.82rem; font-weight:600;">Serial No(s) - one per line, count must match Qty</label>
+        <input type="text" id="serial-search" class="picker-search" placeholder="Search serial no..." style="display:none; margin-bottom:6px;" />
         <div class="picker-table-wrap" id="serial-table-wrap" style="max-height:180px; display:none;">
           <table class="picker-table">
             <thead><tr><th style="width:36px;"></th><th>Serial No</th><th>Bin Location</th></tr></thead>
@@ -2315,16 +2316,26 @@
     // an unfiltered/MIN price previously grabbed the wrong UOM's price entirely.
     if ((!editingReport.actionTaken[i].price || editingReport.actionTaken[i].price === 0) && itemRecord.uomID) {
       (function (idx, im) {
-        addLog('Lazy price fetch for item ' + im.code + ' UOM id=' + im.uomID);
-        qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ID=" + parseInt(im.uomID,10), 5).then(function (resp) {
-          var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
-          var p = r && parseFloat(r[0]);
-          addLog('ItemUOM price result for ' + im.code + ': ' + p);
-          if (p && p>0) {
-            im.price = p;
-            if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p; renderActionTable(); }
-          }
-        }).fail(function(e){ addLog('Price fetch failed for ' + im.code + ': ' + (e&&e.statusText||e)); });
+        var tries = 0;
+        function fetchPrice() {
+          tries++;
+          addLog('Lazy price fetch for item ' + im.code + ' UOM id=' + im.uomID + (tries > 1 ? ' (retry)' : ''));
+          qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ID=" + parseInt(im.uomID,10), 5).then(function (resp) {
+            var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
+            var p = r && parseFloat(r[0]);
+            addLog('ItemUOM price result for ' + im.code + ': ' + p);
+            if (p && p>0) {
+              im.price = p;
+              if (!editingReport.actionTaken[idx].price) { editingReport.actionTaken[idx].price = p; renderActionTable(); }
+            } else if (tries < 2) {
+              setTimeout(fetchPrice, 1500);
+            }
+          }).fail(function(e){
+            addLog('Price fetch failed for ' + im.code + ': ' + (e&&e.statusText||e));
+            if (tries < 2) setTimeout(fetchPrice, 1500);
+          });
+        }
+        fetchPrice();
       })(i, itemRecord);
     }
     renderActionTable();
@@ -2399,7 +2410,7 @@
     $('#serial-hint').text(needSerial ? 'Enter ' + (row.qty || 1) + ' serial(s), one per line' : '');
     $('#serial-tbody').empty();
     $('#serial-empty').hide();
-    $('#serial-table-wrap, #serial-pick-hint').toggle(!!needSerial);
+    $('#serial-search, #serial-table-wrap, #serial-pick-hint').toggle(!!needSerial);
     if (needSerial) loadSerialOptions(itemRec, row);
     if (needBatch) {
       $('#batch-tbody').empty();
@@ -2481,34 +2492,46 @@
      manually clears the ticks). Column/table names follow the ItemSN usage
      already proven live in this environment (ISN_ prefix); if the lookup fails
      for any reason the UI silently stays manual-only, i.e. today's behavior. */
+  // Full serial list for the current modal (search filters a copy of this).
+  var serialCache = [], serialPicked = [];
+  function renderSerialRows(serials) {
+    var whID2 = serialCache.whID;
+    var wh2 = warehouses.filter(function (w) { return w.id === whID2; })[0];
+    var binsById = {};
+    (wh2 ? (wh2.bins || []) : []).forEach(function (bl) { binsById[bl.id] = bl; });
+    $('#serial-tbody').empty();
+    $('#serial-empty').toggle(serials.length === 0);
+    if (!serials.length) return;
+    serials.forEach(function (sn) {
+      var bin = binsById[sn.binID];
+      var $check = $('<input type="checkbox" class="serial-row-check">').prop('checked', serialPicked.indexOf(sn.no) >= 0);
+      var $tr = $('<tr>')
+        .append($('<td>').append($check))
+        .append($('<td>').text(sn.no))
+        .append($('<td>').text(bin ? (bin.code + ' - ' + bin.name) : (sn.binID || '-')));
+      $check.on('change', function () {
+        serialPicked = [];
+        $('#serial-tbody .serial-row-check:checked').each(function () {
+          serialPicked.push($(this).closest('tr').find('td').eq(1).text());
+        });
+        $('#serial-input').val(serialPicked.join('\n'));
+      });
+      $('#serial-tbody').append($tr);
+    });
+  }
+  $('#serial-search').on('input', function () {
+    var q = ($(this).val() || '').toLowerCase();
+    var filtered = !q ? serialCache.rows : serialCache.rows.filter(function (sn) { return (sn.no || '').toLowerCase().indexOf(q) >= 0; });
+    renderSerialRows(filtered);
+  });
   function loadSerialOptions(itemRec, row) {
     var branchID = editingReport.salesBranchID;
     var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
     var whID = editingReport.warehouseID || (branch ? branch.warehouseID : 0);
-    var wh = warehouses.filter(function (w) { return w.id === whID; })[0];
-    var binsById = {};
-    (wh ? (wh.bins || []) : []).forEach(function (bl) { binsById[bl.id] = bl; });
-    function renderSerialRows(serials) {
-      $('#serial-tbody').empty();
-      if (!serials.length) { $('#serial-empty').show(); return; }
-      var saved = row.serialNos || [];
-      serials.forEach(function (sn) {
-        var bin = binsById[sn.binID];
-        var $check = $('<input type="checkbox" class="serial-row-check">').prop('checked', saved.indexOf(sn.no) >= 0);
-        var $tr = $('<tr>')
-          .append($('<td>').append($check))
-          .append($('<td>').text(sn.no))
-          .append($('<td>').text(bin ? (bin.code + ' - ' + bin.name) : (sn.binID || '-')));
-        $check.on('change', function () {
-          var picked = [];
-          $('#serial-tbody .serial-row-check:checked').each(function () {
-            picked.push($(this).closest('tr').find('td').eq(1).text());
-          });
-          $('#serial-input').val(picked.join('\n'));
-        });
-        $('#serial-tbody').append($tr);
-      });
-    }
+    serialCache = { whID: whID, rows: [] };
+    serialPicked = (row.serialNos || []).slice();
+    $('#serial-input').val(serialPicked.join('\n'));
+    $('#serial-search').val('');
     function serialQuery(selectList, whereIdCol) {
       return "SELECT TOP 50 " + selectList + " FROM ItemSN WHERE " + whereIdCol + "=" + parseInt(itemRec.id, 10) +
         (whID ? " AND " + whereIdCol.replace('ItemID', 'WarehouseID') + "=" + parseInt(whID, 10) : "") +
@@ -2516,14 +2539,16 @@
     }
     qrySql(serialQuery("ISN_SerialNo, ISN_BinLocationID", "ISN_ItemID"), 50).then(function (resp) {
       var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
-      renderSerialRows(rows.map(function (r) { return { no: r[0], binID: r[1] }; }));
+      serialCache.rows = rows.map(function (r) { return { no: r[0], binID: r[1] }; });
+      renderSerialRows(serialCache.rows);
     }).fail(function () {
       qrySql(serialQuery("IS_SerialNo, IS_BinLocationID", "IS_ItemID"), 50).then(function (resp2) {
         var rows2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows || [];
-        renderSerialRows(rows2.map(function (r) { return { no: r[0], binID: r[1] }; }));
+        serialCache.rows = rows2.map(function (r) { return { no: r[0], binID: r[1] }; });
+        renderSerialRows(serialCache.rows);
       }).fail(function () {
         addLog('Serial list unavailable - manual entry only');
-        $('#serial-table-wrap, #serial-pick-hint').hide();
+        $('#serial-search, #serial-table-wrap, #serial-pick-hint').hide();
       });
     });
   }
