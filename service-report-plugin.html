@@ -410,7 +410,6 @@
           <option value="readycollect">READY TO COLLECT</option>
           <option value="completed">COMPLETED</option>
           <option value="cancelled">CANCELLED</option>
-          <option value="deleted">DELETED</option>
         </select>
       </div>
     </div>
@@ -1654,7 +1653,10 @@
     var found = code ? reports.filter(function (r) { return r.code === code; })[0] : null;
     editingReport = found ? $.extend(true, {}, found) : blankReport();
     editingCode = found ? code : null;
-    $('#detail-title').text(found ? ('Service Report ' + code) : 'New Service Report');
+    // DELETED is list-filter-only (no dropdown option here): a deleted record
+    // shows a title marker, and picking any status + Save restores it.
+    var isDeletedDoc = !!(found && (found.status || '') === 'deleted');
+    $('#detail-title').text(found ? ('Service Report ' + code + (isDeletedDoc ? ' (Deleted)' : '')) : 'New Service Report');
     $('#btn-delete-report').toggle(!!found && canDelete);
     $('#btn-copy-to-sales').toggle(canSaveEdit);
     $('#d-docno').val(found ? code : '');
@@ -2852,7 +2854,8 @@
     if (!$('#d-sales-branch').val()) { showToast('Please select a Sales Branch before saving', true); return; }
     editingReport.date = $('#d-date').val();
     editingReport.expiry = $('#d-expiry').val();
-    editingReport.status = $('#d-status').val();
+    // Untouched blank select (e.g. opened Deleted record) keeps its status.
+    editingReport.status = $('#d-status').val() || editingReport.status || 'new';
     editingReport.custCode = $('#d-cust-code').val().trim();
     editingReport.custName = $('#d-cust-name').val();
     editingReport.custPhone = $('#d-cust-phone').val();
