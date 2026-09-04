@@ -872,22 +872,34 @@
       addLog('Loaded ' + customers.length + ' customers for company ' + companyID);
       renderCustomerDatalist();
     });
-    apiPost('api/Item/GetAllItemMasterByCompanyID', { companyID: companyID }).then(function (r) {
-      if (!r.ok) { addLog('GetAllItemMasterByCompanyID FAILED for company ' + companyID + ' (kept previous list)'); return; }
-      var resp = r.resp;
-      var data = (resp && resp.data) || [];
-      items = data.map(function (im) {
-        return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
-      }).filter(function (im) { return im.code && EXCLUDED_ITEM_TYPE_IDS.indexOf(im.typeID) < 0; });
-      addLog('Loaded ' + items.length + ' items for company ' + companyID);
-      renderItemDatalist();
-      // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
-      (function enrichSeq(start){
-        if(start>=Math.min(items.length,80)) return;
-        enrichItemsBatchAndPrice(items.slice(start, start+40));
-        setTimeout(function(){ enrichSeq(start+40); }, 800);
-      })(0);
-    });
+    // Paged: the endpoint returns max 1000 rows per call, cursor = MaxID (next
+    // page starts at last IM_ID + 1). Company 548 has 4000+ items - single-page
+    // load silently dropped every newer item (confirmed live: 842293 sits on
+    // page 5). Loop until a short page; a failed page keeps what arrived so far.
+    (function loadItemPages(maxID, acc) {
+      apiPost('api/Item/GetAllItemMasterByCompanyID', { CompanyID: companyID, MaxID: maxID }).then(function (r) {
+        var data = (r.ok && r.resp && r.resp.data) || [];
+        if (!r.ok) addLog('GetAllItemMasterByCompanyID page FAILED at MaxID ' + maxID + ' for company ' + companyID);
+        acc = acc.concat(data);
+        if (r.ok && data.length >= 1000) {
+          var ids = data.map(function (im) { return im.IM_ID; });
+          setTimeout(function () { loadItemPages(Math.max.apply(null, ids) + 1, acc); }, 400);
+          return;
+        }
+        if (!acc.length && !r.ok) { addLog('GetAllItemMasterByCompanyID FAILED for company ' + companyID + ' (kept previous list)'); return; }
+        items = acc.map(function (im) {
+          return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
+        }).filter(function (im) { return im.code && EXCLUDED_ITEM_TYPE_IDS.indexOf(im.typeID) < 0; });
+        addLog('Loaded ' + items.length + ' items for company ' + companyID);
+        renderItemDatalist();
+        // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
+        (function enrichSeq(start){
+          if(start>=Math.min(items.length,80)) return;
+          enrichItemsBatchAndPrice(items.slice(start, start+40));
+          setTimeout(function(){ enrichSeq(start+40); }, 800);
+        })(0);
+      });
+    })(0, []);
     // Load sales branches for detail page (Sales Branch / Warehouse dropdowns)
     apiPost('api/SalesBranch/GetAllSalesBranch', { companyID: companyID }).then(function (r) {
       if (!r.ok) { addLog('GetAllSalesBranch FAILED for company ' + companyID + ' (kept previous list)'); return; }
