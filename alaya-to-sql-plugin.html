@@ -2443,8 +2443,15 @@ $('#btn-transfer').on('click', function() {
 function showTransferResults(results) {
   var html = '';
   (results || []).forEach(function(r) {
-    var statusClass = r.success ? 'done' : 'error';
-    var statusText = r.success ? 'OK' : 'Failed';
+    // 明细里一个都没成功 (全 error) 也算失败, 不能显示绿色 OK 误导人
+    var nErr = 0, nOk = 0;
+    (r.data || []).forEach(function(d) {
+      if (d.status === 'error') nErr++;
+      else if (d.status === 'success' || d.status === 'planned') nOk++;
+    });
+    var ok = !!r.success && !(nErr > 0 && nOk === 0);
+    var statusClass = ok ? 'done' : 'error';
+    var statusText = ok ? 'OK' : 'Failed';
     var det = r.message || r.error || '';
     if (!det && r.data && r.data.length) {
       var firstErr = null, okCount = 0;
