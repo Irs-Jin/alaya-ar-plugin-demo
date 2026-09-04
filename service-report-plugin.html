@@ -2319,7 +2319,7 @@
         if (row0) { row0.priceStatus = 'no UOM'; setPriceStatus(idx, row0.priceStatus); }
         return;
       }
-      var uomIdx = 0, retries = 0, lastErr = '';
+      var uomIdx = 0, retries = 0, lastErr = '', allUomTried = false;
       // Recording the resolution outcome on the row makes the live cause visible
       // without mining the Event Log - '5000 (ITEM UOM 154719)', '0 (fallback done)',
       // 'fetch failed: ...' etc.
@@ -2328,8 +2328,40 @@
         if (r) { r.priceStatus = st; }
         renderActionTable();
       }
+      // Last-resort fallback: when the item's own default/base UOM rows hold no
+      // price on the live DB, scan ALL of the item's UOM rows (keyed on its
+      // IM_ID from the same REST call) and use the first non-zero price. This
+      // catches the case where the price the user sees on the item master lives
+      // on a DIFFERENT UOM than the base UOM (confirmed live: base UOM 154719
+      // reads 0 on SIT while the item shows 5000 elsewhere).
+      function allUomFallback() {
+        if (allUomTried || !im.id) return false;
+        allUomTried = true;
+        addLog('All-UOM fallback for item ' + im.code + ' (IM_ID ' + im.id + ')');
+        setPriceStatus(idx, 'checking all UOMs…');
+        qrySql("SELECT IU_ID, IU_SalesPrice1 FROM ItemUOM WHERE IU_ItemID=" + parseInt(im.id, 10), 5).then(function (resp) {
+          var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+          var hit = null;
+          rows.forEach(function (r) { if (!hit && r[1] && parseFloat(r[1]) > 0) { hit = { uom: r[0], price: parseFloat(r[1]) }; } });
+          addLog('All-UOM result for ' + im.code + ': ' + rows.length + ' UOM rows, first non-zero price=' + (hit ? hit.price : '(none)'));
+          if (hit) {
+            im.price = hit.price;
+            var row = editingReport.actionTaken[idx];
+            if (row && String(row.item) === String(im.code)) { row.price = hit.price; }
+            setPriceStatus(idx, hit.price + ' (ItemUOM all ' + hit.uom + ')');
+          } else {
+            setPriceStatus(idx, (lastErr ? 'fetch failed: ' + lastErr : '0 (all UOMs no price)'));
+          }
+        }).fail(function (e) {
+          lastErr = (e && e.statusText) || String(e);
+          addLog('All-UOM fallback failed for ' + im.code + ': ' + lastErr);
+          setPriceStatus(idx, 'fetch failed: ' + lastErr);
+        });
+        return true;
+      }
       function fetchPrice() {
         if (uomIdx >= uomIds.length) {
+          if (allUomFallback()) return;
           setPriceStatus(idx, (lastErr ? 'fetch failed: ' + lastErr : '0 (all UOMs no price)'));
           return;
         }
@@ -2350,6 +2382,7 @@
           } else if (retries < 1) {
             retries++; setTimeout(fetchPrice, 1000);
           } else {
+            if (allUomFallback()) return;
             setPriceStatus(idx, '0 (UOM ' + u + ' empty)');
           }
         }).fail(function(e){
@@ -2360,6 +2393,7 @@
           } else if (retries < 1) {
             retries++; setTimeout(fetchPrice, 1000);
           } else {
+            if (allUomFallback()) return;
             setPriceStatus(idx, 'fetch failed: ' + lastErr);
           }
         });
