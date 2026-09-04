@@ -302,8 +302,9 @@
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">SQL Account Connection</h3>
     <div class="sub" style="margin-top:-4px;">
-      Changes here are saved straight to the backend (<code>config.json</code>) via <code>btn-save-connection</code>,
-      not to the Alaya UDF settings table. Fields left blank keep their current backend value.
+      Saved to the Alaya UDF settings table along with everything else on this page (use the
+      main <b>Save</b> button above) - and mirrored to the backend's <code>config.json</code>
+      automatically so it stays in sync.
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -350,11 +351,6 @@
         <input type="password" id="s-estream-password" placeholder="(unchanged)" autocomplete="new-password" />
       </div>
     </div>
-    <div class="btn-row" style="margin-bottom:8px;">
-      <button id="btn-save-connection" class="btn-secondary">Save Connection Settings</button>
-      <span id="connection-save-status" style="font-size:0.78rem;color:#6b7280;"></span>
-    </div>
-
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Settings</h3>
     <div class="form-row">
       <div class="form-group">
@@ -606,7 +602,17 @@ var defaultSettings = {
   divisions: [],
   advType: 'customer',
   advDoc: 'CASH SALES',
-  advPreviewDoc: 'CASH SALES'
+  advPreviewDoc: 'CASH SALES',
+  // SQL Account connection - single source of truth is the UDF table now (was
+  // previously only in the backend's own config.json via a separate save button).
+  sqlCompanyCode: '',
+  dcfPath: 'C:\\eStream\\SQLAccounting\\Share\\Default.DCF',
+  fbHost: '127.0.0.1',
+  fbPort: '3050',
+  fbUser: 'SYSDBA',
+  fbPassword: '',
+  estreamUser: 'ADMIN',
+  estreamPassword: ''
 };
 
 // ΓöÇΓöÇ State ΓöÇΓöÇ
@@ -648,6 +654,10 @@ function packRows(s) {
     cp: B(s.tCashpayment), i: B(s.tInvoice), n: B(s.tCn),
     cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv)
   })]);
+  rows.push(['CONN', JSON.stringify({
+    sc: s.sqlCompanyCode, dp: s.dcfPath, h: s.fbHost, po: s.fbPort,
+    u: s.fbUser, pw: s.fbPassword, eu: s.estreamUser, epw: s.estreamPassword
+  })]);
   (s.paymodes || []).forEach(function(pm) {
     if (pm && pm.code) rows.push(['PM_' + pm.code, String(pm.acct || '')]);
   });
@@ -686,6 +696,10 @@ function unpackRows(rowArr) {
         s.tCustomer = flag(o.c); s.tVendor = flag(o.v); s.tCashsales = flag(o.cs);
         s.tCashpayment = flag(o.cp); s.tInvoice = flag(o.i); s.tCn = flag(o.n);
         s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi);
+      } else if (code === 'CONN') {
+        var cn = JSON.parse(val);
+        s.sqlCompanyCode = cn.sc; s.dcfPath = cn.dp; s.fbHost = cn.h; s.fbPort = cn.po;
+        s.fbUser = cn.u; s.fbPassword = cn.pw; s.estreamUser = cn.eu; s.estreamPassword = cn.epw;
       } else if (code.indexOf('PM_') === 0) {
         s.paymodes = s.paymodes || [];
         s.paymodes.push({ code: code.slice(3), acct: val });
@@ -791,6 +805,34 @@ function applySettings() {
   renderPaymodeTable(s.paymodes || []);
   renderBranchTable(s.branches || []);
   renderDivisionTable(s.divisions || []);
+
+  // SQL Account connection - UDF table is now the single source of truth (see saveSettings).
+  $('#s-dcf-path').val(s.dcfPath);
+  $('#s-fb-host').val(s.fbHost);
+  $('#s-fb-port').val(s.fbPort);
+  $('#s-fb-user').val(s.fbUser);
+  $('#s-fb-password').val(s.fbPassword);
+  $('#s-estream-user').val(s.estreamUser);
+  $('#s-estream-password').val(s.estreamPassword);
+  if (s.sqlCompanyCode) $('#sql-company, #s-sql-company').val(s.sqlCompanyCode);
+  pushConnectionSettingsToBackend(s);
+}
+
+// Keep the backend's config.json in sync with whatever's in the UDF table, so the
+// two never drift apart. Called after every load and every save - no separate
+// "Save Connection Settings" button anymore.
+function pushConnectionSettingsToBackend(s) {
+  var body = {
+    dcfPath: s.dcfPath, host: s.fbHost, port: s.fbPort, user: s.fbUser,
+    password: s.fbPassword, estreamUsername: s.estreamUser, estreamPassword: s.estreamPassword
+  };
+  $.ajax({
+    url: BACKEND_URL + '/api/settings/connection', type: 'POST', contentType: 'application/json',
+    data: JSON.stringify(body),
+    success: function(r) { if (!r.success) addLog('Backend rejected connection settings: ' + r.error, 'log-err'); },
+    error: function() { addLog('Could not sync connection settings to backend (unreachable)', 'log-warn'); }
+  });
+  if (s.sqlCompanyCode) selectActiveCompany(s.sqlCompanyCode);
 }
 
 function saveSettings() {
@@ -834,9 +876,18 @@ function saveSettings() {
     divisions: maps.divisions,
     advType: $('input[name="adv-type"]:checked').val() || 'customer',
     advDoc: $('#adv-doc-type').val() || 'CASH SALES',
-    advPreviewDoc: $('#adv-preview-doctype').val() || 'CASH SALES'
+    advPreviewDoc: $('#adv-preview-doctype').val() || 'CASH SALES',
+    sqlCompanyCode: $('#sql-company, #s-sql-company').filter(':first').val() || settings.sqlCompanyCode || '',
+    dcfPath: $('#s-dcf-path').val() || defaultSettings.dcfPath,
+    fbHost: $('#s-fb-host').val() || defaultSettings.fbHost,
+    fbPort: $('#s-fb-port').val() || defaultSettings.fbPort,
+    fbUser: $('#s-fb-user').val() || defaultSettings.fbUser,
+    fbPassword: $('#s-fb-password').val(),
+    estreamUser: $('#s-estream-user').val() || defaultSettings.estreamUser,
+    estreamPassword: $('#s-estream-password').val()
   };
   BACKEND_URL = settings.backendUrl;
+  pushConnectionSettingsToBackend(settings);
 
   // Always keep a local backup
   try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
@@ -1297,57 +1348,6 @@ function testBackendConnection() {
   });
 }
 
-// ΓöÇΓöÇ SQL Account connection settings (backend config.json, not Alaya UDF) ΓöÇΓöÇ
-function loadConnectionSettings() {
-  $.ajax({
-    url: BACKEND_URL + '/api/settings/connection',
-    type: 'GET',
-    success: function(r) {
-      if (!r.success) return;
-      var d = r.data;
-      $('#s-dcf-path').val(d.dcfPath || '');
-      $('#s-fb-host').val(d.host || '');
-      $('#s-fb-port').val(d.port || '');
-      $('#s-fb-user').val(d.user || '');
-      $('#s-fb-password').val(d.password || '');
-      $('#s-estream-user').val(d.estreamUsername || '');
-      $('#s-estream-password').val(d.estreamPassword || '');
-    },
-    error: function() { addLog('Could not load connection settings from backend', 'log-err'); }
-  });
-}
-
-function saveConnectionSettings() {
-  var body = {
-    dcfPath: $('#s-dcf-path').val(),
-    host: $('#s-fb-host').val(),
-    port: $('#s-fb-port').val(),
-    user: $('#s-fb-user').val(),
-    password: $('#s-fb-password').val(),
-    estreamUsername: $('#s-estream-user').val(),
-    estreamPassword: $('#s-estream-password').val()
-  };
-  $('#connection-save-status').text('Saving...').css('color', '#6b7280');
-  $.ajax({
-    url: BACKEND_URL + '/api/settings/connection',
-    type: 'POST',
-    contentType: 'application/json',
-    data: JSON.stringify(body),
-    success: function(r) {
-      if (r.success) {
-        $('#connection-save-status').text('Saved.').css('color', '#16a34a');
-        addLog('SQL Account connection settings saved to backend', 'log-ok');
-      } else {
-        $('#connection-save-status').text('Error: ' + r.error).css('color', '#dc2626');
-      }
-    },
-    error: function(xhr) {
-      $('#connection-save-status').text('Save failed (backend unreachable)').css('color', '#dc2626');
-      addLog('Failed to save connection settings', 'log-err');
-    }
-  });
-}
-
 function selectActiveCompany(code) {
   if (!code) return;
   $.ajax({
@@ -1564,7 +1564,17 @@ $('#btn-refresh-divisions').on('click', function() {
 $('#btn-add-division').on('click', function() { appendDivisionRow('', false); });
 
 // ΓöÇΓöÇ Execute SQL via host eval bridge ΓöÇΓöÇ
+// The host's memoQuery callback control can only have ONE WebForm_DoCallback in
+// flight at a time - firing a second one before the first resolves silently
+// cancels/clobbers the first (its promise never settles until the 60s timeout).
+// Queue every call through here so they run strictly one-at-a-time.
+var _dcbQueue = Promise.resolve();
 function executeSqlViaHost(sql) {
+  var result = _dcbQueue.then(function () { return executeSqlViaHostImpl(sql); });
+  _dcbQueue = result.catch(function () {}); // keep the queue moving even if this call failed
+  return result;
+}
+function executeSqlViaHostImpl(sql) {
   return new Promise(function (resolve, reject) {
     if (!hostOrigin) { reject(new Error('Host origin unknown - ALAYA_INIT not received yet')); return; }
     var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
@@ -2374,23 +2384,14 @@ function showTransferResults(results) {
 }
 
 // ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
-var connectionSettingsLoaded = false;
 $('.tab-btn').on('click', function() {
   var tab = $(this).data('tab');
   $('.tab-btn').removeClass('active');
   $(this).addClass('active');
   $('.tab-panel').removeClass('active');
   $('#tab-' + tab).addClass('active');
-  if (tab === 'settings' && !connectionSettingsLoaded) {
-    connectionSettingsLoaded = true;
-    loadConnectionSettings();
-  }
 });
 
-// ΓöÇΓöÇ SQL Account connection settings UI ΓöÇΓöÇ
-$('#btn-save-connection').on('click', function() {
-  saveConnectionSettings();
-});
 $('#sql-company, #s-sql-company').on('change', function() {
   selectActiveCompany($(this).val());
 });
