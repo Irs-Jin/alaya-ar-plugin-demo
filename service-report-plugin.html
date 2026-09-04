@@ -896,7 +896,7 @@
         }
         if (!acc.length && !r.ok) { addLog('GetAllItemMasterByCompanyID FAILED for company ' + companyID + ' (kept previous list)'); return; }
         items = acc.map(function (im) {
-          return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
+          return { id: im.IM_ID, code: $.trim(im.IM_Code), desc: im.IM_Description, uom: im.IM_BaseUOMCode || '', uomID: im.IM_BaseUOMID, salesUomID: im.IM_DefaultSalesUOMID, typeID: im.IM_TypeID, batchControl: undefined, serialControl: undefined, price: 0 };
         }).filter(function (im) { return im.code && EXCLUDED_ITEM_TYPE_IDS.indexOf(im.typeID) < 0; });
         addLog('Loaded ' + items.length + ' items for company ' + companyID);
         renderItemDatalist();
@@ -2299,25 +2299,37 @@
     // ItemUOM row (IU_SalesPrice1), with one retry. Used both when an item is
     // picked AND when an existing report is opened - a reopened row saved with
     // price 0 (fetch failed at pick time) otherwise stays 0 forever.
+    // Prefers the Default Sales UOM's price (what a Sales line should carry),
+    // falling back to the Base UOM, then to any non-zero price on the item.
     function lazyFetchPrice(idx, im) {
-      var tries = 0;
+      var uomIds = [];
+      [im.salesUomID, im.uomID].forEach(function (u) { if (u && uomIds.indexOf(u) < 0) uomIds.push(parseInt(u, 10)); });
+      if (!uomIds.length) return;
+      var uomIdx = 0, retries = 0;
       function fetchPrice() {
-        tries++;
-        addLog('Lazy price fetch for item ' + im.code + ' UOM id=' + im.uomID + (tries > 1 ? ' (retry)' : ''));
-        qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ID=" + parseInt(im.uomID,10), 5).then(function (resp) {
+        if (uomIdx >= uomIds.length) return;
+        var u = uomIds[uomIdx];
+        addLog('Lazy price fetch for item ' + im.code + ' UOM id=' + u + (retries ? ' (retry)' : ''));
+        qrySql("SELECT TOP 1 IU_SalesPrice1 FROM ItemUOM WHERE IU_ID=" + u, 5).then(function (resp) {
           var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
           var p = r && parseFloat(r[0]);
-          addLog('ItemUOM price result for ' + im.code + ': ' + p);
+          addLog('ItemUOM price result for ' + im.code + ' UOM ' + u + ': ' + p);
           if (p && p>0) {
             im.price = p;
             var row = editingReport.actionTaken[idx];
             if (row && String(row.item) === String(im.code) && !row.price) { row.price = p; renderActionTable(); }
-          } else if (tries < 2) {
-            setTimeout(fetchPrice, 1500);
+          } else if (uomIdx < uomIds.length - 1) {
+            uomIdx++; retries = 0; setTimeout(fetchPrice, 500);
+          } else if (retries < 1) {
+            retries++; setTimeout(fetchPrice, 1000);
           }
         }).fail(function(e){
-          addLog('Price fetch failed for ' + im.code + ': ' + (e&&e.statusText||e));
-          if (tries < 2) setTimeout(fetchPrice, 1500);
+          addLog('Price fetch failed for ' + im.code + ' UOM ' + u + ': ' + (e&&e.statusText||e));
+          if (uomIdx < uomIds.length - 1) {
+            uomIdx++; retries = 0; setTimeout(fetchPrice, 500);
+          } else if (retries < 1) {
+            retries++; setTimeout(fetchPrice, 1000);
+          }
         });
       }
       fetchPrice();
