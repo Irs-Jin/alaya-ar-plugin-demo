@@ -993,7 +993,7 @@ $(window).on('message', function(e) {
     setTimeout(function() { loadSettings(); }, 500);
   }
 
-  if (msg.type === 'alaya-dcb-result' && msg.requestId) {
+  if ((msg.type === 'alaya-dcb-result' || msg.source === 'alaya-dcb-result') && msg.requestId) {
     var cb = pendingDcbCallbacks[msg.requestId];
     if (cb) {
       delete pendingDcbCallbacks[msg.requestId];
