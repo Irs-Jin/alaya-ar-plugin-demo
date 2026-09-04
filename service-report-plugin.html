@@ -1995,71 +1995,39 @@
       }
     });
 
-    var subTotal = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
-    var footerDiscount = Math.min(parseFloat(editingReport.footerDiscount) || 0, subTotal);
-    // PostCashSales requires header Total === SUM(SalesDTL.Total) + RoundingAmount
-    // exactly (confirmed live: "Total not equal all item's (Total) + RoundingAmount"),
-    // so a footer discount has to be allocated down into each line's own Total -
-    // it can't just be subtracted from the header while lines keep their full amount.
-    // Allocate proportionally to each line's share of the subtotal, with the last
-    // line absorbing the rounding remainder so the sum ties out exactly.
-    if (footerDiscount > 0 && subTotal > 0) {
-      var allocated = 0;
-      dtl.forEach(function (d, idx) {
-        var orig = parseFloat(d.Total);
-        var isLast = idx === dtl.length - 1;
-        var share = isLast ? (footerDiscount - allocated) : Math.round((orig / subTotal) * footerDiscount * 10000) / 10000;
-        allocated += share;
-        var net = Math.max(0, orig - share).toFixed(4);
-        // Exclusive-tax mode requires Total === SubTotal + TaxAmt per line; with
-        // TaxAmt always 0 here, SubTotal must also be reduced to the net amount
-        // ("Exclusive Tax:Total Amount not equal (SubTotal + TaxAmt)").
-        d.Total = net; d.SubTotal = net; d.TaxableAmt = net; d.TaxableExcFooterDisc = net;
-        // ItemFooterDiscount is validated server-side as a PER-UNIT discount -
-        // "FooterDiscount not equal all item's (ItemFooterDiscount x Qty)" - so
-        // it must be this line's allocated share divided back by its own Qty.
-        var qty = parseFloat(d.Qty) || 1;
-        d.ItemFooterDiscount = (share / qty).toFixed(6);
-      });
-    }
-    var total = dtl.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
-    var now = fmtCashSalesDate(new Date());
-    var body = {
-      CompanyID: String(companyID), BranchID: String(branch.id), DocumentNo: '',
-      Reference: editingReport.code || 'SVCRPT', Description: 'Copied from Service Report ' + (editingReport.code || ''), Note: '',
-      PostingDate: now, DocumentDate: now, DueDate: '', DeliveryDate: now,
-      CustomerID: String(custRecord.id), WarehouseID: String(branch.warehouseID), PriceLevel: '1',
-      CompanyPaymentTermID: String(payTerm.id),
-      TaxItemize: 'false', InclusiveTax: 'False', Rounding_YN: 'False', RoundingAmount: '0.0000', FooterDiscount: footerDiscount.toFixed(4),
-      SalesAgentID: '', Total: total.toFixed(4), TotalPoint: '0.0000',
-      SalesDTL: dtl,
-    };
-    // Explode Package Item rows into their component child lines. Confirmed live
-    // against a real posted document: a package parent posts as its own header
-    // line PLUS one child line per component, ALL sharing the parent's GroupID,
-    // and every row in that group (parent + every child) reports the SAME
-    // "Total" - the WHOLE package's total, not the individual component's own
-    // subtotal. Replicated exactly rather than guessed, since deviating from a
-    // confirmed-working shape risks yet another opaque server-side error.
+    // Final posted set is assembled below (package parents are REPLACED by
+    // their component child lines) - discount allocation and the header total
+    // must run on that final set, never on the pre-explosion parents.
+    var posted = null, subTotal = 0, footerDiscount = 0, total = 0;
+    // Explode Package Item rows into their component child lines. The package
+    // PARENT row is REPLACED by its children (it is not posted): every child
+    // carries its OWN subtotal (qty x price), so header Total === SUM of all
+    // posted rows exactly. Posting the parent alongside full-total children
+    // counts the package total twice server-side ("Total not equal all item's
+    // (Total) + RoundingAmount" - confirmed live on SR-000027: parent 208 +
+    // children 10/100/98 must sum to 208, not 832). GroupID linkage, batch and
+    // serial rows are unchanged - only the money duplication is removed.
+    posted = [];
     lines.forEach(function (a, idx) {
-      if (!a.packageComponents || !a.packageComponents.length) return;
       var parentDtl = dtl.filter(function (d) { return d.GroupID === lineGroupIds[idx]; })[0];
       if (!parentDtl) return;
+      if (!a.packageComponents || !a.packageComponents.length) { posted.push(parentDtl); return; }
       var grp = lineGroupIds[idx];
       a.packageComponents.forEach(function (c) {
         var compQty = (c.qty || 0).toFixed(4);
         var compPrice = parseFloat((c.price || 0).toFixed(2));
+        var childTotal = (parseFloat(compQty) * compPrice).toFixed(4);
         var childObj = {
           Description: c.desc || c.code, Qty: compQty, ItemID: String(c.id), ItemUOMID: String(c.uomID || ''),
           UnitPrice: compPrice.toFixed(6), NewUnitPrice: compPrice.toFixed(2), DiscountAmt: '0.00', DiscountFormula: '',
           ItemTypeID: '1', WarehouseID: parentDtl.WarehouseID, BinLocationID: c.binLocationID ? String(c.binLocationID) : parentDtl.BinLocationID,
           Remarks: '', GroupID: grp, SubItem_YN: true,
-          SubTotal: parentDtl.Total, TaxAmt: '0.0000', TaxableAmt: parentDtl.Total, Total: parentDtl.Total, TaxCode: '',
-          TaxableExcFooterDisc: parentDtl.Total, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
+          SubTotal: childTotal, TaxAmt: '0.0000', TaxableAmt: childTotal, Total: childTotal, TaxCode: '',
+          TaxableExcFooterDisc: childTotal, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
         };
+        posted.push(childObj);
         if (c.batches && c.batches.length) { childObj.BatchNo = c.batches[0].batchNo; childObj.CSB_BatchNo = c.batches[0].batchNo; }
         if (c.serialNos && c.serialNos.length) { childObj.SerialNo = c.serialNos[0]; childObj.CSSN_SerialNo = c.serialNos[0]; }
-        body.SalesDTL.push(childObj);
         // Batch/serial for a package component shares the PACKAGE's GroupID
         // (confirmed live: CashSalesBatch.CSB_GroupID matched the group's shared
         // GUID, not a per-component one).
@@ -2084,6 +2052,39 @@
         }
       });
     });
+
+    // Discount allocation + header total run on the FINAL posted rows (package
+    // parents already replaced by children above), so header Total ===
+    // SUM(SalesDTL.Total) + RoundingAmount exactly. Same per-line rules as
+    // before: footer discount allocated proportionally with the last line
+    // absorbing the remainder; exclusive-tax lines keep SubTotal === Total.
+    subTotal = posted.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
+    footerDiscount = Math.min(parseFloat(editingReport.footerDiscount) || 0, subTotal);
+    if (footerDiscount > 0 && subTotal > 0) {
+      var allocated = 0;
+      posted.forEach(function (d, idx) {
+        var orig = parseFloat(d.Total);
+        var isLast = idx === posted.length - 1;
+        var share = isLast ? (footerDiscount - allocated) : Math.round((orig / subTotal) * footerDiscount * 10000) / 10000;
+        allocated += share;
+        var net = Math.max(0, orig - share).toFixed(4);
+        d.Total = net; d.SubTotal = net; d.TaxableAmt = net; d.TaxableExcFooterDisc = net;
+        var qty = parseFloat(d.Qty) || 1;
+        d.ItemFooterDiscount = (share / qty).toFixed(6);
+      });
+    }
+    total = posted.reduce(function (sum, d) { return sum + parseFloat(d.Total); }, 0);
+    var now = fmtCashSalesDate(new Date());
+    var body = {
+      CompanyID: String(companyID), BranchID: String(branch.id), DocumentNo: '',
+      Reference: editingReport.code || 'SVCRPT', Description: 'Copied from Service Report ' + (editingReport.code || ''), Note: '',
+      PostingDate: now, DocumentDate: now, DueDate: '', DeliveryDate: now,
+      CustomerID: String(custRecord.id), WarehouseID: String(branch.warehouseID), PriceLevel: '1',
+      CompanyPaymentTermID: String(payTerm.id),
+      TaxItemize: 'false', InclusiveTax: 'False', Rounding_YN: 'False', RoundingAmount: '0.0000', FooterDiscount: footerDiscount.toFixed(4),
+      SalesAgentID: '', Total: total.toFixed(4), TotalPoint: '0.0000',
+      SalesDTL: posted,
+    };
 
     // Attach batch/serial child arrays under multiple possible keys for API compatibility
     if (salesBatches.length) {
