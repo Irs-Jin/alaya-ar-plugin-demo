@@ -2491,6 +2491,14 @@
     closeBatchModal();
     after();
     markDirty('batch/serial');
+    // Chain: when filling components inside an open Package modal, auto-advance
+    // to the next component still missing batch/serial instead of dropping back
+    // silently (Cancel/backdrop intentionally do NOT chain - bailing out is manual).
+    if (packageEditingIdx !== null && $('#package-modal').hasClass('show')) {
+      var prow = editingReport.actionTaken[packageEditingIdx];
+      var nextMissing = prow ? firstMissingComponentIdx(prow) : -1;
+      if (nextMissing >= 0) openBatchModalForComponent(packageEditingIdx, nextMissing);
+    }
   });
 
   /* ── Package Item handling (mirrors native Cash Sales "Package Item" popup) ──
