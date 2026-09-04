@@ -159,6 +159,7 @@
     .status-text.status-readycollect { color:#0e7490; }
     .status-text.status-completed { color:#166534; }
     .status-text.status-cancelled { color:#b91c1c; }
+    .status-text.status-deleted { color:#6b7280; }
     .empty-state { text-align:center; padding:40px 20px; color:#9ca3af; font-size:0.88rem; }
     .empty-state .big-icon { font-size:2.5rem; margin-bottom:8px; }
     .list-footer { padding:10px 4px 0 4px; font-size:0.85rem; font-weight:700; color:#374151; }
@@ -297,6 +298,7 @@
         <label><input type="checkbox" class="status-check" value="readycollect" checked> Ready to Collect</label>
         <label><input type="checkbox" class="status-check" value="completed" checked> Completed</label>
         <label><input type="checkbox" class="status-check" value="cancelled"> Cancelled</label>
+        <label><input type="checkbox" class="status-check" value="deleted"> Deleted</label>
       </div>
     </div>
   </div>
@@ -408,6 +410,7 @@
           <option value="readycollect">READY TO COLLECT</option>
           <option value="completed">COMPLETED</option>
           <option value="cancelled">CANCELLED</option>
+          <option value="deleted">DELETED</option>
         </select>
       </div>
     </div>
@@ -1525,7 +1528,7 @@
   $('#btn-load').on('click', function () { loadReportsFromDb(); });
 
   /* ── List rendering ── */
-  function statusLabel(s) { return { new: 'New', repairing: 'Repairing', readycollect: 'Ready to Collect', completed: 'Completed', cancelled: 'Cancelled' }[s] || s; }
+  function statusLabel(s) { return { new: 'New', repairing: 'Repairing', readycollect: 'Ready to Collect', completed: 'Completed', cancelled: 'Cancelled', deleted: 'Deleted' }[s] || s; }
 
   /* Company filter, positioned first in the filter row like Quotation/Cash Sales.
      Populated from distinct companyID/companyName pairs actually present in the
@@ -1572,7 +1575,7 @@
       var $tr = $('<tr>');
       var $icons = $('<div class="row-icon-actions">');
       if (canSaveEdit) $icons.append($('<button class="row-icon-btn" title="Edit">&#9998;</button>').on('click', function (e) { e.stopPropagation(); openDetail(r.code); }));
-      if (canDelete) $icons.append($('<button class="row-icon-btn danger" title="Delete">&#128465;</button>').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); }));
+      if (canDelete) $icons.append($('<button class="row-icon-btn danger" title="Move to Deleted">&#128465;</button>').on('click', function (e) { e.stopPropagation(); deleteReport(r.code); }));
       if (canCopy) $icons.append($('<button class="row-icon-btn" title="Copy Document">&#128203;</button>').on('click', function (e) { e.stopPropagation(); copyReport(r.code); }));
       $tr.append($('<td>').append($icons));
       $tr.append($('<td>').append($('<a class="doc-link" href="#">').text(r.code || '[unsaved]').on('click', function (e) { e.preventDefault(); openDetail(r.code); })));
@@ -1597,9 +1600,19 @@
   $('#btn-clear-search').on('click', function (e) { e.preventDefault(); $('#inp-search').val(''); renderList(); });
   $('#sel-company-filter').on('change', renderList);
 
+  /* Soft delete - the document is NOT removed from the DB, it is only flagged
+     status='deleted' (scoped save rewrites the header row with the new status,
+     lines are preserved). Deleted reports stay hidden unless the Deleted
+     status checkbox is ticked. To restore, open it, set Status back and Save. */
   function deleteReport(code) {
-    if (!confirm('Remove service report ' + code + '? This cannot be undone.')) return;
-    reports = reports.filter(function (r) { return r.code !== code; });
+    var found = reports.filter(function (r) { return r.code === code; })[0];
+    if (!found) return;
+    if (found.status === 'deleted') {
+      if (!confirm('Service report ' + code + ' is already Deleted. Keep it deleted?')) return;
+      return;
+    }
+    if (!confirm('Move service report ' + code + ' to Deleted? (Tick Deleted in the Status filter to view it again.)')) return;
+    found.status = 'deleted';
     markDirty('delete ' + code);
     renderList();
     doSaveReportsToDb([code]);
