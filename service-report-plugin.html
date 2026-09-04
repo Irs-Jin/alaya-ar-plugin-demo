@@ -2342,22 +2342,49 @@
         qrySql("SELECT IU_ID, IU_SalesPrice1 FROM ItemUOM WHERE IU_ItemID=" + parseInt(im.id, 10), 5).then(function (resp) {
           var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
           var hit = null;
-          rows.forEach(function (r) { if (!hit && r[1] && parseFloat(r[1]) > 0) { hit = { uom: r[0], price: parseFloat(r[1]) }; } });
+          rows.forEach(function (r) { if (!hit && r[1] && parseFloat(r[1]) > 0) { hit = { uom: r[0], price: parseFloat(r[1]), src: 'ItemUOM' }; } });
           addLog('All-UOM result for ' + im.code + ': ' + rows.length + ' UOM rows, first non-zero price=' + (hit ? hit.price : '(none)'));
-          if (hit) {
-            im.price = hit.price;
-            var row = editingReport.actionTaken[idx];
-            if (row && String(row.item) === String(im.code)) { row.price = hit.price; }
-            setPriceStatus(idx, hit.price + ' (ItemUOM all ' + hit.uom + ')');
-          } else {
-            setPriceStatus(idx, (lastErr ? 'fetch failed: ' + lastErr : '0 (all UOMs no price)'));
-          }
+          if (hit) { applyPrice(hit.price, hit.uom, hit.src); }
+          else { altTableFallback(); }
         }).fail(function (e) {
           lastErr = (e && e.statusText) || String(e);
           addLog('All-UOM fallback failed for ' + im.code + ': ' + lastErr);
-          setPriceStatus(idx, 'fetch failed: ' + lastErr);
+          altTableFallback();
         });
         return true;
+      }
+      // Seen live: ItemMaster/UOM UI can show a UNIT price even when
+      // ItemUOM.IU_SalesPrice1 is 0 - the price then lives in one of the
+      // quantity/pricing tables instead. Try those before giving up so the
+      // plugin finds the price wherever SIT stores it.
+      function applyPrice(p, u, src) {
+        im.price = p;
+        var row = editingReport.actionTaken[idx];
+        if (row && String(row.item) === String(im.code)) { row.price = p; }
+        setPriceStatus(idx, p + ' (' + src + (u !== undefined ? ' ' + u : '') + ')');
+      }
+      function altTableFallback() {
+        setPriceStatus(idx, 'checking alt price tables…');
+        var imid = parseInt(im.id, 10);
+        qrySql("SELECT TOP 1 IUSP_SalesPrice, IUSP_ItemUOMID FROM ItemUOMSalesPrice WHERE IUSP_ItemID=" + imid + " AND (IUSP_ItemUOMID = " + (uomIds[0] || 0) + " OR IUSP_ItemUOMID = 0 OR IUSP_ItemUOMID IS NULL) AND IUSP_SalesPrice > 0 ORDER BY IUSP_Qty", 5).then(function (resp) {
+          var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+          if (rows.length && parseFloat(rows[0][0]) > 0) { applyPrice(parseFloat(rows[0][0]), rows[0][1], 'ItemUOMSalesPrice'); return; }
+          addLog('ItemUOMSalesPrice none for ' + im.code + ' - trying ItemBulkPrice');
+          qrySql("SELECT TOP 1 IB_SalesPrice1, IB_IUID FROM ItemBulkPrice WHERE IB_IUID=" + (uomIds[0] || 0) + " OR IB_IUID IN (SELECT IU_ID FROM ItemUOM WHERE IU_ItemID=" + imid + ") AND IB_SalesPrice1 > 0 ORDER BY IB_FromQty", 5).then(function (resp2) {
+            var rows2 = resp2 && resp2.results && resp2.results[0] && resp2.results[0].rows || [];
+            if (rows2.length && parseFloat(rows2[0][0]) > 0) { applyPrice(parseFloat(rows2[0][0]), rows2[0][1], 'ItemBulkPrice'); return; }
+            addLog('Alt price tables none for ' + im.code);
+            setPriceStatus(idx, (lastErr ? 'fetch failed: ' + lastErr : '0 (all UOMs no price)'));
+          }).fail(function (e2) {
+            lastErr = (e2 && e2.statusText) || String(e2);
+            addLog('ItemBulkPrice failed for ' + im.code + ': ' + lastErr);
+            setPriceStatus(idx, 'fetch failed: ' + lastErr);
+          });
+        }).fail(function (e) {
+          lastErr = (e && e.statusText) || String(e);
+          addLog('ItemUOMSalesPrice failed for ' + im.code + ': ' + lastErr);
+          setPriceStatus(idx, 'fetch failed: ' + lastErr);
+        });
       }
       function fetchPrice() {
         if (uomIdx >= uomIds.length) {
