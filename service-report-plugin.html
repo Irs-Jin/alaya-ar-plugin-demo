@@ -521,7 +521,6 @@
     <div id="batch-serial-section" style="display:none;">
       <div style="display:flex; flex-direction:column; gap:6px;">
         <label style="font-size:0.82rem; font-weight:600;">Serial No(s) - one per line, count must match Qty</label>
-        <input type="text" id="serial-search" class="picker-search" placeholder="Search serial no..." style="display:none; margin-bottom:6px;" />
         <div class="picker-table-wrap" id="serial-table-wrap" style="max-height:180px; display:none;">
           <table class="picker-table">
             <thead><tr><th style="width:36px;"></th><th>Serial No</th><th>Bin Location</th></tr></thead>
@@ -2410,7 +2409,7 @@
     $('#serial-hint').text(needSerial ? 'Enter ' + (row.qty || 1) + ' serial(s), one per line' : '');
     $('#serial-tbody').empty();
     $('#serial-empty').hide();
-    $('#serial-search, #serial-table-wrap, #serial-pick-hint').toggle(!!needSerial);
+    $('#serial-table-wrap, #serial-pick-hint').toggle(!!needSerial);
     if (needSerial) loadSerialOptions(itemRec, row);
     if (needBatch) {
       $('#batch-tbody').empty();
@@ -2515,15 +2514,16 @@
           serialPicked.push($(this).closest('tr').find('td').eq(1).text());
         });
         $('#serial-input').val(serialPicked.join('\n'));
+        // Auto-sync the outer line's Qty to however many serials are checked so
+        // an honest count always satisfies "Serial count must match Qty".
+        if (batchTarget && batchTarget.row && batchNeedSerial) {
+          batchTarget.row.qty = serialPicked.length || parseInt($('#batch-qty').val(), 10) || 0;
+          $('#batch-qty').val(batchTarget.row.qty);
+        }
       });
       $('#serial-tbody').append($tr);
     });
   }
-  $('#serial-search').on('input', function () {
-    var q = ($(this).val() || '').toLowerCase();
-    var filtered = !q ? serialCache.rows : serialCache.rows.filter(function (sn) { return (sn.no || '').toLowerCase().indexOf(q) >= 0; });
-    renderSerialRows(filtered);
-  });
   function loadSerialOptions(itemRec, row) {
     var branchID = editingReport.salesBranchID;
     var branch = salesBranches.filter(function (b) { return String(b.id) === String(branchID); })[0];
@@ -2531,7 +2531,6 @@
     serialCache = { whID: whID, rows: [] };
     serialPicked = (row.serialNos || []).slice();
     $('#serial-input').val(serialPicked.join('\n'));
-    $('#serial-search').val('');
     function serialQuery(selectList, whereIdCol) {
       return "SELECT TOP 50 " + selectList + " FROM ItemSN WHERE " + whereIdCol + "=" + parseInt(itemRec.id, 10) +
         (whID ? " AND " + whereIdCol.replace('ItemID', 'WarehouseID') + "=" + parseInt(whID, 10) : "") +
@@ -2548,7 +2547,7 @@
         renderSerialRows(serialCache.rows);
       }).fail(function () {
         addLog('Serial list unavailable - manual entry only');
-        $('#serial-search, #serial-table-wrap, #serial-pick-hint').hide();
+        $('#serial-table-wrap, #serial-pick-hint').hide();
       });
     });
   }
@@ -2972,6 +2971,25 @@
     if (!$('#d-date').val()) { showToast('Date is required', true); return; }
     if (!$('#d-cust-code').val().trim()) { showToast('Customer Account Code is required', true); return; }
     if (!$('#d-sales-branch').val()) { showToast('Please select a Sales Branch before saving', true); return; }
+    // Batch/serial-controlled lines must have their batch/serial entered before
+    // the report can be saved (same rule as Copy To Sales).
+    var lines = (editingReport.actionTaken || []).filter(function (a) { return a.item && a.qty > 0; });
+    var reqErrors = [];
+    lines.forEach(function (a) {
+      var im = items.filter(function (x) { return x.code === a.item; })[0];
+      if (!im) return;
+      if (im.batchControl && !a.batchNo && !(a.batches && a.batches.length)) reqErrors.push(a.item + ' (batch required)');
+      if (im.serialControl) {
+        var need = parseInt(a.qty, 10) || 0;
+        var have = (a.serialNos || []).length;
+        if (!have || have !== need) reqErrors.push(a.item + ' (need ' + need + ' serial(s))');
+      }
+      (a.packageComponents || []).forEach(function (c) {
+        if (c.batchControl && !(c.batches && c.batches.length)) reqErrors.push(a.item + ' > ' + c.code + ' (batch required)');
+        if (c.serialControl && !(c.serialNos && c.serialNos.length)) reqErrors.push(a.item + ' > ' + c.code + ' (serial required)');
+      });
+    });
+    if (reqErrors.length) { showToast('Please enter item batch/serial: ' + reqErrors.join(', '), true); renderActionTable(); return; }
     editingReport.date = $('#d-date').val();
     editingReport.expiry = $('#d-expiry').val();
     // Untouched blank select (e.g. opened Deleted record) keeps its status.
