@@ -904,7 +904,7 @@ function saveSettings() {
     stmts.push("INSERT INTO " + SETTINGS_TABLE + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified) VALUES ('" + codeSafe + "', '" + valSafe + "', '" + dateStr + "', '" + dateStr + "');");
   });
 
-  executeSqlViaHost(stmts.join('')).then(function(msg) {
+  executeSqlViaHost(stmts.join(''), 30000).then(function(msg) {
     if (msg.error) throw new Error(msg.error);
     showToast('Settings saved (' + rows.length + ' rows to Alaya DB)');
     addLog('Settings saved to UDF table (' + rows.length + ' rows) + local backup', 'log-ok');
@@ -1569,19 +1569,20 @@ $('#btn-add-division').on('click', function() { appendDivisionRow('', false); })
 // slow/stuck call blocks every call queued behind it, so a long timeout here
 // would make unrelated features (e.g. Settings load) feel hung for no reason.
 var _dcbQueue = Promise.resolve();
-function executeSqlViaHost(sql) {
-  var result = _dcbQueue.then(function () { return executeSqlViaHostImpl(sql); });
+function executeSqlViaHost(sql, timeoutMs) {
+  var result = _dcbQueue.then(function () { return executeSqlViaHostImpl(sql, timeoutMs); });
   _dcbQueue = result.catch(function () {}); // keep the queue moving even if this call failed
   return result;
 }
-function executeSqlViaHostImpl(sql) {
+function executeSqlViaHostImpl(sql, timeoutMs) {
+  timeoutMs = timeoutMs || 10000;
   return new Promise(function (resolve, reject) {
     if (!hostOrigin) { reject(new Error('Host origin unknown - ALAYA_INIT not received yet')); return; }
     var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     var timer = setTimeout(function () {
       delete pendingDcbCallbacks[requestId];
-      reject(new Error('Database callback timed out after 10s'));
-    }, 10000);
+      reject(new Error('Database callback timed out after ' + Math.round(timeoutMs / 1000) + 's'));
+    }, timeoutMs);
     pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
     var evalScript =
       '(function(){' +
