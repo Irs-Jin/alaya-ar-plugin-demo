@@ -560,7 +560,7 @@
 
 // ΓöÇΓöÇ Config ΓöÇΓöÇ
 var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
-var PLUGIN_VERSION = '2026-09-04-dcb-fix';
+var PLUGIN_VERSION = '2026-09-04-fetch-bridge';
 var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
 
 // ΓöÇΓöÇ Default Settings ΓöÇΓöÇ
@@ -624,6 +624,7 @@ var authToken = '';
 var companies = [];
 var alayaData = { customers: [], vendors: [], items: [], sales: [] };
 var pendingDcbCallbacks = {};
+var pendingFetchCallbacks = {};
 var SETTINGS_TABLE = 'ZZT_ALAYATOSQL';
 var LOCAL_BACKUP_KEY = 'alaya-to-sql-settings-v2';
 var settings = {};
@@ -824,7 +825,7 @@ function pushConnectionSettingsToBackend(s) {
     dcfPath: s.dcfPath, host: s.fbHost, port: s.fbPort, user: s.fbUser,
     password: s.fbPassword, estreamUsername: s.estreamUser, estreamPassword: s.estreamPassword
   };
-  $.ajax({
+  backendAjax({
     url: BACKEND_URL + '/api/settings/connection', type: 'POST', contentType: 'application/json',
     data: JSON.stringify(body),
     success: function(r) { if (!r.success) addLog('Backend rejected connection settings: ' + r.error, 'log-err'); },
@@ -1000,6 +1001,15 @@ $(window).on('message', function(e) {
       delete pendingDcbCallbacks[msg.requestId];
       clearTimeout(cb.timer);
       cb.resolve(msg);
+    }
+  }
+
+  if ((msg.type === 'alaya-fetch-result' || msg.source === 'alaya-fetch-result') && msg.requestId) {
+    var fcb = pendingFetchCallbacks[msg.requestId];
+    if (fcb) {
+      delete pendingFetchCallbacks[msg.requestId];
+      clearTimeout(fcb.timer);
+      fcb.resolve(msg);
     }
   }
 });
@@ -1299,7 +1309,7 @@ function extractJwtHints(token) {
 // ΓöÇΓöÇ Load SQL Account companies from backend ΓöÇΓöÇ
 function loadSqlCompanies() {
   addLog('Loading SQL Account companies from backend...', 'log-info');
-  $.ajax({
+  backendAjax({
     url: BACKEND_URL + '/api/companies',
     type: 'GET',
     success: function(r) {
@@ -1315,7 +1325,7 @@ function loadSqlCompanies() {
         });
         addLog('Loaded ' + r.data.length + ' SQL companies', 'log-ok');
         // Restore the backend's active company (persisted in config.json on last switch)
-        $.ajax({
+        backendAjax({
           url: BACKEND_URL + '/api/settings/connection',
           type: 'GET',
           success: function(rc) {
@@ -1341,7 +1351,7 @@ function loadSqlCompanies() {
 
 // ΓöÇΓöÇ Test backend connection ΓöÇΓöÇ
 function testBackendConnection() {
-  $.ajax({
+  backendAjax({
     url: BACKEND_URL + '/api/health',
     type: 'GET',
     success: function(r) {
@@ -1357,7 +1367,7 @@ function testBackendConnection() {
 
 function selectActiveCompany(code) {
   if (!code) return;
-  $.ajax({
+  backendAjax({
     url: BACKEND_URL + '/api/settings/company',
     type: 'POST',
     contentType: 'application/json',
@@ -1643,6 +1653,71 @@ function executeSqlViaHostImpl(sql, timeoutMs) {
       '})();';
     window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
     addLog('POST eval-bridge RunQuery (sql ' + sql.length + ' chars)', 'log-info');
+  });
+}
+
+// ΓöÇΓöÇ Backend HTTP via host fetch bridge ΓöÇΓöÇ
+// Direct XHR from this iframe (public GitHub Pages origin) to loopback is
+// blocked by Chrome's local-network-access permission (denied for this origin
+// and not grantable from our side). The eval script below runs in the TOP
+// window (sit.irsbizsuite.com.my), whose permission IS granted, so we proxy
+// every backend call through it: eval does fetch() up there and broadcasts
+// the result back, same pattern as the RunQuery bridge above.
+function fetchViaHost(url, opts) {
+  opts = opts || {};
+  var method = (opts.type || 'GET').toUpperCase();
+  var timeoutMs = opts.timeoutMs || 30000;
+  return new Promise(function (resolve, reject) {
+    if (!hostOrigin) { reject({ status: 0, error: 'Host origin unknown - ALAYA_INIT not received yet' }); return; }
+    var requestId = 'fx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    var timer = setTimeout(function () {
+      delete pendingFetchCallbacks[requestId];
+      reject({ status: 0, error: 'Backend fetch timed out after ' + Math.round(timeoutMs / 1000) + 's' });
+    }, timeoutMs);
+    pendingFetchCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+    var evalScript =
+      '(function(){' +
+      'try{' +
+      'var req=result.fetchReq, reqId=result.requestId;' +
+      'function bcast(m){' +
+      'function postAll(win){' +
+      'try{ win.postMessage(m,"*"); }catch(e){}' +
+      'try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}' +
+      '}' +
+      'postAll(window);' +
+      '}' +
+      'fetch(req.url, {method:req.method, headers:req.headers, body:req.body}).then(function(r){' +
+      'return r.text().then(function(t){ bcast({source:"alaya-fetch-result",requestId:reqId,status:r.status,body:t}); });' +
+      '}).catch(function(e){ bcast({source:"alaya-fetch-result",requestId:reqId,error:String((e&&e.message)||e)}); });' +
+      '}catch(e){ bcast({source:"alaya-fetch-result",requestId:result.requestId,error:e.message}); }' +
+      '})();';
+    var fetchReq = { url: url, method: method, headers: {}, body: null };
+    if (opts.contentType) fetchReq.headers['Content-Type'] = opts.contentType;
+    if (method === 'GET' || method === 'HEAD') {
+      if (opts.data && typeof opts.data === 'object') {
+        var qs = Object.keys(opts.data).map(function(k) { return encodeURIComponent(k) + '=' + encodeURIComponent(opts.data[k]); }).join('&');
+        if (qs) fetchReq.url += (fetchReq.url.indexOf('?') >= 0 ? '&' : '?') + qs;
+      }
+    } else if (typeof opts.data === 'string') {
+      fetchReq.body = opts.data;
+    }
+    window.top.postMessage({ target: hostOrigin, eval: evalScript, fetchReq: fetchReq, requestId: requestId }, '*');
+    addLog('POST eval-bridge fetch ' + method + ' ' + url, 'log-info');
+  });
+}
+
+// Drop-in for the $.ajax subset used for backend calls: {url, type,
+// contentType, data, timeoutMs, success(r), error({status})}. Responses with
+// HTTP status >= 400 go to error, same as jQuery.
+function backendAjax(opts) {
+  fetchViaHost(opts.url, opts).then(function(msg) {
+    if (msg.error) { (opts.error || function() {})({ status: 0 }); return; }
+    if (msg.status >= 400) { (opts.error || function() {})({ status: msg.status }); return; }
+    var r = null;
+    try { r = JSON.parse(msg.body); } catch(e) { (opts.error || function() {})({ status: msg.status }); return; }
+    (opts.success || function() {})(r);
+  }).catch(function() {
+    (opts.error || function() {})({ status: 0 });
   });
 }
 
@@ -2302,10 +2377,11 @@ $('#btn-transfer').on('click', function() {
       break;
     }
   }
-  $.ajax({
+  backendAjax({
     url: BACKEND_URL + '/api/transfer',
     type: 'POST',
     contentType: 'application/json',
+    timeoutMs: 600000,
     data: JSON.stringify({
       fromdate: from,
       todate: to,
@@ -2436,7 +2512,7 @@ function openDcfBrowser() {
 
   function loadDir(path) {
     list.html('<div style="padding:12px;color:#6b7280;font-size:0.82rem;">Loading...</div>');
-    $.ajax({
+    backendAjax({
       url: BACKEND_URL + '/api/browse', type: 'GET', cache: false,
       data: { path: path || '', ext: '.DCF' },
       success: function(r) {
