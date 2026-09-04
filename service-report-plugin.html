@@ -282,7 +282,7 @@
         <div class="sub" style="margin-bottom:0;">Log customer equipment service visits &mdash; equipment received, action taken, and outcome.</div>
       </div>
     </div>
-    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span> <span id="save-status" class="badge" style="display:none;"></span></div>
+    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span> <span id="save-status" class="badge" style="display:none;"></span> <span id="perm-debug" class="badge" style="display:inline-block;background:#e0e7ff;color:#3730a3;font-size:0.7rem;"></span></div>
   </div>
 </div>
 
@@ -706,6 +706,10 @@
       if (payload.canDelete !== undefined) canDelete = !!payload.canDelete;
       if (payload.canCopy !== undefined) canCopy = !!payload.canCopy;
       addLog('Permissions: saveEdit=' + canSaveEdit + ' delete=' + canDelete + ' copy=' + canCopy);
+      $('#perm-debug').text('S:' + canSaveEdit + ' D:' + canDelete + ' C:' + canCopy).show();
+    } else {
+      addLog('Permissions: no payload — all default true');
+      $('#perm-debug').text('S:true D:true C:true (no payload)').show();
     }
     postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
     if (apiUrl && nonce && clientId && username) requestToken();
