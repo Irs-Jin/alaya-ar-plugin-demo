@@ -1809,6 +1809,17 @@
       a.batchNo = ''; a.batches = []; a.serialNos = [];
       (a.packageComponents || []).forEach(function (c) { c.batchNo = ''; c.batches = []; c.serialNos = []; });
     });
+    // Ensure batch/serial flags are enriched for copied items (lazy check if needed)
+    (editingReport.actionTaken || []).forEach(function (a) {
+      if (!a.item) return;
+      var im = items.filter(function (x) { return x.code === a.item; })[0];
+      if (im && im.serialControl === undefined) {
+        qrySql("SELECT IM_BatchControl_YN, IM_SerializeControl_YN FROM ItemMaster WHERE IM_ID=" + parseInt(im.id, 10), 5).then(function (resp) {
+          var row = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
+          if (row) { im.batchControl = !!row[0]; im.serialControl = !!row[1]; renderActionTable(); }
+        });
+      }
+    });
     editingCode = null;
     $('#detail-title').text('New Service Report (copied from ' + code + ')');
     $('#btn-delete-report').hide();
@@ -3171,7 +3182,8 @@
     var reqErrors = [];
     lines.forEach(function (a) {
       var im = items.filter(function (x) { return x.code === a.item; })[0];
-      if (!im) return;
+      if (!im) { reqErrors.push(a.item + ' (item not in catalog)'); return; }
+      if (im.serialControl === undefined || im.batchControl === undefined) { reqErrors.push(a.item + ' (loading item data, please wait)'); return; }
       if (im.batchControl && !a.batchNo && !(a.batches && a.batches.length)) reqErrors.push(a.item + ' (batch required)');
       if (im.serialControl) {
         var need = parseInt(a.qty, 10) || 0;
