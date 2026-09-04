@@ -1813,9 +1813,11 @@
     (editingReport.actionTaken || []).forEach(function (a) {
       if (!a.item) return;
       var im = items.filter(function (x) { return x.code === a.item; })[0];
+      console.log('Copy debug: item=' + a.item + ' im_found=' + !!im + ' serialControl=' + (im ? im.serialControl : 'N/A') + ' batchControl=' + (im ? im.batchControl : 'N/A'));
       if (im && im.serialControl === undefined) {
         qrySql("SELECT IM_BatchControl_YN, IM_SerializeControl_YN FROM ItemMaster WHERE IM_ID=" + parseInt(im.id, 10), 5).then(function (resp) {
           var row = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
+          console.log('Copy enrichment result for ' + a.item + ':', row);
           if (row) { im.batchControl = !!row[0]; im.serialControl = !!row[1]; renderActionTable(); }
         });
       }
@@ -3119,6 +3121,7 @@
         }
         var itemRec = a.item ? items.filter(function (im) { return $.trim(im.code) === a.item; })[0] : null;
         var need = itemRec && (itemRec.batchControl || itemRec.serialControl);
+        if (a.item) console.log('Render: item=' + a.item + ' itemRec=' + !!itemRec + ' serialCtrl=' + (itemRec ? itemRec.serialControl : 'N/A') + ' batchCtrl=' + (itemRec ? itemRec.batchControl : 'N/A') + ' need=' + need);
         var label = '-';
         if (need) {
           var parts = [];
