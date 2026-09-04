@@ -1902,12 +1902,12 @@
     // "Value cannot be null. Parameter name: source".
     var headerWhID = editingReport.warehouseID || branch.warehouseID;
     if (!headerWhID) { showToast('Please select a Warehouse in Service Header first', true); $('#d-warehouse').focus(); return; }
-    // A CompanyItem can legitimately exist (i.e. resolve fine as an item) with
-    // ZERO ItemWarehouse rows for this company/warehouse - never actually
-    // received/stocked. PostCashSales can't handle that and dies server-side
-    // with an opaque "Value cannot be null. Parameter name: source" (confirmed
-    // live: item 'A000001' / IM_ID 115041 is a valid CompanyItem for company 548
-    // but has no ItemWarehouse row at all). Check up front and name the item.
+    // ItemWarehouse pre-flight is advisory only, NEVER blocking: native Cash
+    // Sales posts items with no ItemWarehouse row just fine (confirmed live
+    // 04/Sep: A000001 @ PRIMARY posted as CS-00000588), so a missing row must
+    // not stop Copy To Sales. Warn and let the server decide - the paymode
+    // confirm dialog stays as the final gate, and a real server rejection is
+    // still surfaced verbatim with the request body logged.
     var checkIds = [];
     dtl.forEach(function (d) { if (checkIds.indexOf(d.ItemID) < 0) checkIds.push(d.ItemID); });
     lines.forEach(function (a) {
@@ -1922,9 +1922,8 @@
         (a.packageComponents || []).forEach(function (c) { if (foundIds.indexOf(String(c.id)) < 0) missingCodes.push(a.item + ' > ' + c.code); });
       });
       if (missingCodes.length) {
-        showToast('Cannot Copy To Sales: ' + missingCodes.join(', ') + ' has no warehouse stock set up for this company/warehouse - set it up in Alaya\'s Item Warehouse settings first', true);
-        addLog('Copy To Sales blocked: no ItemWarehouse row for ' + missingCodes.join(', ') + ' (company ' + companyID + ', warehouse ' + headerWhID + ')');
-        return;
+        showToast('Note: ' + missingCodes.join(', ') + ' has no ItemWarehouse row here - proceeding anyway like native Cash Sales', true);
+        addLog('ItemWarehouse advisory: no row for ' + missingCodes.join(', ') + ' (company ' + companyID + ', warehouse ' + headerWhID + ') - proceeding');
       }
       continueCopyToCashSales();
     }).fail(function (e) {
@@ -2170,7 +2169,9 @@
         } else {
           addLog('Cash Sales post FAILED: ' + JSON.stringify(resp).slice(0, 1000));
           addLog('Failed request body: ' + JSON.stringify(ctx.body).slice(0, 2000));
-          showToast('Copy to Sales failed: ' + ((resp && resp.msg) || 'unknown error'), true);
+          var serverMsg = (resp && resp.msg) || 'unknown error';
+          if (/parameter name:\s*source/i.test(serverMsg)) serverMsg += ' (an ID the server cannot resolve - check the logged request body)';
+          showToast('Copy to Sales failed: ' + serverMsg, true);
         }
       },
       error: function (xhr) {
