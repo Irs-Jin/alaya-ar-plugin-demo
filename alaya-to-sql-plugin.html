@@ -2390,13 +2390,9 @@ $('#btn-transfer').on('click', function() {
     return;
   }
 
-  // Progress animation
-  var progress = 0;
-  var iv = setInterval(function() {
-    progress = Math.min(progress + Math.random() * 15, 90);
-    $('#progress-bar').css('width', progress + '%');
-    $('#progress-text').text(Math.round(progress) + '%');
-  }, 500);
+  // Live progress: poll backend so the Transfer panel shows the customer
+  // currently being transferred (same behaviour as the desktop Link tool)
+  startProgressPoll();
 
   // Call backend (mappings included; backend may ignore unknown fields for now)
   var maps = collectMappingsFromUI();
@@ -2486,7 +2482,7 @@ $('#btn-transfer').on('click', function() {
         creditnoteSide: $('input[name="adv-type"]:checked').val() || 'customer' }, srcDocs)
     }),
     success: function(r) {
-      clearInterval(iv);
+      stopProgressPoll();
       $('#progress-bar').css('width', '100%');
       $('#progress-text').text('100%');
       addLog('Transfer completed: ' + JSON.stringify(r), 'log-ok');
@@ -2496,7 +2492,7 @@ $('#btn-transfer').on('click', function() {
       $('#btn-transfer').prop('disabled', false);
     },
     error: function(xhr) {
-      clearInterval(iv);
+      stopProgressPoll();
       $('#progress-bar').css('width', '0%');
       addLog('Transfer FAILED: ' + xhr.status, 'log-err');
       showToast('Transfer failed', true);
@@ -2508,6 +2504,61 @@ $('#btn-transfer').on('click', function() {
 });
 
 // ΓöÇΓöÇ Show transfer results ΓöÇΓöÇ
+// ── Live transfer progress (polled; mirrors the desktop Link tool's
+//    per-customer status visible during a transfer) ──
+var _progPoll = null;
+function startProgressPoll() {
+  stopProgressPoll();
+  _progPoll = setInterval(function() {
+    fetch(BACKEND_URL + '/api/transfer/progress').then(function(r) {
+      return r.json();
+    }).then(function(p) {
+      if (p) renderLiveProgress(p);
+    }).catch(function() {});
+  }, 400);
+}
+function stopProgressPoll() {
+  if (_progPoll) { clearInterval(_progPoll); _progPoll = null; }
+}
+function renderLiveProgress(p) {
+  var done = (p.done || 0), total = (p.total || 0);
+  var pct = total > 0 ? Math.round(done / total * 100) : 0;
+  $('#progress-bar').css('width', pct + '%');
+  var cur = p.current || {};
+  var txt = '';
+  if (cur.label || cur.code) {
+    txt = cur.label || '';
+    if (cur.code) txt += ' ' + cur.code + (cur.name ? ' — ' + cur.name : '');
+    txt = 'Transferring ' + txt;
+  } else if (p.running) {
+    txt = 'Transferring...';
+  } else if (p.items && p.items.length) {
+    txt = 'Done';
+  }
+  if (total > 0) txt += ' ' + pct + '%';
+  $('#progress-text').text(txt);
+
+  var html = '';
+  (p.items || []).forEach(function(it) {
+    var cls = 'pending';
+    if (it.status === 'success') cls = 'done';
+    else if (it.status === 'error') cls = 'error';
+    var nm = it.label || '';
+    if (it.code) nm += (nm ? ' · ' : '') + it.code;
+    if (it.name) nm += ' — ' + it.name;
+    html += '<div class="transfer-item">';
+    html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
+    html += '<div class="detail">' + escHtml(it.message || '') + '</div></div>';
+    html += '<div class="status ' + cls + '">' + escHtml(it.status) + '</div>';
+    html += '</div>';
+  });
+  if (html) {
+    $('#results-list').html(html);
+    $('#transfer-results').css('display', 'block');
+  }
+}
+
+// ── Show transfer results ──
 function showTransferResults(results) {
   var html = '';
   (results || []).forEach(function(r) {
