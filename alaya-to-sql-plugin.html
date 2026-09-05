@@ -219,9 +219,6 @@
 
     <div class="btn-row" style="align-items:center;margin-top:12px;">
       <button id="btn-transfer" class="btn-primary">Transfer</button>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-left:8px;">
-        <input type="checkbox" id="t-dryrun" checked /> Dry run (validate only, no posting)
-      </label>
     </div>
 
     <div id="transfer-progress" style="margin-top:16px;display:none;">
@@ -2480,7 +2477,7 @@ function runTransferMaster(from, to, company, alayaCid) {
       transferMethod: $('#transfer-method').val(),
       docType: $('#adv-doc-type').val(),
       transfers: transfers,
-      dryRun: $('#t-dryrun').is(':checked'),
+      dryRun: false,
       options: {
         cashsalesMethod: $('#s-cashsales-method').val(),
         cashsalesPrefix: $('#s-cashsales-prefix').val(),
