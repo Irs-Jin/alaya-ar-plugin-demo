@@ -1598,11 +1598,16 @@
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           if (!meta.dc || !meta.li) return;
           var key = meta.dc + '-A' + meta.li;
-          // Component's P index = its 1-based position within this line's list -
-          // matches how buildReportInsertLines keyed the component's svcrptbat
-          // child rows ('-P<m>'), so child batches/serials map back per-component.
           var arr = (pkgByLine[key] = pkgByLine[key] || []);
-          var ckey = key + '-P' + (arr.length + 1);
+          // Component's P index comes from its OWN ZZC_Code ('-A<n>-P<p>'), not
+          // from array push order - ZZTGetDataTable gives no ordering guarantee,
+          // and matching by position silently swapped batches/serials between
+          // components whenever rows came back in a different order than they
+          // were written (mirrors how the action-line's own lineNo is parsed
+          // from its Code below rather than assumed from fetch order).
+          var piMatch = /-P(\d+)$/.exec(String(r.ZZC_Code || ''));
+          var pi = piMatch ? parseInt(piMatch[1], 10) : (arr.length + 1);
+          var ckey = key + '-P' + pi;
           var compBatches = batchesByComponent[ckey];
           var compSerials = serialsByComponent[ckey];
           // For components saved BEFORE the split, batch/serial data is embedded
