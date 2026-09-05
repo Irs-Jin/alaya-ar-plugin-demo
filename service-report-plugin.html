@@ -253,7 +253,7 @@
 
     /* ── Print view (browser print/PDF - not native FastReport, but a real printable
        output). Only #print-view shows when printing; everything else is hidden. ── */
-    #print-view { display:none; }
+    #print-view { display:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     #print-view table { width:100%; border-collapse:collapse; margin:10px 0 18px 0; font-size:0.85rem; }
     #print-view th, #print-view td { border:1px solid #999; padding:6px 8px; text-align:left; }
     #print-view th { background:#f0f0f0; }
