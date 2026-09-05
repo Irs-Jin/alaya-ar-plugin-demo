@@ -262,6 +262,7 @@
     #print-view .print-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 24px; margin-bottom:18px; font-size:0.88rem; }
     #print-view .print-grid div b { display:inline-block; min-width:130px; }
     #print-view .print-letterhead { text-align:center; border:2px solid #c00; padding:12px 16px; margin-bottom:14px; }
+    #print-view .print-logo { height:60px; max-width:240px; object-fit:contain; margin-bottom:6px; }
     #print-view .print-co-name { font-size:1.4rem; font-weight:800; color:#1a3c6e; }
     #print-view .print-co-detail { font-size:0.82rem; color:#444; margin-top:2px; }
     #print-view .print-banner { background:#c00; color:#fff; text-align:center; font-weight:700; font-size:0.95rem; padding:6px 0; margin-bottom:14px; letter-spacing:1px; }
@@ -1980,6 +1981,7 @@
     var contactLine = [companyInfo.tel ? 'Tel: ' + companyInfo.tel : '', companyInfo.fax ? 'Fax: ' + companyInfo.fax : ''].filter(Boolean).join('  ');
     var html =
       '<div class="print-letterhead">' +
+        '<img class="print-logo" src="4.jpg" alt="Company Logo" />' +
         '<div class="print-co-name">' + escapeHtml(companyInfo.name || editingReport.companyName || '') + '</div>' +
         (companyInfo.regNo ? '<div class="print-co-detail">(Reg No: ' + escapeHtml(companyInfo.regNo) + ')</div>' : '') +
         (companyAddr ? '<div class="print-co-detail">' + escapeHtml(companyAddr) + '</div>' : '') +
@@ -2011,8 +2013,19 @@
       '</tbody></table>';
 
     $('#print-view').html(html);
-    window.print();
+    // Wait for the letterhead logo to load before printing, otherwise the
+    // first print can come out with a blank logo (image not yet cached).
+    var $logo = $('#print-view .print-logo');
+    var doPrint = function () { window.print(); };
+    if ($logo.length && !$logo[0].complete) {
+      $logo.one('load error', doPrint);
+      setTimeout(doPrint, 800);
+    } else {
+      doPrint();
+    }
   }
+  // Preload the letterhead logo so it's cached before the first print.
+  $(function () { try { new Image().src = '4.jpg'; } catch (e) {} });
   $('#btn-print-report').on('click', printReport);
 
   /* ── Copy To Sales (real, writes a POSTED Cash Sales document) ──
