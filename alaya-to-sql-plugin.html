@@ -292,7 +292,7 @@
     <div class="form-row">
       <div class="form-group">
         <label>Backend URL</label>
-        <input type="text" id="s-backend-url" placeholder="http://localhost:3100" />
+        <input type="text" id="s-backend-url" placeholder="https://localhost:3100" />
       </div>
       <div class="form-group">
         <label>Alaya Company (Client ID)</label>
@@ -565,7 +565,7 @@ var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQue
 
 // ΓöÇΓöÇ Default Settings ΓöÇΓöÇ
 var defaultSettings = {
-  backendUrl: window.location.origin,
+  backendUrl: 'https://localhost:3100',
   alayaCompany: 'qa3',
   alayaCompanyId: 0,
   cashsalesMethod: 'summary',
@@ -628,6 +628,16 @@ var pendingFetchCallbacks = {};
 var SETTINGS_TABLE = 'ZZT_ALAYATOSQL';
 var LOCAL_BACKUP_KEY = 'alaya-to-sql-settings-v2';
 var settings = {};
+
+// The backend only listens on HTTPS now. Any stale http:// value saved in
+// settings (pre-HTTPS migration) must be upgraded or every API call dies with
+// ERR_CONNECTION_RESET before it even reaches the server.
+function normalizeBackendUrl(u) {
+  if (!u) return defaultSettings.backendUrl;
+  u = String(u).replace(/\/+$/, '');
+  if (u.indexOf('http:') === 0) u = 'https:' + u.slice(5);
+  return u;
+}
 
 // Short-key packing keeps every UDF row far below the NVARCHAR(400) limit
 function packRows(s) {
@@ -800,6 +810,7 @@ function applySettings() {
   $('#adv-doc-type').val(s.advDoc || 'CASH SALES');
   $('#adv-preview-doctype').val(s.advPreviewDoc || 'CASH SALES');
   if (s.alayaCompanyId) $('#alaya-company-select').val(String(s.alayaCompanyId));
+  s.backendUrl = normalizeBackendUrl(s.backendUrl);
   BACKEND_URL = s.backendUrl;
   renderPaymodeTable(s.paymodes || []);
   renderBranchTable(s.branches || []);
@@ -837,7 +848,7 @@ function pushConnectionSettingsToBackend(s) {
 function saveSettings() {
   var maps = collectMappingsFromUI();
   settings = {
-    backendUrl: $('#s-backend-url').val() || defaultSettings.backendUrl,
+    backendUrl: normalizeBackendUrl($('#s-backend-url').val() || defaultSettings.backendUrl),
     // NOTE: #s-alaya-company is the Client ID field (e.g. "qa3"), NOT the selected
     // company code - keep whatever code btn-save-default-company (or a prior load)
     // already put in settings.alayaCompany instead of clobbering it here.
@@ -1710,13 +1721,19 @@ function fetchViaHost(url, opts) {
 // contentType, data, timeoutMs, success(r), error({status})}. Responses with
 // HTTP status >= 400 go to error, same as jQuery.
 function backendAjax(opts) {
-  fetchViaHost(opts.url, opts).then(function(msg) {
-    if (msg.error) { (opts.error || function() {})({ status: 0 }); return; }
-    if (msg.status >= 400) { (opts.error || function() {})({ status: msg.status }); return; }
-    var r = null;
-    try { r = JSON.parse(msg.body); } catch(e) { (opts.error || function() {})({ status: msg.status }); return; }
-    (opts.success || function() {})(r);
-  }).catch(function() {
+  var method = (opts.type || 'GET').toUpperCase();
+  var fetchOpts = { method: method, headers: {} };
+  if (opts.contentType) fetchOpts.headers['Content-Type'] = opts.contentType;
+  if (opts.data && typeof opts.data === 'string') fetchOpts.body = opts.data;
+  fetch(opts.url, fetchOpts).then(function(resp) {
+    return resp.text().then(function(t) {
+      if (resp.status >= 400) { (opts.error || function() {})({ status: resp.status }); return; }
+      var r = null;
+      try { r = JSON.parse(t); } catch(e) { (opts.error || function() {})({ status: resp.status }); return; }
+      (opts.success || function() {})(r);
+    });
+  }).catch(function(e) {
+    addLog('Backend fetch error: ' + e, 'log-err');
     (opts.error || function() {})({ status: 0 });
   });
 }
