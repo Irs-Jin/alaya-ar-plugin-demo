@@ -269,6 +269,7 @@
       body > *:not(#print-view) { display:none !important; }
       #print-view { display:block !important; }
       body { background:#fff; padding:0; }
+      @page { margin: 15mm 15mm 15mm 15mm; size: A4; }
     }
   </style>
 </head>
@@ -820,17 +821,7 @@
         renderCompanyFilterOptions();
         renderList();
         loadScopedListsForCurrentCompany();
-        // Fetch company details for print letter head
-        var cid = DEFAULT_COMPANY_ID;
-        qrySql("SELECT TOP 1 * FROM Company WHERE CO_ID=" + cid, 1).then(function (resp) {
-          var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
-          var cols = resp && resp.results && resp.results[0] && resp.results[0].columns || [];
-          if (r) {
-            var find = function() { var a = arguments; for (var i=0;i<a.length;i++) { var idx = cols.indexOf(a[i]); if (idx >= 0 && r[idx]) return r[idx]; } return ''; };
-            companyInfo = { name: find('CO_Name'), regNo: find('CO_RegistrationNo','CO_RegNo'), addr1: find('CO_MainAddress1','CO_Address1'), addr2: find('CO_MainAddress2','CO_Address2'), addr3: find('CO_MainAddress3','CO_Address3'), addr4: find('CO_MainAddress4','CO_Address4'), postcode: find('CO_MainPostcode','CO_Postcode'), tel: find('CO_Phone1','CO_Tel'), fax: find('CO_Fax1','CO_Fax') };
-            addLog('Company info loaded: ' + companyInfo.name);
-          }
-        });
+        loadCompanyInfo();
       },
       error: function (xhr) {
         addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company only');
@@ -843,6 +834,18 @@
      ("API calling too frequent, please try again later"). Silently falling back to
      the default company with no on-screen indication was confusing (looked like
      other companies had simply vanished); show a Retry link instead. */
+  function loadCompanyInfo() {
+    var cid = DEFAULT_COMPANY_ID;
+    qrySql("SELECT TOP 1 * FROM Company WHERE CO_ID=" + cid, 1).then(function (resp) {
+      var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
+      var cols = resp && resp.results && resp.results[0] && resp.results[0].columns || [];
+      if (r) {
+        var find = function() { var a = arguments; for (var i=0;i<a.length;i++) { var idx = cols.indexOf(a[i]); if (idx >= 0 && r[idx]) return r[idx]; } return ''; };
+        companyInfo = { name: find('CO_Name'), regNo: find('CO_RegistrationNo','CO_RegNo'), addr1: find('CO_MainAddress1','CO_Address1'), addr2: find('CO_MainAddress2','CO_Address2'), addr3: find('CO_MainAddress3','CO_Address3'), addr4: find('CO_MainAddress4','CO_Address4'), postcode: find('CO_MainPostcode','CO_Postcode'), tel: find('CO_Phone1','CO_Tel'), fax: find('CO_Fax1','CO_Fax') };
+        addLog('Company info loaded: ' + companyInfo.name);
+      }
+    }).fail(function (e) { addLog('Company info load failed: ' + (e && e.statusText || e)); });
+  }
   function showCompanyLoadError(msg) {
     if ($('#company-load-error').length) { $('#company-load-error').text('Company list failed to load (' + (msg || 'unknown error') + ').').show(); return; }
     $('<div id="company-load-error" class="sub" style="color:#dc2626; margin-top:4px;">')
