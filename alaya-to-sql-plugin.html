@@ -205,17 +205,6 @@
           <option value="itemize">By Item</option>
         </select>
       </div>
-      <div class="form-group">
-        <label>Doc Type (for Preview / Advanced)</label>
-        <select id="adv-doc-type">
-          <option value="CASH SALES">CASH SALES</option>
-          <option value="INVOICE">INVOICE</option>
-          <option value="CREDIT NOTE">CREDIT NOTE</option>
-          <option value="PAYMENT">PAYMENT</option>
-          <option value="CASH PURCHASES">CASH PURCHASES</option>
-          <option value="VENDOR INVOICE">VENDOR INVOICE</option>
-        </select>
-      </div>
     </div>
 
     <div class="sub" style="margin-top:4px;">Which documents get transferred is controlled by <b>Transfer Options</b> on the Settings tab.</div>
@@ -617,7 +606,6 @@ var defaultSettings = {
   branches: [],
   divisions: [],
   advType: 'customer',
-  advDoc: 'CASH SALES',
   advPreviewDoc: 'CASH SALES',
   // SQL Account connection - single source of truth is the UDF table now (was
   // previously only in the backend's own config.json via a separate save button).
@@ -664,7 +652,7 @@ function packRows(s) {
   rows.push(['GENERAL', JSON.stringify({
     bu: s.backendUrl, ac: s.alayaCompany, aid: s.alayaCompanyId,
     cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod,
-    pb: B(s.pmByBranch), at: s.advType, ad: s.advDoc, apd: s.advPreviewDoc
+    pb: B(s.pmByBranch), at: s.advType, apd: s.advPreviewDoc
   })]);
   rows.push(['CUSTOMER', JSON.stringify({
     cs: s.acCashsales, cr: s.acCashrounding, is: s.acCreditsales,
@@ -707,7 +695,7 @@ function unpackRows(rowArr) {
         var g = JSON.parse(val);
         s.backendUrl = g.bu; s.alayaCompany = g.ac; s.alayaCompanyId = g.aid;
         s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp; s.transferMethod = g.tm;
-        s.pmByBranch = flag(g.pb); s.advType = g.at; s.advDoc = g.ad; s.advPreviewDoc = g.apd;
+        s.pmByBranch = flag(g.pb); s.advType = g.at; s.advPreviewDoc = g.apd;
       } else if (code === 'CUSTOMER') {
         var c = JSON.parse(val);
         s.acCashsales = c.cs; s.acCashrounding = c.cr; s.acCreditsales = c.is;
@@ -830,7 +818,6 @@ function applySettings() {
   $('#s-t-cashpurchpay').prop('checked', s.tCashpurchpay);
   $('#s-t-vendorinv').prop('checked', s.tVendorinv);
   $('input[name="adv-type"][value="' + (s.advType || 'customer') + '"]').prop('checked', true);
-  $('#adv-doc-type').val(s.advDoc || 'CASH SALES');
   $('#adv-preview-doctype').val(s.advPreviewDoc || 'CASH SALES');
   if (s.alayaCompanyId) $('#alaya-company-select').val(String(s.alayaCompanyId));
   s.backendUrl = normalizeBackendUrl(s.backendUrl);
@@ -909,7 +896,6 @@ function saveSettings() {
     branches: maps.branches,
     divisions: maps.divisions,
     advType: $('input[name="adv-type"]:checked').val() || 'customer',
-    advDoc: $('#adv-doc-type').val() || 'CASH SALES',
     advPreviewDoc: $('#adv-preview-doctype').val() || 'CASH SALES',
     sqlCompanyCode: $('#sql-company, #s-sql-company').filter(':first').val() || settings.sqlCompanyCode || '',
     dcfPath: $('#s-dcf-path').val() || defaultSettings.dcfPath,
@@ -2538,7 +2524,7 @@ function runTransferMaster(from, to, company, alayaCid) {
       companycode: company,
       alayaCompanyId: currentAlayaCompanyID(),
       transferMethod: $('#transfer-method').val(),
-      docType: $('#adv-doc-type').val(),
+      docType: $('#adv-preview-doctype').val(),
       transfers: transfers,
       dryRun: false,
       options: {
