@@ -78,6 +78,9 @@
     .transfer-item .status.pending { color:#92400e; }
     .transfer-item .status.done { color:#166534; }
     .transfer-item .status.error { color:#991b1b; }
+    .transfer-sub { margin-left:16px; margin-bottom:4px; padding:6px 12px;
+      background:#ffffff; border-color:#f1f5f9; }
+    .transfer-sub .name { font-size:0.78rem; font-weight:500; color:#374151; }
 
     /* Log panel */
     .log-panel {
@@ -2161,9 +2164,21 @@ function splitNested(raw) {
 }
 
 function normPay(raw) {
+  // pick() is an EXACT (case-insensitive) key match, not a substring search -
+  // confirmed live that ALAYA's CSH_PaymentDetails rows use CSP_-prefixed
+  // field names (CSP_PaymentModeCode/CSP_PaymentAmount), which weren't in
+  // this candidate list, so mode/amount always came back empty even though
+  // the API genuinely returned the payment data (server.py's own
+  // _cs_pay_controls already had to work around this same gap for the
+  // control-account field). Prefixed variants for the other doc types follow
+  // normItem's established CSD_/SID_/SRD_/PID_/CPD_/PRD_ convention.
   return {
-    mode: pick(raw, ['PaymentMode', 'PayMode', 'Mode', 'PaymentModeCode', 'Code']),
-    amount: parseFloat(pick(raw, ['Amount', 'PaymentAmt', 'PaymentAmount', 'PaidAmount'])) || 0
+    mode: pick(raw, ['PaymentMode', 'PayMode', 'Mode', 'PaymentModeCode', 'Code',
+                     'CSP_PaymentModeCode', 'SIP_PaymentModeCode', 'SRP_PaymentModeCode',
+                     'PIP_PaymentModeCode', 'CPP_PaymentModeCode', 'PRP_PaymentModeCode']),
+    amount: parseFloat(pick(raw, ['Amount', 'PaymentAmt', 'PaymentAmount', 'PaidAmount',
+                     'CSP_PaymentAmount', 'SIP_PaymentAmount', 'SRP_PaymentAmount',
+                     'PIP_PaymentAmount', 'CPP_PaymentAmount', 'PRP_PaymentAmount'])) || 0
   };
 }
 
@@ -2222,6 +2237,18 @@ function normPurchaseDoc(raw) {
 
 function fetchDocType(type, endpoint, cid, from, to, cb) {
   var body = { CompanyID: cid, DateFrom: from, DateTo: to };
+  // Ground truth (c_Account.cs Main|TransferCash) always sends MaxID + a
+  // DocumentStatus filter for cash-transaction fetches - omitting them was
+  // confirmed to make the API return cash sales records WITHOUT their nested
+  // CSH_PaymentDetails array (this is what caused "no payment details in
+  // group" warnings even for docs the legacy desktop tool posts payment for
+  // fine). MaxID='0' (string, matches Conversions.ToString of an int - not
+  // paginating multi-page results here since this endpoint's result sets are
+  // small; revisit if a large date range ever returns a non-zero MaxID).
+  if (type === 'cashsales') {
+    body.MaxID = '0';
+    body.DocumentStatus = 'POSTED';
+  }
   addLog('POST ' + endpoint + ' ' + JSON.stringify(body));
   function errDetail(xhr) {
     var t = '';
@@ -2586,23 +2613,24 @@ function showTransferResults(results) {
   var html = '';
   (results || []).forEach(function(r) {
     // 明细里一个都没成功 (全 error) 也算失败, 不能显示绿色 OK 误导人
-    var nErr = 0, nOk = 0;
+    var nErr = 0, nOk = 0, nSkip = 0;
     (r.data || []).forEach(function(d) {
       if (d.status === 'error') nErr++;
       else if (d.status === 'success' || d.status === 'planned') nOk++;
+      else if (d.status === 'skipped') nSkip++;
     });
     var ok = !!r.success && !(nErr > 0 && nOk === 0);
     var statusClass = ok ? 'done' : 'error';
     var statusText = ok ? 'OK' : 'Failed';
     var det = r.message || r.error || '';
     if (!det && r.data && r.data.length) {
-      var firstErr = null, okCount = 0;
+      var firstErr = null;
       r.data.forEach(function(d) {
         if (d.status === 'error' && !firstErr) firstErr = d.error;
-        if (d.status === 'success' || d.status === 'planned') okCount++;
       });
       if (firstErr) det = firstErr;
-      else if (r.count !== undefined) det = okCount + '/' + r.count + ' ok';
+      else if (r.count !== undefined) det = nOk + '/' + r.count + ' ok';
+      if (nSkip) det = (det ? det + ' · ' : '') + nSkip + ' skipped';
     } else if (!det && r.count !== undefined) {
       det = 'count: ' + r.count;
     }
@@ -2614,6 +2642,26 @@ function showTransferResults(results) {
     html += '<div class="detail">' + escHtml(det) + '</div></div>';
     html += '<div class="status ' + statusClass + '">' + statusText + '</div>';
     html += '</div>';
+
+    // Per-record detail list (each customer/vendor shows its own status), so the
+    // result panel mirrors the live one-by-one progress instead of a single OK.
+    (r.data || []).forEach(function(d) {
+      var cls = 'pending';
+      if (d.status === 'success' || d.status === 'planned') cls = 'done';
+      else if (d.status === 'error') cls = 'error';
+      else if (d.status === 'skipped') cls = 'pending';
+      var nm = '';
+      if (d.code) nm += (nm ? ' · ' : '') + d.code;
+      if (d.name) nm += (nm ? ' — ' : '') + d.name;
+      if (!nm) nm = r.type;
+      var msg = d.message || d.error || '';
+      var st = d.status || '';
+      html += '<div class="transfer-item transfer-sub">';
+      html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
+      html += '<div class="detail">' + escHtml(msg) + '</div></div>';
+      html += '<div class="status ' + cls + '">' + escHtml(st) + '</div>';
+      html += '</div>';
+    });
   });
   $('#results-list').html(html);
   $('#transfer-results').show();
