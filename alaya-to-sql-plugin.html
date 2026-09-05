@@ -586,6 +586,7 @@ var defaultSettings = {
   alayaCompany: 'qa3',
   alayaCompanyId: 0,
   cashsalesMethod: 'summary',
+  transferMethod: 'summary',
   cashsalesPrefix: '',
   acCashsales: '500-000',
   acCashrounding: '500-000',
@@ -662,7 +663,7 @@ function packRows(s) {
   function B(v) { return v ? 1 : 0; }
   rows.push(['GENERAL', JSON.stringify({
     bu: s.backendUrl, ac: s.alayaCompany, aid: s.alayaCompanyId,
-    cm: s.cashsalesMethod, cp: s.cashsalesPrefix,
+    cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod,
     pb: B(s.pmByBranch), at: s.advType, ad: s.advDoc, apd: s.advPreviewDoc
   })]);
   rows.push(['CUSTOMER', JSON.stringify({
@@ -705,7 +706,7 @@ function unpackRows(rowArr) {
       if (code === 'GENERAL') {
         var g = JSON.parse(val);
         s.backendUrl = g.bu; s.alayaCompany = g.ac; s.alayaCompanyId = g.aid;
-        s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp;
+        s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp; s.transferMethod = g.tm;
         s.pmByBranch = flag(g.pb); s.advType = g.at; s.advDoc = g.ad; s.advPreviewDoc = g.apd;
       } else if (code === 'CUSTOMER') {
         var c = JSON.parse(val);
@@ -796,7 +797,12 @@ function applySettings() {
   var s = $.extend({}, defaultSettings, settings);
   $('#s-backend-url').val(s.backendUrl);
   $('#s-alaya-company').val(s.alayaCompany);
-  $('#s-cashsales-method').val(s.cashsalesMethod);
+  // Transfer tab method is the operative choice at transfer time (server
+  // prefers transferMethod); keep the Settings-tab twin in sync on load so
+  // the two can never silently disagree after a reload.
+  var _m = s.transferMethod || s.cashsalesMethod || 'summary';
+  $('#transfer-method').val(_m);
+  $('#s-cashsales-method').val(_m);
   $('#s-cashsales-prefix').val(s.cashsalesPrefix);
   $('#s-ac-cashsales').val(s.acCashsales);
   $('#s-ac-cashrounding').val(s.acCashrounding);
@@ -872,6 +878,7 @@ function saveSettings() {
     alayaCompany: settings.alayaCompany || $('#s-alaya-company').val(),
     alayaCompanyId: parseInt($('#alaya-company-select').val(), 10) || 0,
     cashsalesMethod: $('#s-cashsales-method').val(),
+    transferMethod: $('#transfer-method').val() || 'summary',
     cashsalesPrefix: $('#s-cashsales-prefix').val(),
     acCashsales: $('#s-ac-cashsales').val(),
     acCashrounding: $('#s-ac-cashrounding').val(),
