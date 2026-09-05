@@ -2429,6 +2429,7 @@ function runTransferMaster(from, to, company, alayaCid) {
 
   // Fresh run: clear any leftover results from a previous transfer so the panel
   // never shows stale "success" rows before the new transfer actually finishes.
+  _progSawRunning = false;
   $('#results-list').empty();
   $('#transfer-results').hide();
   $('#summary-list').empty();
@@ -2568,6 +2569,11 @@ function runTransferMaster(from, to, company, alayaCid) {
 // ── Live transfer progress (polled; mirrors the desktop Link tool's
 //    per-customer status visible during a transfer) ──
 var _progPoll = null;
+// True once the poll has seen _prog.running=true (i.e. the POST actually
+// started its transfer). Before that, /api/transfer/progress returns the
+// PREVIOUS run's completed items because _prog_reset only runs inside the
+// POST handler - rendering them would fake "all transferred" instantly.
+var _progSawRunning = false;
 function startProgressPoll() {
   stopProgressPoll();
   _progPoll = setInterval(function() {
@@ -2582,6 +2588,16 @@ function stopProgressPoll() {
   if (_progPoll) { clearInterval(_progPoll); _progPoll = null; }
 }
 function renderLiveProgress(p) {
+  // Before the backend POST calls _prog_reset, the progress endpoint still
+  // reports the previous transfer's finished items (running=false). Rendering
+  // those here makes it look like every customer was already transferred -
+  // which is exactly the "一按 transfer 就全部 success" bug. So we only start
+  // rendering once we've seen running=true for the real (new) transfer.
+  if (!p.running && !_progSawRunning) {
+    // Still pre-transfer: show the fetching state, never stale rows.
+    return;
+  }
+  if (p.running) _progSawRunning = true;
   var done = (p.done || 0), total = (p.total || 0);
   var pct = total > 0 ? Math.round(done / total * 100) : 0;
   $('#progress-bar').css('width', pct + '%');
