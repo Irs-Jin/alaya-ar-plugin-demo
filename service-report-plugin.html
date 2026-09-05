@@ -286,7 +286,7 @@
         <div class="sub" style="margin-bottom:0;">Log customer equipment service visits &mdash; equipment received, action taken, and outcome.</div>
       </div>
     </div>
-    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span> <span id="save-status" class="badge" style="display:none;"></span> <span id="perm-debug" class="badge" style="display:inline-block;background:#e0e7ff;color:#3730a3;font-size:0.7rem;"></span></div>
+    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span> <span id="save-status" class="badge" style="display:none;"></span></div>
   </div>
 </div>
 
@@ -702,7 +702,6 @@
     hostOrigin = e.originalEvent.origin || '';
     var payload = msg.data !== undefined ? msg.data : msg;
     addLog('Raw payload: ' + JSON.stringify(payload));
-    console.log('ALAYA_INIT payload:', JSON.stringify(payload));
     $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
     if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
     if (payload && payload.nonce) nonce = payload.nonce;
@@ -717,10 +716,8 @@
       canDelete = !!la.DELETE;
       canCopy = !!la.COPY;
       addLog('Permissions: view=' + canView + ' saveEdit=' + canSaveEdit + ' delete=' + canDelete + ' copy=' + canCopy);
-      $('#perm-debug').text('V:' + canView + ' S:' + canSaveEdit + ' D:' + canDelete + ' C:' + canCopy).show();
     } else {
       addLog('Permissions: no menuInfo.ListAccess — all default true');
-      $('#perm-debug').text('V:true S:true D:true C:true (no payload)').show();
     }
     postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
     if (apiUrl && nonce && clientId && username) requestToken();
@@ -825,9 +822,17 @@
         loadScopedListsForCurrentCompany();
         // Fetch company details for print letter head
         var cid = DEFAULT_COMPANY_ID;
-        qrySql("SELECT TOP 1 CO_Name, CO_Address1, CO_Address2, CO_Address3, CO_Address4, CO_Tel, CO_Fax, CO_RegNo FROM Company WHERE CO_ID=" + cid, 1).then(function (resp) {
+        qrySql("SELECT TOP 1 * FROM Company WHERE CO_ID=" + cid, 1).then(function (resp) {
           var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
-          if (r) { companyInfo = { name: r[0]||'', addr1: r[1]||'', addr2: r[2]||'', addr3: r[3]||'', addr4: r[4]||'', tel: r[5]||'', fax: r[6]||'', regNo: r[7]||'' }; addLog('Company info loaded: ' + companyInfo.name); }
+          var cols = resp && resp.results && resp.results[0] && resp.results[0].columns || [];
+          if (r) {
+            addLog('Company columns: ' + cols.join(', '));
+            addLog('Company row: ' + JSON.stringify(r));
+            // Try common column name patterns for address/reg/tel
+            var find = function() { var a = arguments; for (var i=0;i<a.length;i++) { var idx = cols.indexOf(a[i]); if (idx >= 0 && r[idx]) return r[idx]; } return ''; };
+            companyInfo = { name: find('CO_Name','CompanyName','Name'), regNo: find('CO_RegNo','CO_CompanyRegNo','RegNo'), addr1: find('CO_Address1','CO_Addr1','Address1'), addr2: find('CO_Address2','CO_Addr2','Address2'), addr3: find('CO_Address3','CO_Addr3','Address3'), addr4: find('CO_Address4','CO_Addr4','Address4'), tel: find('CO_Tel','CO_Phone','Telephone','Phone'), fax: find('CO_Fax','Fax') };
+            addLog('Company info loaded: ' + companyInfo.name);
+          }
         });
       },
       error: function (xhr) {
@@ -1839,7 +1844,6 @@
     (editingReport.actionTaken || []).forEach(function (a) {
       if (!a.item) return;
       var im = items.filter(function (x) { return x.code === a.item; })[0];
-      console.log('Copy debug: item=' + a.item + ' im_found=' + !!im + ' serialControl=' + (im ? im.serialControl : 'N/A') + ' batchControl=' + (im ? im.batchControl : 'N/A'));
       if (im && im.serialControl === undefined) {
         qrySql("SELECT IM_BatchControl_YN, IM_SerializeControl_YN FROM ItemMaster WHERE IM_ID=" + parseInt(im.id, 10), 5).then(function (resp) {
           var row = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
@@ -1913,11 +1917,13 @@
 
     var addrParts = [companyInfo.addr1, companyInfo.addr2, companyInfo.addr3, companyInfo.addr4].filter(Boolean);
     var companyAddr = addrParts.join(', ');
+    var contactLine = [companyInfo.tel ? 'Tel: ' + companyInfo.tel : '', companyInfo.fax ? 'Fax: ' + companyInfo.fax : ''].filter(Boolean).join('  ');
     var html =
       '<div class="print-letterhead">' +
         '<div class="print-co-name">' + escapeHtml(companyInfo.name || editingReport.companyName || '') + '</div>' +
         (companyInfo.regNo ? '<div class="print-co-detail">(Reg No: ' + escapeHtml(companyInfo.regNo) + ')</div>' : '') +
         (companyAddr ? '<div class="print-co-detail">' + escapeHtml(companyAddr) + '</div>' : '') +
+        (contactLine ? '<div class="print-co-detail">' + escapeHtml(contactLine) + '</div>' : '') +
       '</div>' +
       '<div class="print-banner">SERVICE REPORT</div>' +
       '<div class="print-title">Service Report ' + escapeHtml($('#d-docno').val() || '[Unsaved]') + '</div>' +
@@ -3154,7 +3160,6 @@
         }
         var itemRec = a.item ? items.filter(function (im) { return $.trim(im.code) === a.item; })[0] : null;
         var need = itemRec && (itemRec.batchControl || itemRec.serialControl);
-        if (a.item) console.log('Render: item=' + a.item + ' itemRec=' + !!itemRec + ' serialCtrl=' + (itemRec ? itemRec.serialControl : 'N/A') + ' batchCtrl=' + (itemRec ? itemRec.batchControl : 'N/A') + ' need=' + need);
         var label = '-';
         if (need) {
           var parts = [];
