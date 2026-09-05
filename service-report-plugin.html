@@ -826,11 +826,8 @@
           var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
           var cols = resp && resp.results && resp.results[0] && resp.results[0].columns || [];
           if (r) {
-            addLog('Company columns: ' + cols.join(', '));
-            addLog('Company row: ' + JSON.stringify(r));
-            // Try common column name patterns for address/reg/tel
             var find = function() { var a = arguments; for (var i=0;i<a.length;i++) { var idx = cols.indexOf(a[i]); if (idx >= 0 && r[idx]) return r[idx]; } return ''; };
-            companyInfo = { name: find('CO_Name','CompanyName','Name'), regNo: find('CO_RegNo','CO_CompanyRegNo','RegNo'), addr1: find('CO_Address1','CO_Addr1','Address1'), addr2: find('CO_Address2','CO_Addr2','Address2'), addr3: find('CO_Address3','CO_Addr3','Address3'), addr4: find('CO_Address4','CO_Addr4','Address4'), tel: find('CO_Tel','CO_Phone','Telephone','Phone'), fax: find('CO_Fax','Fax') };
+            companyInfo = { name: find('CO_Name'), regNo: find('CO_RegistrationNo','CO_RegNo'), addr1: find('CO_MainAddress1','CO_Address1'), addr2: find('CO_MainAddress2','CO_Address2'), addr3: find('CO_MainAddress3','CO_Address3'), addr4: find('CO_MainAddress4','CO_Address4'), postcode: find('CO_MainPostcode','CO_Postcode'), tel: find('CO_Phone1','CO_Tel'), fax: find('CO_Fax1','CO_Fax') };
             addLog('Company info loaded: ' + companyInfo.name);
           }
         });
@@ -1916,6 +1913,7 @@
     var printTotal = Math.max(0, printSubTotal - printDiscount);
 
     var addrParts = [companyInfo.addr1, companyInfo.addr2, companyInfo.addr3, companyInfo.addr4].filter(Boolean);
+    if (companyInfo.postcode) addrParts.push(companyInfo.postcode);
     var companyAddr = addrParts.join(', ');
     var contactLine = [companyInfo.tel ? 'Tel: ' + companyInfo.tel : '', companyInfo.fax ? 'Fax: ' + companyInfo.fax : ''].filter(Boolean).join('  ');
     var html =
