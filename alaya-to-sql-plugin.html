@@ -1737,7 +1737,7 @@ function backendAjax(opts) {
 
 // ΓöÇΓöÇ Load Alaya data (company-scoped via REST when possible) ΓöÇΓöÇ
 function loadScopedViaRest(cid, done) {
-  var pending = 4, finished = false;
+  var pending = 3, finished = false;
   function oneDone() { if (--pending === 0 && !finished) { finished = true; done(); } }
   function setVendors(data, scoped) {
     alayaData.vendorRaw = data;
@@ -1746,32 +1746,20 @@ function loadScopedViaRest(cid, done) {
     }).filter(function(r) { return r[0]; });
     addLog('Loaded ' + alayaData.vendors.length + ' vendors' + (scoped ? ' for company ' + cid + ' (REST, scoped)' : ' (REST, unscoped fallback)'), 'log-ok');
   }
-  $.ajax({
-    url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
-    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
-    success: function(resp) {
-      var data = (resp && resp.data) || [];
-      alayaData.customerRaw = data;
-      alayaData.customers = data.map(function(c) {
-        return [c.Cust_AccountCode || '', c.Cust_NAME || '', '', 0];
-      }).filter(function(r) { return r[0]; });
-      addLog('Loaded ' + alayaData.customers.length + ' customers for company ' + cid + ' (REST, scoped)', 'log-ok');
-    },
-    error: function(xhr) { addLog('GetAllCustomer failed (' + xhr.status + ') for company ' + cid, 'log-err'); },
-    complete: oneDone
-  });
-  // CompanyCustomer: attach Company-scoped Reference No / Ref Control Acct to each
-  // customer so the backend has the source fields the real Link tool uses
-  // (CC_ReferenceNo, CC_ReferenceControlAcct). Should only use the MemoQuery bridge.
+  // Customer master source: authoritative list = CompanyCustomer JOIN Customer for
+  // this company (exactly mirrors the desktop Link tool + the user's SQL). Includes
+  // CC_ReferenceNo / CC_ReferenceControlAcct directly, already filtered like the
+  // user's query, so no separate (racy) merge step is needed.
   (function() {
-    var ccSql = "SELECT CC_CustomerID, CC_ReferenceNo, CC_ReferenceControlAcct, CC_ControlAccount " +
-                "FROM CompanyCustomer WHERE CC_CompanyID = " + (parseInt(cid, 10) || 1) +
-                " AND CC_ReferenceNo NOT IN ('', '[IGNORE]') " +
-                " AND CC_ReferenceControlAcct NOT IN ('', '[IGNORE]')";
+    var ccSql = "SELECT c.Cust_ID, c.Cust_AccountCode, c.Cust_NAME, cc.CC_ReferenceNo, " +
+                "cc.CC_ReferenceControlAcct, cc.CC_ControlAccount " +
+                "FROM CompanyCustomer cc LEFT JOIN Customer c ON cc.CC_CustomerID = c.Cust_ID " +
+                "WHERE cc.CC_CompanyID = " + (parseInt(cid, 10) || 1) +
+                " AND cc.CC_ReferenceNo NOT IN ('', '[IGNORE]') " +
+                " AND cc.CC_ReferenceControlAcct NOT IN ('', '[IGNORE]')";
     executeSqlViaHost(ccSql, 10000, 5000).then(function(msg) {
       if (msg && !msg.error) {
         try {
-          var cc = {};
           var res = JSON.parse(msg.result);
           if (res.success && res.results && res.results[0]) {
             var rs = res.results[0];
@@ -1779,54 +1767,63 @@ function loadScopedViaRest(cid, done) {
               var m = /^\[([^\]]+)\]/.exec(c);
               return m ? m[1] : c;
             });
-            var ciCust = cols.indexOf('CC_CustomerID');
-            var ciRef = cols.indexOf('CC_ReferenceNo');
-            var ciRefAcct = cols.indexOf('CC_ReferenceControlAcct');
-            var ciAcct = cols.indexOf('CC_ControlAccount');
+            function idx(n) { return cols.indexOf(n); }
+            var ciID = idx('Cust_ID'), ciCode = idx('Cust_AccountCode'), ciName = idx('Cust_NAME');
+            var ciRef = idx('CC_ReferenceNo'), ciRefAcct = idx('CC_ReferenceControlAcct'),
+                ciAcct = idx('CC_ControlAccount');
+            var raw = [];
             (rs.rows || []).forEach(function(row) {
-              var custId = row[ciCust];
-              if (custId === null || custId === undefined) return;
-              var key = String(custId).trim();
-              if (!key) return;
-              cc[key] = {
-                CC_ReferenceNo: (row[ciRef] !== null && row[ciRef] !== undefined) ? String(row[ciRef]) : undefined,
-                CC_ReferenceControlAcct: (row[ciRefAcct] !== null && row[ciRefAcct] !== undefined) ? String(row[ciRefAcct]) : undefined,
-                CC_ControlAccount: (row[ciAcct] !== null && row[ciAcct] !== undefined) ? String(row[ciAcct]) : undefined
-              };
+              var code = (row[ciCode] === null || row[ciCode] === undefined) ? '' : String(row[ciCode]);
+              var nm = (row[ciName] === null || row[ciName] === undefined) ? '' : String(row[ciName]);
+              if (!code) return;
+              var c = { Cust_ID: row[ciID], Cust_AccountCode: code, Cust_NAME: nm };
+              if (ciRef >= 0) c.CC_ReferenceNo = (row[ciRef] !== null && row[ciRef] !== undefined) ? String(row[ciRef]) : undefined;
+              if (ciRefAcct >= 0) c.CC_ReferenceControlAcct = (row[ciRefAcct] !== null && row[ciRefAcct] !== undefined) ? String(row[ciRefAcct]) : undefined;
+              if (ciAcct >= 0) c.CC_ControlAccount = (row[ciAcct] !== null && row[ciAcct] !== undefined) ? String(row[ciAcct]) : undefined;
+              raw.push(c);
             });
-            var ccKeys = Object.keys(cc);
-            // merge into customerRaw. Try Cust_ID, then CustomerID/CC_CustomerID/ID.
-            var merged = 0;
-            alayaData.customerRaw && Array.isArray(alayaData.customerRaw) && alayaData.customerRaw.forEach(function(c) {
-              if (c === null || typeof c !== 'object') return;
-              var row = null;
-              var cands = [c.Cust_ID, c.CustomerID, c.CC_CustomerID, c.ID];
-              for (var i = 0; i < cands.length && !row; i++) {
-                if (cands[i] === null || cands[i] === undefined) continue;
-                row = cc[String(cands[i]).trim()] || null;
-              }
-              if (!row) return;
-              merged++;
-              if (row.CC_ReferenceNo !== undefined) c.CC_ReferenceNo = row.CC_ReferenceNo;
-              if (row.CC_ReferenceControlAcct !== undefined) c.CC_ReferenceControlAcct = row.CC_ReferenceControlAcct;
-              if (row.CC_ControlAccount !== undefined) c.CC_ControlAccount = row.CC_ControlAccount;
-            });
-            addLog('CompanyCustomer: ' + (rs.rows || []).length + ' CC rows for company ' + cid +
-                   ', matched ' + merged + ' customers', merged ? 'log-ok' : 'log-warn');
-            if (ccKeys.length && merged === 0) {
-              addLog('CC merge diag: cc[0]=' + ccKeys[0] + '; customer keys=' +
-                     (alayaData.customerRaw[0] ? Object.keys(alayaData.customerRaw[0]).slice(0, 24).join(',') : 'no customers'), 'log-warn');
-            }
+            alayaData.customerRaw = raw;
+            alayaData.customers = raw.map(function(c) {
+              return [c.Cust_AccountCode || '', c.Cust_NAME || '', '', 0];
+            }).filter(function(r) { return r[0]; });
+            addLog('CompanyCustomer JOIN: ' + raw.length + ' customers for company ' + cid +
+                   ' (CC refs attached, [IGNORE]/blank filtered)', 'log-ok');
+          } else {
+            addLog('CompanyCustomer JOIN empty result for company ' + cid, 'log-warn');
           }
-        } catch (e) { addLog('CompanyCustomer merge error: ' + e.message, 'log-warn'); }
+        } catch (e) {
+          addLog('CompanyCustomer JOIN error: ' + e.message, 'log-warn');
+          restFallback(e.message);
+          return;
+        }
       } else {
-        addLog('CompanyCustomer load failed, CC_* fields unavailable: ' + (msg && msg.error ? msg.error : 'no bridge'), 'log-warn');
+        addLog('CompanyCustomer JOIN failed, customers unavailable: ' +
+               (msg && msg.error ? msg.error : 'no bridge'), 'log-warn');
+        restFallback(msg && msg.error ? msg.error : 'no bridge');
+        return;
       }
       oneDone();
     }).catch(function(err) {
-      addLog('CompanyCustomer load error: ' + err.message, 'log-warn');
-      oneDone();
+      addLog('CompanyCustomer JOIN load error: ' + err.message, 'log-warn');
+      restFallback(err.message);
     });
+    function restFallback(reason) {
+      addLog('Customer source falling back to GetAllCustomer REST (' + reason + ')', 'log-warn');
+      $.ajax({
+        url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+        success: function(resp) {
+          var data = (resp && resp.data) || [];
+          alayaData.customerRaw = data;
+          alayaData.customers = data.map(function(c) {
+            return [c.Cust_AccountCode || '', c.Cust_NAME || '', '', 0];
+          }).filter(function(r) { return r[0]; });
+          addLog('Loaded ' + alayaData.customers.length + ' customers for company ' + cid + ' (REST fallback)', 'log-ok');
+        },
+        error: function(xhr) { addLog('GetAllCustomer fallback failed (' + xhr.status + ')', 'log-err'); },
+        complete: oneDone
+      });
+    }
   })();
   $.ajax({
     url: apiUrl + 'api/Vendor/GetAllVendor', type: 'POST', cache: false, contentType: 'application/json',
