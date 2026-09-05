@@ -400,16 +400,16 @@
         </div>
         <span id="cust-lookup-status" class="sub" style="margin-bottom:0;"></span>
       </div>
-      <div class="form-group full"><label>Name</label><input type="text" id="d-cust-name" disabled /></div>
-      <div class="form-group full"><label>Address</label><div style="flex:1; display:flex; flex-direction:column; gap:6px;"><input type="text" id="d-cust-addr1" disabled placeholder="Address 1" /><input type="text" id="d-cust-addr2" disabled placeholder="Address 2" /><input type="text" id="d-cust-addr3" disabled placeholder="Address 3" /><input type="text" id="d-cust-addr4" disabled placeholder="Address 4" /></div></div>
-      <div class="form-group full"><label>Telephone</label><input type="text" id="d-cust-phone" disabled /></div>
-      <div class="form-group full"><label>Remark</label><textarea id="d-remark" style="min-height:70px;"></textarea></div>
+      <div class="form-group full"><label>Name</label><input type="text" id="d-cust-name" maxlength="150" disabled /></div>
+      <div class="form-group full"><label>Address</label><div style="flex:1; display:flex; flex-direction:column; gap:6px;"><input type="text" id="d-cust-addr1" maxlength="150" disabled placeholder="Address 1" /><input type="text" id="d-cust-addr2" maxlength="150" disabled placeholder="Address 2" /><input type="text" id="d-cust-addr3" maxlength="150" disabled placeholder="Address 3" /><input type="text" id="d-cust-addr4" maxlength="150" disabled placeholder="Address 4" /></div></div>
+      <div class="form-group full"><label>Telephone</label><input type="text" id="d-cust-phone" maxlength="50" disabled /></div>
+      <div class="form-group full"><label>Remark</label><textarea id="d-remark" maxlength="200" style="min-height:70px;"></textarea></div>
     </div>
     <div class="header-col">
       <div class="form-group full"><label>Doc No</label><input type="text" id="d-docno" disabled placeholder="[Auto on Save]" /></div>
       <div class="form-group full"><label>Date<span class="required-mark">*</span></label><input type="date" id="d-date" /></div>
       <div class="form-group full"><label>Expiry Date</label><input type="date" id="d-expiry" /></div>
-      <div class="form-group full"><label>Reference</label><input type="text" id="d-ref" /></div>
+      <div class="form-group full"><label>Reference</label><input type="text" id="d-ref" maxlength="100" /></div>
       <div class="form-group full"><label>Received By</label><select id="d-received-by"><option value="">-- Select --</option></select></div>
       <div class="form-group full"><label>Serviced By</label><select id="d-serviced-by"><option value="">-- Select --</option></select></div>
       <div class="form-group full"><label>Sales Branch<span class="required-mark">*</span></label><select id="d-sales-branch"><option value="">-- Select --</option></select></div>
@@ -639,6 +639,12 @@
   var EQUIP_TABLE_CODE = 'svcrpteq';
   var ACTION_TABLE_CODE = 'svcrptact';
   var PACKAGE_TABLE_CODE = 'svcrptpkg';
+  // Part A prep for the batch/serial child-row split: svcrptbat must first be
+  // created by an Alaya admin via the User Defined Field module editor (DDL is
+  // blocked from the SQL bridge). Constant is INERT until that table exists -
+  // no code writes/reads it yet, because a live Save would fail with "Invalid
+  // object name" if it referenced a table that isn't there.
+  var BATCH_TABLE_CODE = 'svcrptbat';
   var DEFAULT_COMPANY_ID = 548; // matches jin's default test company (JIN6 SDN BHD)
   var PACKAGE_ITEM_TYPE_ID = 5; // ItemMaster.IM_Type - confirmed live via item 'A000001'
   var MATRIX_ITEM_TYPE_ID = 4; // ItemMaster.IM_Type - confirmed live via item 841264 ("Matrix Item")
