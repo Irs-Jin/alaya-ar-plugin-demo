@@ -1981,7 +1981,7 @@
     var contactLine = [companyInfo.tel ? 'Tel: ' + companyInfo.tel : '', companyInfo.fax ? 'Fax: ' + companyInfo.fax : ''].filter(Boolean).join('  ');
     var html =
       '<div class="print-letterhead">' +
-        '<img class="print-logo" src="4.jpg" alt="Company Logo" />' +
+        '<img class="print-logo" src="https://irs-jin.github.io/alaya-ar-plugin-demo/4.jpg" alt="Company Logo" />' +
         '<div class="print-co-name">' + escapeHtml(companyInfo.name || editingReport.companyName || '') + '</div>' +
         (companyInfo.regNo ? '<div class="print-co-detail">(Reg No: ' + escapeHtml(companyInfo.regNo) + ')</div>' : '') +
         (companyAddr ? '<div class="print-co-detail">' + escapeHtml(companyAddr) + '</div>' : '') +
@@ -2025,7 +2025,7 @@
     }
   }
   // Preload the letterhead logo so it's cached before the first print.
-  $(function () { try { new Image().src = '4.jpg'; } catch (e) {} });
+  $(function () { try { new Image().src = 'https://irs-jin.github.io/alaya-ar-plugin-demo/4.jpg'; } catch (e) {} });
   $('#btn-print-report').on('click', printReport);
 
   /* ── Copy To Sales (real, writes a POSTED Cash Sales document) ──
