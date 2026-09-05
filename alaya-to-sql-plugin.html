@@ -235,6 +235,10 @@
       <h2>Transfer Results</h2>
       <div id="results-list"></div>
     </div>
+    <div id="transfer-summary" style="margin-top:16px;display:none;">
+      <h2>Transfer Summary</h2>
+      <div id="summary-list"></div>
+    </div>
   </div>
 
   <!-- ΓöÇΓöÇ Advanced Tab ΓöÇΓöÇ -->
@@ -2423,6 +2427,13 @@ function runTransferMaster(from, to, company, alayaCid) {
   $('#transfer-progress').show();
   $('#btn-transfer').prop('disabled', true);
 
+  // Fresh run: clear any leftover results from a previous transfer so the panel
+  // never shows stale "success" rows before the new transfer actually finishes.
+  $('#results-list').empty();
+  $('#transfer-results').hide();
+  $('#summary-list').empty();
+  $('#transfer-summary').hide();
+
   var transfers = [];
   if ($('#s-t-cashsales').is(':checked')) transfers.push('cashsales');
   if ($('#s-t-invoice').is(':checked')) transfers.push('invoice');
@@ -2596,10 +2607,11 @@ function renderLiveProgress(p) {
     var nm = it.label || '';
     if (it.code) nm += (nm ? ' · ' : '') + it.code;
     if (it.name) nm += ' — ' + it.name;
+    var st = it.status === 'success' ? (it.message || 'transferred') : (it.status || 'pending');
     html += '<div class="transfer-item">';
     html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
-    html += '<div class="detail">' + escHtml(it.message || '') + '</div></div>';
-    html += '<div class="status ' + cls + '">' + escHtml(it.status) + '</div>';
+    html += '<div class="detail">' + escHtml(it.status === 'success' ? 'transfer ' + st : (it.message || '')) + '</div></div>';
+    html += '<div class="status ' + cls + '">' + escHtml(st) + '</div>';
     html += '</div>';
   });
   if (html) {
@@ -2613,11 +2625,10 @@ function showTransferResults(results) {
   var html = '';
   (results || []).forEach(function(r) {
     // 明细里一个都没成功 (全 error) 也算失败, 不能显示绿色 OK 误导人
-    var nErr = 0, nOk = 0, nSkip = 0;
+    var nErr = 0, nOk = 0;
     (r.data || []).forEach(function(d) {
       if (d.status === 'error') nErr++;
       else if (d.status === 'success' || d.status === 'planned') nOk++;
-      else if (d.status === 'skipped') nSkip++;
     });
     var ok = !!r.success && !(nErr > 0 && nOk === 0);
     var statusClass = ok ? 'done' : 'error';
@@ -2629,8 +2640,14 @@ function showTransferResults(results) {
         if (d.status === 'error' && !firstErr) firstErr = d.error;
       });
       if (firstErr) det = firstErr;
-      else if (r.count !== undefined) det = nOk + '/' + r.count + ' ok';
-      if (nSkip) det = (det ? det + ' · ' : '') + nSkip + ' skipped';
+      else {
+        var parts = [];
+        if (r.inserted !== undefined && r.inserted) parts.push(r.inserted + ' inserted');
+        if (r.updated !== undefined && r.updated) parts.push(r.updated + ' updated');
+        if (r.skipped !== undefined && r.skipped) parts.push(r.skipped + ' skipped');
+        if (!parts.length && r.count !== undefined) parts.push(r.count + ' total');
+        det = parts.join(' · ') || 'done';
+      }
     } else if (!det && r.count !== undefined) {
       det = 'count: ' + r.count;
     }
@@ -2645,6 +2662,8 @@ function showTransferResults(results) {
 
     // Per-record detail list (each customer/vendor shows its own status), so the
     // result panel mirrors the live one-by-one progress instead of a single OK.
+    // Status shows the actual transfer outcome (action: created/updated), NOT the
+    // source load result - "loaded" does not mean "transferred".
     (r.data || []).forEach(function(d) {
       var cls = 'pending';
       if (d.status === 'success' || d.status === 'planned') cls = 'done';
@@ -2655,7 +2674,8 @@ function showTransferResults(results) {
       if (d.name) nm += (nm ? ' — ' : '') + d.name;
       if (!nm) nm = r.type;
       var msg = d.message || d.error || '';
-      var st = d.status || '';
+      var st = d.action || d.status || '';
+      if (st === 'success') st = 'transferred';
       html += '<div class="transfer-item transfer-sub">';
       html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
       html += '<div class="detail">' + escHtml(msg) + '</div></div>';
@@ -2663,8 +2683,8 @@ function showTransferResults(results) {
       html += '</div>';
     });
   });
-  $('#results-list').html(html);
-  $('#transfer-results').show();
+  $('#summary-list').html(html);
+  $('#transfer-summary').show();
 }
 
 // ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
