@@ -3282,7 +3282,15 @@
     lines.forEach(function (a) {
       var im = items.filter(function (x) { return x.code === a.item; })[0];
       if (!im) { reqErrors.push(a.item + ' (item not in catalog)'); return; }
-      if (im.serialControl === undefined || im.batchControl === undefined) { reqErrors.push(a.item + ' (loading item data, please wait)'); return; }
+      // Package items never get their OWN batch/serial flags fetched -
+      // applyItemToRow returns early for them (openPackageModalForRow instead),
+      // so im.batchControl/serialControl stay undefined forever, not just
+      // "still loading". Only components carry real batch/serial control,
+      // checked below - gating Save on the parent's flags here permanently
+      // blocked every report with a Package Item line ("loading item data,
+      // please wait" that never resolves). Copy To Sales already skips this
+      // gate the same way (line ~2043 has no such check).
+      if (im.typeID !== PACKAGE_ITEM_TYPE_ID && (im.serialControl === undefined || im.batchControl === undefined)) { reqErrors.push(a.item + ' (loading item data, please wait)'); return; }
       if (im.batchControl && !a.batchNo && !(a.batches && a.batches.length)) reqErrors.push(a.item + ' (batch required)');
       if (im.serialControl) {
         var need = parseInt(a.qty, 10) || 0;
