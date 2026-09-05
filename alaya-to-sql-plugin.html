@@ -1596,13 +1596,14 @@ $('#btn-add-division').on('click', function() { appendDivisionRow('', false); })
 // slow/stuck call blocks every call queued behind it, so a long timeout here
 // would make unrelated features (e.g. Settings load) feel hung for no reason.
 var _dcbQueue = Promise.resolve();
-function executeSqlViaHost(sql, timeoutMs) {
-  var result = _dcbQueue.then(function () { return executeSqlViaHostImpl(sql, timeoutMs); });
+function executeSqlViaHost(sql, timeoutMs, maxRows) {
+  var result = _dcbQueue.then(function () { return executeSqlViaHostImpl(sql, timeoutMs, maxRows); });
   _dcbQueue = result.catch(function () {}); // keep the queue moving even if this call failed
   return result;
 }
-function executeSqlViaHostImpl(sql, timeoutMs) {
+function executeSqlViaHostImpl(sql, timeoutMs, maxRows) {
   timeoutMs = timeoutMs || 10000;
+  maxRows = maxRows || 100;
   return new Promise(function (resolve, reject) {
     if (!hostOrigin) { reject(new Error('Host origin unknown - ALAYA_INIT not received yet')); return; }
     var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
@@ -1629,7 +1630,7 @@ function executeSqlViaHostImpl(sql, timeoutMs) {
         '}' +
         'function runOnMemo(mf){' +
           'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
-          'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+          'var hdr={Rowcount:' + maxRows + ',Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
           'var arg="RunQuery|"+JSON.stringify(hdr);' +
           'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
           'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
@@ -1764,8 +1765,10 @@ function loadScopedViaRest(cid, done) {
   // (CC_ReferenceNo, CC_ReferenceControlAcct). Should only use the MemoQuery bridge.
   (function() {
     var ccSql = "SELECT CC_CustomerID, CC_ReferenceNo, CC_ReferenceControlAcct, CC_ControlAccount " +
-                "FROM CompanyCustomer WHERE CC_CompanyID = " + (parseInt(cid, 10) || 1);
-    executeSqlViaHost(ccSql).then(function(msg) {
+                "FROM CompanyCustomer WHERE CC_CompanyID = " + (parseInt(cid, 10) || 1) +
+                " AND CC_ReferenceNo NOT IN ('', '[IGNORE]') " +
+                " AND CC_ReferenceControlAcct NOT IN ('', '[IGNORE]')";
+    executeSqlViaHost(ccSql, 10000, 5000).then(function(msg) {
       if (msg && !msg.error) {
         try {
           var cc = {};
