@@ -639,11 +639,13 @@
   var EQUIP_TABLE_CODE = 'svcrpteq';
   var ACTION_TABLE_CODE = 'svcrptact';
   var PACKAGE_TABLE_CODE = 'svcrptpkg';
-  // Part A prep for the batch/serial child-row split: svcrptbat must first be
-  // created by an Alaya admin via the User Defined Field module editor (DDL is
-  // blocked from the SQL bridge). Constant is INERT until that table exists -
-  // no code writes/reads it yet, because a live Save would fail with "Invalid
-  // object name" if it referenced a table that isn't there.
+  // svcrptbat holds one child row per batch AND per serial, for both Action
+  // Taken lines and Package components (created via the User Defined Field
+  // module editor once DDL was blocked from the SQL bridge). Same generic
+  // schema as the other 4 tables. Code '<docCode>-A<n>-B<m>' (line batch),
+  // '-S<m>' (line serial), '-A<n>-P<p>-B<m>' (component batch), '-P<p>-S<m>'
+  // (component serial) - mirroring the pkg-split that already moved Package
+  // components into their own table when embedding blew the 400-char cap.
   var BATCH_TABLE_CODE = 'svcrptbat';
   var DEFAULT_COMPANY_ID = 548; // matches jin's default test company (JIN6 SDN BHD)
   var PACKAGE_ITEM_TYPE_ID = 5; // ItemMaster.IM_Type - confirmed live via item 'A000001'
@@ -1566,21 +1568,52 @@
 
   function loadReportsFromDb() {
     if (!apiUrl || !authToken) { addLog('No token yet - cannot load from DB'); return; }
-    addLog('Loading ' + REPORT_TABLE_CODE + ' / ' + EQUIP_TABLE_CODE + ' / ' + ACTION_TABLE_CODE + ' / ' + PACKAGE_TABLE_CODE + '...');
+    addLog('Loading ' + REPORT_TABLE_CODE + ' / ' + EQUIP_TABLE_CODE + ' / ' + ACTION_TABLE_CODE + ' / ' + PACKAGE_TABLE_CODE + ' / ' + BATCH_TABLE_CODE + '...');
     $('#btn-load').prop('disabled', true).text('Loading...');
-    $.when(fetchUdfTable(REPORT_TABLE_CODE), fetchUdfTable(EQUIP_TABLE_CODE), fetchUdfTable(ACTION_TABLE_CODE), fetchUdfTable(PACKAGE_TABLE_CODE))
-      .done(function (headerRows, equipRows, actionRows, pkgRows) {
+    $.when(fetchUdfTable(REPORT_TABLE_CODE), fetchUdfTable(EQUIP_TABLE_CODE), fetchUdfTable(ACTION_TABLE_CODE), fetchUdfTable(PACKAGE_TABLE_CODE), fetchUdfTable(BATCH_TABLE_CODE))
+      .done(function (headerRows, equipRows, actionRows, pkgRows, batRows) {
         var equipByDoc = {}, actionByDoc = {}, pkgByLine = {};
+        // svcrptbat child rows hold batches/serials split out of the action-line
+        // and package-component payloads (see buildReportInsertLines). Keyed the
+        // same way pkgByLine is: line groups '<dc>-A<n>', component groups
+        // '<dc>-A<n>-P<p>'. Rows saved before the split have no child rows and
+        // carry bt/sn embedded in their own payload - read as a fallback below.
+        var batchesByLine = {}, serialsByLine = {}, batchesByComponent = {}, serialsByComponent = {};
+        (batRows || []).forEach(function (r) {
+          var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
+          if (!meta.dc) return;
+          var li = meta.li;
+          var pi = meta.pi;
+          if (pi !== undefined) {
+            var ckey = meta.dc + '-A' + li + '-P' + pi;
+            if (meta.n !== undefined) (batchesByComponent[ckey] = batchesByComponent[ckey] || []).push({ batchNo: meta.n, qty: meta.q, expiryDate: meta.e || '' });
+            else if (meta.s !== undefined) (serialsByComponent[ckey] = serialsByComponent[ckey] || []).push(meta.s);
+          } else {
+            var lkey = meta.dc + '-A' + li;
+            if (meta.n !== undefined) (batchesByLine[lkey] = batchesByLine[lkey] || []).push({ batchNo: meta.n, qty: meta.q });
+            else if (meta.s !== undefined) (serialsByLine[lkey] = serialsByLine[lkey] || []).push(meta.s);
+          }
+        });
         (pkgRows || []).forEach(function (r) {
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           if (!meta.dc || !meta.li) return;
           var key = meta.dc + '-A' + meta.li;
-          (pkgByLine[key] = pkgByLine[key] || []).push({
+          // Component's P index = its 1-based position within this line's list -
+          // matches how buildReportInsertLines keyed the component's svcrptbat
+          // child rows ('-P<m>'), so child batches/serials map back per-component.
+          var arr = (pkgByLine[key] = pkgByLine[key] || []);
+          var ckey = key + '-P' + (arr.length + 1);
+          var compBatches = batchesByComponent[ckey];
+          var compSerials = serialsByComponent[ckey];
+          // For components saved BEFORE the split, batch/serial data is embedded
+          // in this row's own payload (meta.bt/meta.sn) with no child rows - fall
+          // back to it, mirroring how the old embedded meta.pc is read on actions.
+          arr.push({
             id: meta.i, code: meta.c || '', desc: meta.d || '', uomID: meta.u, uom: meta.um || '',
             qty: meta.q || 0, price: meta.p || 0, baseQty: meta.bq || 0, binLocationID: meta.bl || null,
             batchControl: !!meta.bc, serialControl: !!meta.sc,
-            batches: (meta.bt || []).map(function (b) { return { batchNo: b.n, qty: b.q, expiryDate: b.e || '' }; }),
-            serialNos: meta.sn || []
+            batches: (compBatches && compBatches.length) ? compBatches : (meta.bt || []).map(function (b) { return { batchNo: b.n, qty: b.q, expiryDate: b.e || '' }; }),
+            serialNos: (compSerials && compSerials.length) ? compSerials : (meta.sn || [])
           });
         });
         equipRows.forEach(function (r) {
@@ -1593,18 +1626,26 @@
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           var docCode = meta.dc || meta.docCode;
           if (!docCode) return;
-          var batches = meta.bt ? meta.bt.map(function (b) { return { batchNo: b.n, qty: b.q }; }) : (meta.batches || []);
+          var lineNo = parseInt(String(r.ZZC_Code || '').split('-A').pop(), 10) || 0;
+          var lkey = docCode + '-A' + lineNo;
+          var lineBatches = batchesByLine[lkey];
+          var lineSerials = serialsByLine[lkey];
+          // Batches/serials of the line now live in svcrptbat child rows; for
+          // rows saved before the split, fall back to the embedded bt/sn.
+          var batches = (lineBatches && lineBatches.length)
+            ? lineBatches
+            : (meta.bt ? meta.bt.map(function (b) { return { batchNo: b.n, qty: b.q }; }) : (meta.batches || []));
           var actionRow = {
             item: meta.i || meta.item || '', desc: meta.ds || meta.desc || '', uom: meta.u || meta.uom || '',
             qty: (meta.q !== undefined ? meta.q : meta.qty) || 0, price: (meta.p !== undefined ? meta.p : meta.price) || 0,
             batchNo: batches.length ? batches[0].batchNo : (meta.batchNo || ''), batches: batches,
-            serialNos: meta.sn || meta.serialNos || [], binLocationID: (meta.bl !== undefined ? meta.bl : meta.binLocationID) || null
+            serialNos: (lineSerials && lineSerials.length) ? lineSerials : (meta.sn || meta.serialNos || []),
+            binLocationID: (meta.bl !== undefined ? meta.bl : meta.binLocationID) || null
           };
           // Package components come from their own svcrptpkg rows (keyed
           // '<docCode>-A<n>'); the old embedded meta.pc is read as a fallback
           // for rows saved before the split. Flags/baseQty/multi-batch come
           // back exactly as saved instead of being guessed on load.
-          var lineNo = parseInt(String(r.ZZC_Code || '').split('-A').pop(), 10) || 0;
           var lineComps = (lineNo && pkgByLine[docCode + '-A' + lineNo]) || [];
           if (lineComps.length) {
             actionRow.totalPackage = meta.pn || 1;
@@ -1643,7 +1684,7 @@
             createdAt: meta.ca || meta.createdAt || '', createdBy: meta.cb || meta.createdBy || ''
           });
         });
-        addLog('Loaded ' + reports.length + ' service reports (' + equipRows.length + ' equipment, ' + actionRows.length + ' action-taken lines, ' + (pkgRows || []).length + ' package components)');
+        addLog('Loaded ' + reports.length + ' service reports (' + equipRows.length + ' equipment, ' + actionRows.length + ' action-taken lines, ' + (pkgRows || []).length + ' package components, ' + (batRows || []).length + ' batch/serial rows)');
         renderCompanyFilterOptions();
         renderList();
         clearDirty();
@@ -3352,10 +3393,10 @@
       lines.push(sqlInsertLine(EQUIP_TABLE_CODE, r.code + '-E' + (i + 1), payload, dateCreated, now, oversized, ['rm', 'sy', 'ds']));
     });
     (r.actionTaken || []).forEach(function (a, i) {
+      var li = i + 1;
       var payload = {
         dc: r.code, i: a.item || '', ds: a.desc || '', u: a.uom || '', q: a.qty || 0, p: a.price || 0,
-        bt: (a.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty }; }),
-        sn: a.serialNos || [], bl: a.binLocationID || null
+        bl: a.binLocationID || null
       };
       // Package components live in their OWN rows (svcrptpkg, one per component)
       // instead of embedded here - embedding blew the NVARCHAR(400) budget as
@@ -3363,16 +3404,33 @@
       // SR-000026-A1, whole Save died with SQL 8152). The action row keeps only
       // the package multiplier; every batch/serial of every component persists.
       if (a.packageComponents && a.packageComponents.length) payload.pn = a.totalPackage || 0;
-      lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + (i + 1), payload, dateCreated, now, oversized, ['ds']));
+      lines.push(sqlInsertLine(ACTION_TABLE_CODE, r.code + '-A' + li, payload, dateCreated, now, oversized, ['ds']));
+      // Batches/serials of the line go in their own svcrptbat child rows too
+      // (one per batch, one per serial) - the old inline bt/sn array blew the
+      // 400-char cap on a line with 10+ batches exactly like components did
+      // ("could not fit" toast, line silently dropped). Code '-B<m>' / '-S<m>'.
+      (a.batches || []).forEach(function (b, m) {
+        lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-B' + (m + 1), { dc: r.code, li: li, n: b.batchNo, q: b.qty }, dateCreated, now, oversized, []));
+      });
+      (a.serialNos || []).forEach(function (s, m) {
+        lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-S' + (m + 1), { dc: r.code, li: li, s: s }, dateCreated, now, oversized, []));
+      });
       (a.packageComponents || []).forEach(function (c, m) {
+        var pi = m + 1;
         var cpayload = {
-          dc: r.code, li: i + 1, i: c.id, c: c.code || '', d: c.desc || '', u: c.uomID, um: c.uom || '',
+          dc: r.code, li: li, i: c.id, c: c.code || '', d: c.desc || '', u: c.uomID, um: c.uom || '',
           q: c.qty || 0, p: c.price || 0, bq: c.baseQty || 0, bl: c.binLocationID || null,
-          bc: c.batchControl ? 1 : 0, sc: c.serialControl ? 1 : 0,
-          bt: (c.batches || []).map(function (b) { return { n: b.batchNo, q: b.qty, e: b.expiryDate || '' }; }),
-          sn: c.serialNos || []
+          bc: c.batchControl ? 1 : 0, sc: c.serialControl ? 1 : 0
         };
-        lines.push(sqlInsertLine(PACKAGE_TABLE_CODE, r.code + '-A' + (i + 1) + '-P' + (m + 1), cpayload, dateCreated, now, oversized, ['d']));
+        lines.push(sqlInsertLine(PACKAGE_TABLE_CODE, r.code + '-A' + li + '-P' + pi, cpayload, dateCreated, now, oversized, ['d']));
+        // Component batches/serials also split into svcrptbat child rows,
+        // keyed '-A<n>-P<p>-B<m>' / '-P<p>-S<m>'.
+        (c.batches || []).forEach(function (b, k) {
+          lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-P' + pi + '-B' + (k + 1), { dc: r.code, li: li, pi: pi, n: b.batchNo, q: b.qty, e: b.expiryDate || '' }, dateCreated, now, oversized, []));
+        });
+        (c.serialNos || []).forEach(function (s, k) {
+          lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-P' + pi + '-S' + (k + 1), { dc: r.code, li: li, pi: pi, s: s }, dateCreated, now, oversized, []));
+        });
       });
     });
     return lines;
@@ -3383,7 +3441,8 @@
       'DELETE FROM ZZT_' + REPORT_TABLE_CODE + ';',
       'DELETE FROM ZZT_' + EQUIP_TABLE_CODE + ';',
       'DELETE FROM ZZT_' + ACTION_TABLE_CODE + ';',
-      'DELETE FROM ZZT_' + PACKAGE_TABLE_CODE + ';'
+      'DELETE FROM ZZT_' + PACKAGE_TABLE_CODE + ';',
+      'DELETE FROM ZZT_' + BATCH_TABLE_CODE + ';'
     ];
     var oversized = [];
     reports.forEach(function (r) { lines = lines.concat(buildReportInsertLines(r, now, oversized)); });
@@ -3407,6 +3466,7 @@
       lines.push("DELETE FROM ZZT_" + EQUIP_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-E%';");
       lines.push("DELETE FROM ZZT_" + ACTION_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-A%';");
       lines.push("DELETE FROM ZZT_" + PACKAGE_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-A%';");
+      lines.push("DELETE FROM ZZT_" + BATCH_TABLE_CODE + " WHERE ZZC_Code LIKE '" + codeSafe + "-A%';");
       var r = reports.filter(function (rr) { return rr.code === code; })[0];
       if (r) lines = lines.concat(buildReportInsertLines(r, now, oversized));
     });
