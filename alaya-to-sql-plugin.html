@@ -232,7 +232,19 @@
     </div>
 
     <div id="transfer-results" style="margin-top:16px;display:none;">
-      <h2>Transfer Results</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <h2 style="margin:0;">Transfer Results</h2>
+        <label style="font-size:12px;color:#4b5563;">Status
+          <select id="results-filter" title="Filter rows by transfer status" style="margin-left:6px;padding:4px 8px;">
+            <option value="all">All</option>
+            <option value="transferred">Transferred</option>
+            <option value="created">Created</option>
+            <option value="updated">Updated</option>
+            <option value="skipped">Skipped</option>
+            <option value="failed">Failed</option>
+          </select>
+        </label>
+      </div>
       <div id="results-list"></div>
     </div>
     <div id="transfer-summary" style="margin-top:16px;display:none;">
@@ -2434,6 +2446,7 @@ function runTransferMaster(from, to, company, alayaCid) {
   $('#transfer-results').hide();
   $('#summary-list').empty();
   $('#transfer-summary').hide();
+  applyResultsFilter();
 
   var transfers = [];
   if ($('#s-t-cashsales').is(':checked')) transfers.push('cashsales');
@@ -2624,7 +2637,7 @@ function renderLiveProgress(p) {
     if (it.code) nm += (nm ? ' · ' : '') + it.code;
     if (it.name) nm += ' — ' + it.name;
     var st = it.status === 'success' ? (it.message || 'transferred') : (it.status || 'pending');
-    html += '<div class="transfer-item">';
+    html += '<div class="transfer-item" data-st="' + escHtml(String(st).toLowerCase()) + '">';
     html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
     html += '<div class="detail">' + escHtml(it.status === 'success' ? 'transfer ' + st : (it.message || '')) + '</div></div>';
     html += '<div class="status ' + cls + '">' + escHtml(st) + '</div>';
@@ -2633,6 +2646,7 @@ function renderLiveProgress(p) {
   if (html) {
     $('#results-list').html(html);
     $('#transfer-results').css('display', 'block');
+    applyResultsFilter();
   }
 }
 
@@ -2692,7 +2706,7 @@ function showTransferResults(results) {
       var msg = d.message || d.error || '';
       var st = d.action || d.status || '';
       if (st === 'success') st = 'transferred';
-      html += '<div class="transfer-item transfer-sub">';
+      html += '<div class="transfer-item transfer-sub" data-st="' + escHtml(String(st).toLowerCase()) + '">';
       html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
       html += '<div class="detail">' + escHtml(msg) + '</div></div>';
       html += '<div class="status ' + cls + '">' + escHtml(st) + '</div>';
@@ -2701,7 +2715,52 @@ function showTransferResults(results) {
   });
   $('#summary-list').html(html);
   $('#transfer-summary').show();
+  applyResultsFilter();
 }
+
+// ── Status filter for Transfer Results / Summary ──
+// Lets the user narrow 100+ rows down to e.g. only Failed/Skipped.
+function rowMatchesStatusFilter(st, f) {
+  st = String(st || '').toLowerCase();
+  if (f === 'all') return true;
+  if (f === 'transferred') return st === 'created' || st === 'updated' || st === 'transferred';
+  if (f === 'created') return st === 'created';
+  if (f === 'updated') return st === 'updated';
+  if (f === 'skipped') return st === 'skipped' || st === 'pending';
+  if (f === 'failed') return st === 'error' || st === 'failed';
+  return true;
+}
+function applyResultsFilter() {
+  var f = $('#results-filter').val() || 'all';
+  var counts = { all: 0, transferred: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
+  function bucket(st) {
+    if (st === 'created') { counts.created++; counts.transferred++; }
+    else if (st === 'updated') { counts.updated++; counts.transferred++; }
+    else if (st === 'transferred') { counts.transferred++; }
+    else if (st === 'skipped' || st === 'pending') { counts.skipped++; }
+    else if (st === 'error' || st === 'failed') { counts.failed++; }
+  }
+  // Live list: every row is a per-record row.
+  $('#results-list .transfer-item').each(function() {
+    var st = String($(this).attr('data-st') || '').toLowerCase();
+    counts.all++;
+    bucket(st);
+    $(this).toggle(rowMatchesStatusFilter(st, f));
+  });
+  // Summary list: filter the per-record sub-rows, always keep type headers.
+  $('#summary-list .transfer-sub').each(function() {
+    var st = String($(this).attr('data-st') || '').toLowerCase();
+    $(this).toggle(rowMatchesStatusFilter(st, f));
+  });
+  // Show counts in the dropdown so failures are visible without filtering.
+  var labels = { all: 'All', transferred: 'Transferred', created: 'Created',
+                 updated: 'Updated', skipped: 'Skipped', failed: 'Failed' };
+  $('#results-filter option').each(function() {
+    var v = $(this).val();
+    $(this).text(labels[v] + ' (' + (counts[v] || 0) + ')');
+  });
+}
+$('#results-filter').on('change', applyResultsFilter);
 
 // ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
 $('.tab-btn').on('click', function() {
