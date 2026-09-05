@@ -835,16 +835,19 @@
      the default company with no on-screen indication was confusing (looked like
      other companies had simply vanished); show a Retry link instead. */
   function loadCompanyInfo() {
-    var cid = DEFAULT_COMPANY_ID;
-    qrySql("SELECT TOP 1 * FROM Company WHERE CO_ID=" + cid, 1).then(function (resp) {
-      var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
-      var cols = resp && resp.results && resp.results[0] && resp.results[0].columns || [];
-      if (r) {
-        var find = function() { var a = arguments; for (var i=0;i<a.length;i++) { var idx = cols.indexOf(a[i]); if (idx >= 0 && r[idx]) return r[idx]; } return ''; };
-        companyInfo = { name: find('CO_Name'), regNo: find('CO_RegistrationNo','CO_RegNo'), addr1: find('CO_MainAddress1','CO_Address1'), addr2: find('CO_MainAddress2','CO_Address2'), addr3: find('CO_MainAddress3','CO_Address3'), addr4: find('CO_MainAddress4','CO_Address4'), postcode: find('CO_MainPostcode','CO_Postcode'), tel: find('CO_Phone1','CO_Tel'), fax: find('CO_Fax1','CO_Fax') };
-        addLog('Company info loaded: ' + companyInfo.name);
-      }
-    }).fail(function (e) { addLog('Company info load failed: ' + (e && e.statusText || e)); });
+    if (!apiUrl || !authToken) return;
+    $.ajax({
+      url: apiUrl + 'api/Company/GetCompanyInfoByCompanyID', type: 'POST', cache: false,
+      headers: { 'Authorization': authToken },
+      data: { CompanyID: DEFAULT_COMPANY_ID },
+      success: function (resp) {
+        var c = (resp && resp.data) || resp;
+        if (!c || !c.CO_Name) { addLog('GetCompanyInfoByCompanyID: no data'); return; }
+        companyInfo = { name: c.CO_Name || '', regNo: c.CO_RegistrationNo || '', addr1: c.CO_MainAddress1 || '', addr2: c.CO_MainAddress2 || '', addr3: c.CO_MainAddress3 || '', addr4: c.CO_MainAddress4 || '', postcode: c.CO_MainPostcode || '', tel: c.CO_Phone1 || '', fax: c.CO_Fax1 || '' };
+        addLog('Company info loaded via API: ' + companyInfo.name);
+      },
+      error: function (xhr) { addLog('GetCompanyInfoByCompanyID failed (' + xhr.status + ')'); }
+    });
   }
   function showCompanyLoadError(msg) {
     if ($('#company-load-error').length) { $('#company-load-error').text('Company list failed to load (' + (msg || 'unknown error') + ').').show(); return; }
