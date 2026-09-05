@@ -2639,6 +2639,8 @@
     if (!comp) return;
     var itemRec = items.filter(function (im) { return $.trim(im.code) === comp.code; })[0] ||
       { id: comp.id, code: comp.code, desc: comp.desc, batchControl: comp.batchControl, serialControl: comp.serialControl };
+    if (itemRec && (itemRec.batchControl === undefined || itemRec.batchControl === null)) itemRec.batchControl = comp.batchControl;
+    if (itemRec && (itemRec.serialControl === undefined || itemRec.serialControl === null)) itemRec.serialControl = comp.serialControl;
     batchTarget = { row: comp, after: function () { renderPackageTable(); } };
     openBatchModalCore(comp, itemRec, force);
   }
@@ -3337,7 +3339,7 @@
       sbi: r.salesBranchID || '', sbc: r.salesBranchCode || '', wid: r.warehouseID || null, fdisc: r.footerDiscount || 0,
       ca: r.createdAt || '', cb: r.createdBy || ''
     };
-    lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now, oversized, ['rm', 'rf', 'a4', 'a3', 'cn']));
+    lines.push(sqlInsertLine(REPORT_TABLE_CODE, r.code, headerPayload, dateCreated, now, oversized, ['cn', 'a1', 'a2', 'a3', 'a4', 'rm', 'rf', 'cp', 'rb', 'sv']));
 
     (r.equipment || []).forEach(function (eq, i) {
       var payload = { dc: r.code, ds: eq.desc || '', br: eq.brand || '', md: eq.model || '', sn: eq.sn || '', sy: eq.symptom || '', rm: eq.remark || '' };
