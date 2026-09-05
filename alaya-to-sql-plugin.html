@@ -219,7 +219,6 @@
 
     <div class="btn-row" style="align-items:center;margin-top:12px;">
       <button id="btn-transfer" class="btn-primary">Transfer</button>
-      <button id="btn-load-data" class="btn-secondary">Load Alaya Data</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-left:8px;">
         <input type="checkbox" id="t-dryrun" checked /> Dry run (validate only, no posting)
       </label>
@@ -277,7 +276,7 @@
       <p style="color:#6b7280;font-size:0.85rem;">Click "Reload Data" to load documents.</p>
     </div>
     <div id="preview-content" style="max-height:400px;overflow-y:auto;">
-      <p style="color:#6b7280;font-size:0.85rem;">Click "Load Alaya Data" or "Reload Data" to preview data from Alaya.</p>
+      <p style="color:#6b7280;font-size:0.85rem;">Data loads automatically when you click Transfer.</p>
     </div>
   </div>
 
@@ -622,7 +621,7 @@ var clientId = '';
 var username = '';
 var authToken = '';
 var companies = [];
-var alayaData = { customers: [], vendors: [], items: [], sales: [] };
+var alayaData = { customers: [], vendors: [], items: [], sales: [], _masterCid: null };
 var pendingDcbCallbacks = {};
 var pendingFetchCallbacks = {};
 var SETTINGS_TABLE = 'ZZT_ALAYATOSQL';
@@ -1417,7 +1416,7 @@ $('#alaya-company-select').on('change', function() {
     refreshBranchesForCompany(id);
   }
   if (id && hostOrigin) {
-    $('#btn-load-data').trigger('click');
+    loadMasterData();
   }
 });
 
@@ -1787,21 +1786,37 @@ function loadScopedViaRest(cid, done) {
             (rs.rows || []).forEach(function(row) {
               var custId = row[ciCust];
               if (custId === null || custId === undefined) return;
-              cc[custId] = {
+              var key = String(custId).trim();
+              if (!key) return;
+              cc[key] = {
                 CC_ReferenceNo: (row[ciRef] !== null && row[ciRef] !== undefined) ? String(row[ciRef]) : undefined,
                 CC_ReferenceControlAcct: (row[ciRefAcct] !== null && row[ciRefAcct] !== undefined) ? String(row[ciRefAcct]) : undefined,
                 CC_ControlAccount: (row[ciAcct] !== null && row[ciAcct] !== undefined) ? String(row[ciAcct]) : undefined
               };
             });
-            // merge into customerRaw by Cust_ID
+            var ccKeys = Object.keys(cc);
+            // merge into customerRaw. Try Cust_ID, then CustomerID/CC_CustomerID/ID.
+            var merged = 0;
             alayaData.customerRaw && Array.isArray(alayaData.customerRaw) && alayaData.customerRaw.forEach(function(c) {
               if (c === null || typeof c !== 'object') return;
-              var row = cc[c.Cust_ID];
+              var row = null;
+              var cands = [c.Cust_ID, c.CustomerID, c.CC_CustomerID, c.ID];
+              for (var i = 0; i < cands.length && !row; i++) {
+                if (cands[i] === null || cands[i] === undefined) continue;
+                row = cc[String(cands[i]).trim()] || null;
+              }
               if (!row) return;
+              merged++;
               if (row.CC_ReferenceNo !== undefined) c.CC_ReferenceNo = row.CC_ReferenceNo;
               if (row.CC_ReferenceControlAcct !== undefined) c.CC_ReferenceControlAcct = row.CC_ReferenceControlAcct;
               if (row.CC_ControlAccount !== undefined) c.CC_ControlAccount = row.CC_ControlAccount;
             });
+            addLog('CompanyCustomer: ' + (rs.rows || []).length + ' CC rows for company ' + cid +
+                   ', matched ' + merged + ' customers', merged ? 'log-ok' : 'log-warn');
+            if (ccKeys.length && merged === 0) {
+              addLog('CC merge diag: cc[0]=' + ccKeys[0] + '; customer keys=' +
+                     (alayaData.customerRaw[0] ? Object.keys(alayaData.customerRaw[0]).slice(0, 24).join(',') : 'no customers'), 'log-warn');
+            }
           }
         } catch (e) { addLog('CompanyCustomer merge error: ' + e.message, 'log-warn'); }
       } else {
@@ -1849,8 +1864,13 @@ function loadScopedViaRest(cid, done) {
   });
 }
 
-function finishScopedLoad(btn) {
+function finishScopedLoad(done) {
   var advType = $('input[name="adv-type"]:checked').val() || 'customer';
+  var after = function() {
+    showToast('Alaya data loaded successfully');
+    renderPreview();
+    if (done) done();
+  };
   if (advType === 'vendor') {
     var vendorSql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AP_SUPPLIER WHERE STATUS = 'Active' ORDER BY CODE";
     executeSqlViaHost(vendorSql).then(function(vmsg) {
@@ -1861,44 +1881,33 @@ function finishScopedLoad(btn) {
           addLog('Loaded ' + alayaData.vendors.length + ' vendors from Alaya', 'log-ok');
         }
       } catch(e) { addLog('Parse vendors error: ' + e.message, 'log-err'); }
-      btn.prop('disabled', false).text('Load Alaya Data');
-      showToast('Alaya data loaded successfully');
-      renderPreview();
-    }).catch(function(err) {
-      addLog('Load vendors error: ' + err.message, 'log-err');
-      btn.prop('disabled', false).text('Load Alaya Data');
-      renderPreview();
-    });
+      after();
+    }).catch(function(err) { addLog('Load vendors error: ' + err.message, 'log-err'); after(); });
   } else {
-    btn.prop('disabled', false).text('Load Alaya Data');
-    showToast('Alaya data loaded successfully');
-    renderPreview();
+    after();
   }
 }
 
-$('#btn-load-data').on('click', function() {
+function loadMasterData(done) {
   if (!hostOrigin) {
     showToast('Not connected to Alaya (ALAYA_INIT pending)', true);
+    if (done) done();
     return;
   }
-
-  var btn = $(this);
   var cid = currentAlayaCompanyID();
   if (cid && apiUrl && authToken) {
     addLog('Loading Alaya data for company ' + cid + ' (' + currentAlayaCompanyCode() + ')...', 'log-info');
-    btn.prop('disabled', true).text('Loading...');
-    loadScopedViaRest(cid, function() { finishScopedLoad(btn); });
+    loadScopedViaRest(cid, function() { finishScopedLoad(done); });
     return;
   }
-
   addLog('Loading Alaya data (unscoped fallback - select a company for scoped load)...', 'log-info');
-  btn.prop('disabled', true).text('Loading...');
-  
+
   // Load customers
   var sql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AR_CUSTOMER WHERE STATUS = 'Active' ORDER BY CODE";
   executeSqlViaHost(sql).then(function(msg) {
     if (msg.error) {
       addLog('Load customers failed: ' + msg.error, 'log-err');
+      if (done) done();
       return;
     }
     try {
@@ -1917,6 +1926,7 @@ $('#btn-load-data').on('click', function() {
   }).then(function(msg) {
     if (msg.error) {
       addLog('Load items failed: ' + msg.error, 'log-err');
+      if (done) done();
       return;
     }
     try {
@@ -1929,7 +1939,6 @@ $('#btn-load-data').on('click', function() {
       addLog('Parse items error: ' + e.message, 'log-err');
     }
     
-    $('#btn-load-data').prop('disabled', false).text('Load Alaya Data');
     var advType = $('input[name="adv-type"]:checked').val() || 'customer';
     if (advType === 'vendor') {
       var vendorSql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AP_SUPPLIER WHERE STATUS = 'Active' ORDER BY CODE";
@@ -1943,19 +1952,22 @@ $('#btn-load-data').on('click', function() {
         } catch(e) { addLog('Parse vendors error: ' + e.message, 'log-err'); }
         showToast('Alaya data loaded successfully');
         renderPreview();
+        if (done) done();
       }).catch(function(err) {
         addLog('Load vendors error: ' + err.message, 'log-err');
         renderPreview();
+        if (done) done();
       });
     } else {
       showToast('Alaya data loaded successfully');
       renderPreview();
+      if (done) done();
     }
   }).catch(function(err) {
     addLog('Load data error: ' + err.message, 'log-err');
-    $('#btn-load-data').prop('disabled', false).text('Load Alaya Data');
+    if (done) done();
   });
-});
+}
 
 // ΓöÇΓöÇ Advanced doc grid (desktop Advanced dialog port) ΓöÇΓöÇ
 function advDocTypeToTransfer() {
@@ -2369,6 +2381,20 @@ $('#btn-transfer').on('click', function() {
   var alayaCid = currentAlayaCompanyID();
   if (!alayaCid) { showToast('Please select an Alaya company', true); return; }
 
+  // Auto-load master data (customers + CompanyCustomer CC merge) before
+  // transferring: one click = load + transfer. Manual Load button removed.
+  if (alayaData._masterCid === alayaCid && alayaData.customerRaw && alayaData.customerRaw.length) {
+    runTransferMaster(from, to, company, alayaCid);
+  } else {
+    addLog('Auto-loading Alaya data for company ' + alayaCid + ' (' + currentAlayaCompanyCode() + ')...', 'log-info');
+    loadMasterData(function() {
+      alayaData._masterCid = alayaCid;
+      runTransferMaster(from, to, company, alayaCid);
+    });
+  }
+});
+
+function runTransferMaster(from, to, company, alayaCid) {
   addLog('Starting transfer: ' + from + ' ~ ' + to + ' to ' + company, 'log-info');
   $('#transfer-progress').show();
   $('#btn-transfer').prop('disabled', true);
@@ -2420,8 +2446,8 @@ $('#btn-transfer').on('click', function() {
   if (settings.tCashpurchpay && transfers.indexOf('vendorpayment') < 0) transfers.push('vendorpayment');
   if ((transfers.indexOf('customer') >= 0 && !custDocs.length) ||
       (transfers.indexOf('vendor') >= 0 && !vendDocs.length)) {
-    showToast('Load Alaya Data first (Preview) before transferring master data', true);
-    addLog('Transfer blocked: no master data loaded - click Load Alaya Data first', 'log-err');
+    showToast('No master data from Alaya to transfer', true);
+    addLog('Transfer blocked: no master data loaded - load returned empty', 'log-err');
     $('#transfer-progress').hide();
     $('#btn-transfer').prop('disabled', false);
     return;
@@ -2501,7 +2527,7 @@ $('#btn-transfer').on('click', function() {
     }
   });
   }); // end fetchAllSourceDocs
-});
+}
 
 // ΓöÇΓöÇ Show transfer results ΓöÇΓöÇ
 // ── Live transfer progress (polled; mirrors the desktop Link tool's
