@@ -960,6 +960,9 @@
         // refreshZeroPrices because the item wasn't in cache yet. Re-run it now
         // that the full list is here so those rows finally resolve their price.
         refreshZeroPrices();
+        // Same late-arrival problem as prices: an already-open report's rows
+        // reference items that weren't in the cache yet when it opened.
+        refreshMissingBatchFlags();
         // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
         (function enrichSeq(start){
           if(start>=Math.min(items.length,80)) return;
@@ -1590,7 +1593,7 @@
             else if (meta.s !== undefined) (serialsByComponent[ckey] = serialsByComponent[ckey] || []).push(meta.s);
           } else {
             var lkey = meta.dc + '-A' + li;
-            if (meta.n !== undefined) (batchesByLine[lkey] = batchesByLine[lkey] || []).push({ batchNo: meta.n, qty: meta.q });
+            if (meta.n !== undefined) (batchesByLine[lkey] = batchesByLine[lkey] || []).push({ batchNo: meta.n, qty: meta.q, expiryDate: meta.e || '' });
             else if (meta.s !== undefined) (serialsByLine[lkey] = serialsByLine[lkey] || []).push(meta.s);
           }
         });
@@ -1868,7 +1871,7 @@
     renderActionTable();
     // Reopened rows saved with price 0 never got a pick-time fetch - refresh
     // them now. Deleted docs are frozen views: no fetching, no re-render.
-    if (!isDeletedDoc) refreshZeroPrices();
+    if (!isDeletedDoc) { refreshZeroPrices(); refreshMissingBatchFlags(); }
     // Deleted = frozen: lock every field/button inside the detail view, then
     // re-enable Back / Print / Cancel (pure navigation + printing). The Doc No
     // link from the list stays the only way in.
@@ -1942,6 +1945,7 @@
     // Copied rows keep their saved prices, but a 0-price row deserves the same
     // lazy refresh as a reopened one.
     refreshZeroPrices();
+    refreshMissingBatchFlags();
     $('#view-list').hide();
     $('#view-detail').show();
     markDirty('copied from ' + code);
@@ -2610,6 +2614,41 @@
         else if (found.uomID) { a.priceStatus = 'fetching price…'; lazyFetchPrice(idx, found); }
       });
       if (dirty) renderActionTable();
+    }
+    // A row's item comes from the shared items[] cache, not a fresh pick, when
+    // a report is reopened/copied - applyItemToRow's own lazy batch/serial-flag
+    // fetch (below) never runs for those rows, and enrichItemsBatchAndPrice only
+    // covers the first 80 items loaded (rate-limit guard) - any item beyond that
+    // stays batchControl/serialControl === undefined FOREVER once the report is
+    // open, with no button in the Action Taken table to force a fetch (need is
+    // falsy for undefined, same as for "confirmed not batch/serial"), which then
+    // permanently blocks Save with "loading item data, please wait" (found via
+    // code review after the identical Package Item bug, commit b11769e). Mirrors
+    // refreshZeroPrices - call after openDetail/copyReport and once the paged
+    // item list finishes loading.
+    function refreshMissingBatchFlags() {
+      if (!editingReport || !editingReport.actionTaken) return;
+      var ids = [];
+      (editingReport.actionTaken || []).forEach(function (a) {
+        if (!a.item) return;
+        var found = items.filter(function (x) { return String(x.code) === String(a.item); })[0];
+        if (found && found.id && found.typeID !== PACKAGE_ITEM_TYPE_ID
+            && (found.batchControl === undefined || found.serialControl === undefined)
+            && ids.indexOf(found.id) < 0) ids.push(parseInt(found.id, 10));
+      });
+      if (!ids.length) return;
+      qrySql("SELECT IM_ID, IM_BatchControl_YN, IM_SerializeControl_YN FROM ItemMaster WHERE IM_ID IN (" + ids.join(',') + ")", 500).then(function (resp) {
+        var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+        var map = {};
+        rows.forEach(function (r) { map[r[0]] = { batch: !!r[1], serial: !!r[2] }; });
+        items.forEach(function (im) {
+          if (map[im.id] && (im.batchControl === undefined || im.serialControl === undefined)) {
+            im.batchControl = map[im.id].batch; im.serialControl = map[im.id].serial;
+          }
+        });
+        addLog('Refreshed batch/serial flags for ' + ids.length + ' item(s) missing from the enrichment cap');
+        renderActionTable();
+      }).fail(function (e) { addLog('refreshMissingBatchFlags failed: ' + (e && e.statusText || e)); });
     }
     function applyItemToRow(i, itemRecord) {
     editingReport.actionTaken[i].item = itemRecord.code;
@@ -3423,7 +3462,7 @@
       // 400-char cap on a line with 10+ batches exactly like components did
       // ("could not fit" toast, line silently dropped). Code '-B<m>' / '-S<m>'.
       (a.batches || []).forEach(function (b, m) {
-        lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-B' + (m + 1), { dc: r.code, li: li, n: b.batchNo, q: b.qty }, dateCreated, now, oversized, []));
+        lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-B' + (m + 1), { dc: r.code, li: li, n: b.batchNo, q: b.qty, e: b.expiryDate || '' }, dateCreated, now, oversized, []));
       });
       (a.serialNos || []).forEach(function (s, m) {
         lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-S' + (m + 1), { dc: r.code, li: li, s: s }, dateCreated, now, oversized, []));
