@@ -261,6 +261,10 @@
     #print-view .print-sub { color:#555; margin-bottom:16px; }
     #print-view .print-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 24px; margin-bottom:18px; font-size:0.88rem; }
     #print-view .print-grid div b { display:inline-block; min-width:130px; }
+    #print-view .print-letterhead { text-align:center; border:2px solid #c00; padding:12px 16px; margin-bottom:14px; }
+    #print-view .print-co-name { font-size:1.4rem; font-weight:800; color:#1a3c6e; }
+    #print-view .print-co-detail { font-size:0.82rem; color:#444; margin-top:2px; }
+    #print-view .print-banner { background:#c00; color:#fff; text-align:center; font-weight:700; font-size:0.95rem; padding:6px 0; margin-bottom:14px; letter-spacing:1px; }
     @media print {
       body > *:not(#print-view) { display:none !important; }
       #print-view { display:block !important; }
@@ -654,6 +658,8 @@
   var editingCode = null; // null = new report
   var hasUnsavedChanges = false;
   var isSaving = false;
+  var listPage = 0;
+  var PAGE_SIZE = 30;
 
   function ts() { return new Date().toLocaleTimeString(); }
   function addLog(msg) { $('#log').prepend($('<li>').append($('<span class="ts">').text(ts()), document.createTextNode(msg))); }
@@ -788,6 +794,7 @@
      Populates the Company filter with real companies instead of deriving options
      from whatever's already been saved. */
   var companies = [];
+  var companyInfo = {}; // { name, regNo, addr1-4, tel, fax }
   function loadCompaniesFromApi() {
     if (!apiUrl || !authToken) return;
     var endpoint = apiUrl + 'api/Company/GetAllCompany';
@@ -816,6 +823,12 @@
         renderCompanyFilterOptions();
         renderList();
         loadScopedListsForCurrentCompany();
+        // Fetch company details for print letter head
+        var cid = DEFAULT_COMPANY_ID;
+        qrySql("SELECT TOP 1 CO_Name, CO_Address1, CO_Address2, CO_Address3, CO_Address4, CO_Tel, CO_Fax, CO_RegNo FROM Company WHERE CO_ID=" + cid, 1).then(function (resp) {
+          var r = resp && resp.results && resp.results[0] && resp.results[0].rows && resp.results[0].rows[0];
+          if (r) { companyInfo = { name: r[0]||'', addr1: r[1]||'', addr2: r[2]||'', addr3: r[3]||'', addr4: r[4]||'', tel: r[5]||'', fax: r[6]||'', regNo: r[7]||'' }; addLog('Company info loaded: ' + companyInfo.name); }
+        });
       },
       error: function (xhr) {
         addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company only');
@@ -1671,7 +1684,11 @@
     });
     var $tbody = $('#rpt-tbody').empty();
     filtered.sort(function (a, b) { return (b.code || '').localeCompare(a.code || ''); });
-    filtered.forEach(function (r) {
+    var totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (listPage >= totalPages) listPage = totalPages - 1;
+    if (listPage < 0) listPage = 0;
+    var paged = filtered.slice(listPage * PAGE_SIZE, (listPage + 1) * PAGE_SIZE);
+    paged.forEach(function (r) {
       var $tr = $('<tr>');
       var $icons = $('<div class="row-icon-actions">');
       if (canSaveEdit) $icons.append($('<button class="row-icon-btn" title="Edit">&#9998;</button>').on('click', function (e) { e.stopPropagation(); openDetail(r.code); }));
@@ -1701,12 +1718,21 @@
     // must stay visible even with zero results (confirmed live: hiding the whole
     // table on an empty company made "+ New" disappear along with it).
     $('#empty-state').toggle(filtered.length === 0);
-    $('#list-footer').text('Rec: ' + filtered.length);
+    if (filtered.length <= PAGE_SIZE) {
+      $('#list-footer').text('Rec: ' + filtered.length);
+    } else {
+      var from = listPage * PAGE_SIZE + 1;
+      var to = Math.min((listPage + 1) * PAGE_SIZE, filtered.length);
+      var $f = $('#list-footer').empty();
+      $f.append($('<button class="btn-secondary btn-sm" type="button" style="margin-right:6px;">').text('\u25C0 Prev').prop('disabled', listPage === 0).on('click', function () { listPage--; renderList(); }));
+      $f.append($('<span>').text('Rec ' + from + '-' + to + ' of ' + filtered.length));
+      $f.append($('<button class="btn-secondary btn-sm" type="button" style="margin-left:6px;">').text('Next \u25B6').prop('disabled', listPage >= totalPages - 1).on('click', function () { listPage++; renderList(); }));
+    }
     $('#btn-new-report, #btn-new-report-top').toggle(canSaveEdit);
   }
-  $('#inp-search').on('input', renderList);
-  $('.status-check').on('change', renderList);
-  $('#btn-search-list').on('click', renderList);
+  $('#inp-search').on('input', function () { listPage = 0; renderList(); });
+  $('.status-check').on('change', function () { listPage = 0; renderList(); });
+  $('#btn-search-list').on('click', function () { listPage = 0; renderList(); });
   $('#inp-date-from, #inp-date-to').on('change', renderList);
   $('#btn-clear-search').on('click', function (e) { e.preventDefault(); $('#inp-search').val(''); renderList(); });
   $('#sel-company-filter').on('change', renderList);
@@ -1885,9 +1911,16 @@
     var printDiscount = parseFloat(editingReport.footerDiscount) || 0;
     var printTotal = Math.max(0, printSubTotal - printDiscount);
 
+    var addrParts = [companyInfo.addr1, companyInfo.addr2, companyInfo.addr3, companyInfo.addr4].filter(Boolean);
+    var companyAddr = addrParts.join(', ');
     var html =
+      '<div class="print-letterhead">' +
+        '<div class="print-co-name">' + escapeHtml(companyInfo.name || editingReport.companyName || '') + '</div>' +
+        (companyInfo.regNo ? '<div class="print-co-detail">(Reg No: ' + escapeHtml(companyInfo.regNo) + ')</div>' : '') +
+        (companyAddr ? '<div class="print-co-detail">' + escapeHtml(companyAddr) + '</div>' : '') +
+      '</div>' +
+      '<div class="print-banner">SERVICE REPORT</div>' +
       '<div class="print-title">Service Report ' + escapeHtml($('#d-docno').val() || '[Unsaved]') + '</div>' +
-      '<div class="print-sub">' + escapeHtml($('#sel-company-filter option:selected').text() || '') + '</div>' +
       '<div class="print-grid">' +
         '<div><b>Account:</b>' + escapeHtml($('#d-cust-code').val()) + '</div>' +
         '<div><b>Date:</b>' + escapeHtml($('#d-date').val()) + '</div>' +
