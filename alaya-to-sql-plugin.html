@@ -233,7 +233,7 @@
 
     <div id="transfer-results" style="margin-top:16px;display:none;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <h2 style="margin:0;">Transfer Results</h2>
+        <h2 style="margin:0;"><button id="results-collapse" title="Collapse/Expand" style="border:none;background:none;cursor:pointer;font-size:16px;padding:0 6px 0 0;">&#9662;</button>Transfer Results</h2>
         <label style="font-size:12px;color:#4b5563;">Status
           <select id="results-filter" title="Filter rows by transfer status" style="margin-left:6px;padding:4px 8px;">
             <option value="all">All</option>
@@ -248,7 +248,9 @@
       <div id="results-list"></div>
     </div>
     <div id="transfer-summary" style="margin-top:16px;display:none;">
-      <h2>Transfer Summary</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <h2 style="margin:0;"><button id="summary-collapse" title="Collapse/Expand" style="border:none;background:none;cursor:pointer;font-size:16px;padding:0 6px 0 0;">&#9662;</button>Transfer Summary</h2>
+      </div>
       <div id="summary-list"></div>
     </div>
   </div>
@@ -2446,6 +2448,8 @@ function runTransferMaster(from, to, company, alayaCid) {
   $('#transfer-results').hide();
   $('#summary-list').empty();
   $('#transfer-summary').hide();
+  setResultsCollapsed(false);
+  setSummaryCollapsed(false);
   applyResultsFilter();
 
   var transfers = [];
@@ -2761,6 +2765,24 @@ function applyResultsFilter() {
   });
 }
 $('#results-filter').on('change', applyResultsFilter);
+
+// ── Collapse/expand for Transfer Results / Summary ──
+// The customer list can be 100+ rows; collapsing it lets the cash sales
+// summary below be reached without scrolling through everything.
+function setResultsCollapsed(collapsed) {
+  $('#results-list').toggle(!collapsed);
+  $('#results-collapse').html(collapsed ? '&#9656;' : '&#9662;');
+}
+function setSummaryCollapsed(collapsed) {
+  $('#summary-list').toggle(!collapsed);
+  $('#summary-collapse').html(collapsed ? '&#9656;' : '&#9662;');
+}
+$('#results-collapse').on('click', function() {
+  setResultsCollapsed($('#results-list').is(':visible'));
+});
+$('#summary-collapse').on('click', function() {
+  setSummaryCollapsed($('#summary-list').is(':visible'));
+});
 
 // ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
 $('.tab-btn').on('click', function() {
