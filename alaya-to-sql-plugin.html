@@ -1740,7 +1740,7 @@ function backendAjax(opts) {
 
 // ΓöÇΓöÇ Load Alaya data (company-scoped via REST when possible) ΓöÇΓöÇ
 function loadScopedViaRest(cid, done) {
-  var pending = 3, finished = false;
+  var pending = 4, finished = false;
   function oneDone() { if (--pending === 0 && !finished) { finished = true; done(); } }
   function setVendors(data, scoped) {
     alayaData.vendorRaw = data;
@@ -1763,6 +1763,56 @@ function loadScopedViaRest(cid, done) {
     error: function(xhr) { addLog('GetAllCustomer failed (' + xhr.status + ') for company ' + cid, 'log-err'); },
     complete: oneDone
   });
+  // CompanyCustomer: attach Company-scoped Reference No / Ref Control Acct to each
+  // customer so the backend has the source fields the real Link tool uses
+  // (CC_ReferenceNo, CC_ReferenceControlAcct). Should only use the MemoQuery bridge.
+  (function() {
+    var ccSql = "SELECT CC_CustomerID, CC_ReferenceNo, CC_ReferenceControlAcct, CC_ControlAccount " +
+                "FROM CompanyCustomer WHERE CC_CompanyID = " + (parseInt(cid, 10) || 1);
+    executeSqlViaHost(ccSql).then(function(msg) {
+      if (msg && !msg.error) {
+        try {
+          var cc = {};
+          var res = JSON.parse(msg.result);
+          if (res.success && res.results && res.results[0]) {
+            var rs = res.results[0];
+            var cols = (rs.columns || []).map(function(c) {
+              var m = /^\[([^\]]+)\]/.exec(c);
+              return m ? m[1] : c;
+            });
+            var ciCust = cols.indexOf('CC_CustomerID');
+            var ciRef = cols.indexOf('CC_ReferenceNo');
+            var ciRefAcct = cols.indexOf('CC_ReferenceControlAcct');
+            var ciAcct = cols.indexOf('CC_ControlAccount');
+            (rs.rows || []).forEach(function(row) {
+              var custId = row[ciCust];
+              if (custId === null || custId === undefined) return;
+              cc[custId] = {
+                CC_ReferenceNo: (row[ciRef] !== null && row[ciRef] !== undefined) ? String(row[ciRef]) : undefined,
+                CC_ReferenceControlAcct: (row[ciRefAcct] !== null && row[ciRefAcct] !== undefined) ? String(row[ciRefAcct]) : undefined,
+                CC_ControlAccount: (row[ciAcct] !== null && row[ciAcct] !== undefined) ? String(row[ciAcct]) : undefined
+              };
+            });
+            // merge into customerRaw by Cust_ID
+            alayaData.customerRaw && Array.isArray(alayaData.customerRaw) && alayaData.customerRaw.forEach(function(c) {
+              if (c === null || typeof c !== 'object') return;
+              var row = cc[c.Cust_ID];
+              if (!row) return;
+              if (row.CC_ReferenceNo !== undefined) c.CC_ReferenceNo = row.CC_ReferenceNo;
+              if (row.CC_ReferenceControlAcct !== undefined) c.CC_ReferenceControlAcct = row.CC_ReferenceControlAcct;
+              if (row.CC_ControlAccount !== undefined) c.CC_ControlAccount = row.CC_ControlAccount;
+            });
+          }
+        } catch (e) { addLog('CompanyCustomer merge error: ' + e.message, 'log-warn'); }
+      } else {
+        addLog('CompanyCustomer load failed, CC_* fields unavailable: ' + (msg && msg.error ? msg.error : 'no bridge'), 'log-warn');
+      }
+      oneDone();
+    }).catch(function(err) {
+      addLog('CompanyCustomer load error: ' + err.message, 'log-warn');
+      oneDone();
+    });
+  })();
   $.ajax({
     url: apiUrl + 'api/Vendor/GetAllVendor', type: 'POST', cache: false, contentType: 'application/json',
     headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
