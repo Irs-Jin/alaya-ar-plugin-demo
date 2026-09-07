@@ -2230,7 +2230,7 @@
       }
     });
 
-    // Final posted set is assembled below (package parents are REPLACED by
+    // Final posted set is assembled below (package PARENT rows are REPLACED by
     // their component child lines) - discount allocation and the header total
     // must run on that final set, never on the pre-explosion parents.
     var posted = null, subTotal = 0, footerDiscount = 0, total = 0;
@@ -2240,47 +2240,62 @@
     // posted rows exactly. Posting the parent alongside full-total children
     // counts the package total twice server-side ("Total not equal all item's
     // (Total) + RoundingAmount" - confirmed live on SR-000027: parent 208 +
-    // children 10/100/98 must sum to 208, not 832). GroupID linkage, batch and
-    // serial rows are unchanged - only the money duplication is removed.
+    // children 10/100/98 must sum to 208, not 832).
+    //
+    // Each component must post as an INDEPENDENT line with its OWN GroupID -
+    // NOT sharing the package line's group and NOT marked SubItem_YN. The
+    // server rejects a GroupID shared by two different items ("Duplicate group
+    // id found for different item" - reproduced on SIT 08/Sep with the parent
+    // under the old shared-guid/SubItem shape), and distinct-group children
+    // crash the post ("Value cannot be null. Parameter name: source"). The
+    // verified-working shape is exactly this one: components as plain lines,
+    // one group each, own money, batch rows keyed to each component's own group
+    // and nested under the line (posted live as CS-000000600).
     posted = [];
     lines.forEach(function (a, idx) {
       var parentDtl = dtl.filter(function (d) { return d.GroupID === lineGroupIds[idx]; })[0];
       if (!parentDtl) return;
       if (!a.packageComponents || !a.packageComponents.length) { posted.push(parentDtl); return; }
-      var grp = lineGroupIds[idx];
       a.packageComponents.forEach(function (c) {
         var compQty = (c.qty || 0).toFixed(4);
         var compPrice = parseFloat((c.price || 0).toFixed(2));
         var childTotal = (parseFloat(compQty) * compPrice).toFixed(4);
+        var childGrp = makeGuid();
+        var childRecord = items.filter(function (im) { return im.code === c.code; })[0];
         var childObj = {
           Description: c.desc || c.code, Qty: compQty, ItemID: String(c.id), ItemUOMID: String(c.uomID || ''),
           UnitPrice: compPrice.toFixed(6), NewUnitPrice: compPrice.toFixed(2), DiscountAmt: '0.00', DiscountFormula: '',
-          ItemTypeID: '1', WarehouseID: parentDtl.WarehouseID, BinLocationID: c.binLocationID ? String(c.binLocationID) : parentDtl.BinLocationID,
-          Remarks: '', GroupID: grp, SubItem_YN: true,
+          ItemTypeID: String(childRecord && childRecord.typeID ? childRecord.typeID : '1'),
+          WarehouseID: parentDtl.WarehouseID, BinLocationID: c.binLocationID ? String(c.binLocationID) : parentDtl.BinLocationID,
+          Remarks: '', GroupID: childGrp,
           SubTotal: childTotal, TaxAmt: '0.0000', TaxableAmt: childTotal, Total: childTotal, TaxCode: '',
           TaxableExcFooterDisc: childTotal, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
         };
         posted.push(childObj);
         if (c.batches && c.batches.length) { childObj.BatchNo = c.batches[0].batchNo; childObj.CSB_BatchNo = c.batches[0].batchNo; }
         if (c.serialNos && c.serialNos.length) { childObj.SerialNo = c.serialNos[0]; childObj.CSSN_SerialNo = c.serialNos[0]; }
-        // Batch/serial for a package component shares the PACKAGE's GroupID
-        // (confirmed live: CashSalesBatch.CSB_GroupID matched the group's shared
-        // GUID, not a per-component one).
+        // Batch/serial rows for a component link to the COMPONENT's own GroupID
+        // (not the package line's group) so the server can tie each batch row
+        // back to its DTL line - missing or loosely-keyed batches come back as
+        // "Please enter item batch for item ID ...", so the rows are emitted
+        // both top-level AND nested under the line (verified live CS-000000600).
         if (c.batchControl && c.batches && c.batches.length) {
-          c.batches.forEach(function (b) {
+          var childBatchRows = c.batches.map(function (b) {
             var q = (typeof b.qty === 'number' ? b.qty : parseFloat(b.qty) || 0).toFixed(4);
             var expStr = b.expiryDate ? fmtCashSalesDate(new Date(b.expiryDate)) : '';
-            salesBatches.push({
-              GroupID: grp, ItemID: String(c.id), BatchNo: b.batchNo, Qty: q, BaseQty: q,
+            return {
+              GroupID: childGrp, ItemID: String(c.id), BatchNo: b.batchNo, Qty: q, BaseQty: q,
               BinLocationID: childObj.BinLocationID, WarehouseID: childObj.WarehouseID, ExpiryDate: expStr,
-              CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: grp, CSB_ExpiryDate: expStr
-            });
+              CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: childGrp, CSB_ExpiryDate: expStr
+            };
           });
+          salesBatches = salesBatches.concat(childBatchRows);
+          childObj.CashSalesBatch = childBatchRows; childObj.SalesBatch = childBatchRows; childObj.Batch = childBatchRows; childObj.BatchDetail = childBatchRows;
         }
         if (c.serialControl && c.serialNos && c.serialNos.length) {
           c.serialNos.forEach(function (sn) {
             salesSNs.push({
-              GroupID: grp, ItemID: String(c.id), SerialNo: sn, BatchNo: (c.batches[0] && c.batches[0].batchNo) || '',
+              GroupID: childGrp, ItemID: String(c.id), SerialNo: sn, BatchNo: (c.batches[0] && c.batches[0].batchNo) || '',
               CSSN_SerialNo: sn, CSSN_BatchNo: (c.batches[0] && c.batches[0].batchNo) || '', BinLocationID: childObj.BinLocationID
             });
           });
@@ -2980,12 +2995,15 @@
   });
 
   /* ── Package Item handling (mirrors native Cash Sales "Package Item" popup) ──
-     Confirmed live against a real posted document: a package parent (IM_Type=5)
-     posts as ONE header line PLUS one child line per PackageItem component, all
-     sharing a single GroupID; each row's Total is the WHOLE PACKAGE's total (not
-     the individual component's own subtotal) - replicated exactly in
-     buildPackageDtlLines() below since deviating risks yet another opaque
-     server-side validation error. */
+     Live-verified against the SIT API on 08/Sep: a package row posts with the
+     PARENT row omitted and each component as an independent DTL line, each with
+     its OWN GroupID, its own subtotal, and no SubItem flag. Sharing one GroupID
+     across the components is rejected ("Duplicate group id found for different
+     item"), and distinct-group children while keeping the package plumbing
+     crashes the post ("Value cannot be null. Parameter name: source") - the
+     plain per-line shape below (implemented in the Copy To Sales payload build)
+     is the one that actually posts (verified as CS-000000600). Component
+     batch/serial rows link to each component's own GroupID. */
   var packageEditingIdx = null;
   /* First component still missing required batch/serial, or -1 when all filled -
      drives the auto-popup so batch/serial entry opens by itself, same as it
