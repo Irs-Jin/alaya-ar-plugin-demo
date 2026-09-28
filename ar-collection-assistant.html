@@ -856,58 +856,85 @@
     if (note) parts.push(note);
     var entry = '[' + new Date().toLocaleString() + '] ' + parts.join(' - ');
 
-    var getEndpoint = apiUrl + 'api/Customer/GetCustomerByAccountCode';
-    addLog('POST ' + getEndpoint);
-    $.ajax({
-      url: getEndpoint, type: 'POST', cache: false, contentType: 'application/json',
-      headers: { 'Authorization': authToken },
-      data: JSON.stringify({ accountCode: selectedDebtor.code, companyID: 548 }),
-      success: function (getResp) {
-        if (!getResp || getResp.success === false || !getResp.data) {
-          addLog('GetCustomerByAccountCode failed: ' + (getResp && getResp.msg));
-          showToast('Saved locally only - could not reach Customer Master');
-          if (callback) callback();
-          return;
-        }
-        var rec = getResp.data;
-        var newRemarks = entry + (rec.Cust_Remarks ? '\n' + rec.Cust_Remarks : '');
-        var payload = buildCustomerPayload(rec, newRemarks);
-        var postEndpoint = apiUrl + 'api/Customer/PostCustomer';
-        addLog('POST ' + postEndpoint);
-        $.ajax({
-          url: postEndpoint, type: 'POST', cache: false, contentType: 'application/json',
-          headers: { 'Authorization': authToken },
-          data: JSON.stringify(payload),
-          success: function (postResp) {
-            if (postResp && postResp.success === false) {
-              addLog('PostCustomer rejected: ' + postResp.msg);
-              showToast('Saved locally only - Customer Master rejected: ' + postResp.msg);
-              if (callback) callback();
-              return;
-            }
-            addLog('Customer Master Notes updated for ' + selectedDebtor.code);
-            showToast('Saved Successfully');
-            if (callback) callback();
-          },
-          error: function (xhr) {
-            var msg;
-            try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
-            catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
-            addLog('PostCustomer failed (' + xhr.status + '): ' + msg);
-            showToast('Saved locally only - Customer Master update failed');
-            if (callback) callback();
+    // The access token can go stale while this tab has been sitting open (it is fetched once on
+    // load and never refreshed). A stale token has been observed to surface as a raw Newtonsoft
+    // deserialization exception from the server rather than a clean 401, so on any failure below
+    // we refresh the token once and retry the whole save before giving up.
+    function attempt(isRetry) {
+      var getEndpoint = apiUrl + 'api/Customer/GetCustomerByAccountCode';
+      addLog('POST ' + getEndpoint + (isRetry ? ' (retry after token refresh)' : ''));
+      $.ajax({
+        url: getEndpoint, type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken },
+        data: JSON.stringify({ accountCode: selectedDebtor.code, companyID: 548 }),
+        success: function (getResp) {
+          if (!getResp || getResp.success === false || !getResp.data) {
+            addLog('GetCustomerByAccountCode failed: ' + (getResp && getResp.msg));
+            retryOrFail(isRetry, 'Saved locally only - could not reach Customer Master');
+            return;
           }
-        });
-      },
-      error: function (xhr) {
-        var msg;
-        try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
-        catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
-        addLog('GetCustomerByAccountCode failed (' + xhr.status + '): ' + msg);
-        showToast('Saved locally only - could not reach Customer Master');
+          var rec = getResp.data;
+          var newRemarks = entry + (rec.Cust_Remarks ? '\n' + rec.Cust_Remarks : '');
+          var payload = buildCustomerPayload(rec, newRemarks);
+          var postEndpoint = apiUrl + 'api/Customer/PostCustomer';
+          addLog('POST ' + postEndpoint);
+          $.ajax({
+            url: postEndpoint, type: 'POST', cache: false, contentType: 'application/json',
+            headers: { 'Authorization': authToken },
+            data: JSON.stringify(payload),
+            success: function (postResp) {
+              if (postResp && postResp.success === false) {
+                addLog('PostCustomer rejected: ' + postResp.msg);
+                retryOrFail(isRetry, 'Saved locally only - Customer Master rejected: ' + postResp.msg);
+                return;
+              }
+              addLog('Customer Master Notes updated for ' + selectedDebtor.code);
+              showToast('Saved Successfully');
+              if (callback) callback();
+            },
+            error: function (xhr) {
+              var msg;
+              try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
+              catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
+              addLog('PostCustomer failed (' + xhr.status + '): ' + msg);
+              retryOrFail(isRetry, 'Saved locally only - Customer Master update failed');
+            }
+          });
+        },
+        error: function (xhr) {
+          var msg;
+          try { msg = JSON.stringify(JSON.parse(xhr.responseText), null, 2); }
+          catch (ex) { msg = xhr.responseText || ('HTTP ' + xhr.status); }
+          addLog('GetCustomerByAccountCode failed (' + xhr.status + '): ' + msg);
+          retryOrFail(isRetry, 'Saved locally only - could not reach Customer Master');
+        }
+      });
+    }
+
+    function retryOrFail(isRetry, failureToast) {
+      if (isRetry) {
+        showToast(failureToast);
         if (callback) callback();
+        return;
       }
-    });
+      addLog('Refreshing token and retrying save once...');
+      $.ajax({
+        url: apiUrl + 'token', type: 'POST', cache: false,
+        data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+        success: function (response) {
+          authToken = response.token_type + ' ' + response.access_token;
+          addLog('Token refreshed, retrying save');
+          attempt(true);
+        },
+        error: function () {
+          addLog('Token refresh failed - giving up on retry');
+          showToast(failureToast);
+          if (callback) callback();
+        }
+      });
+    }
+
+    attempt(false);
     return true;
   }
 
