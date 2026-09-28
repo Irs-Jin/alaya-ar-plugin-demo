@@ -223,21 +223,6 @@
       <button class="btn-secondary" id="btn-debug-table" disabled>Debug: Resolve Table</button>
     </div>
   </div>
-  <div class="real-banner" style="margin-top:16px;">
-    <b>REAL DATA (via custom module snapshot).</b> Reads the <code>AROverdueSnapshot</code> custom Master Data module
-    (built in Module Editor under this same jinmenu2, refreshed via its Module Query - see
-    <code>module-query-aroverdue.sql</code>) through the real <code>api/Udf/ZZTGetDataTable</code> endpoint - confirmed
-    working against live SIT data. Authenticates automatically once loaded inside Alaya. Contact person /
-    phone / email are the customer's real record where on file (shown as "Not on file" otherwise).
-    "Save note only" appends a timestamped entry to the real Customer Master Notes field via
-    <code>api/Customer/PostCustomer</code> (accepted tradeoff: this also clears that customer's Registration
-    Branch and Inter-Company Billing "Transfer PO To" setting, and flips their "User Generated Acc No" flag
-    to true - known side effects of this write API with no safe workaround found; fix manually in Customer
-    Master if it matters for a given customer). Contact-attempts history shown below is a demo placeholder
-    (not tracked anywhere yet) - everything else (amounts, dates, priority, reminder draft) is computed from
-    the real snapshot rows.
-  </div>
-
   <div class="kpi-row" id="kpi-row" style="display:none;">
     <div class="kpi-card">
       <div class="kpi-icon">🚩</div>
