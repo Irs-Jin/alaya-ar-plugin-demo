@@ -736,8 +736,29 @@
      CreditLimitPreference is deliberately omitted from the payload - including it causes a hard
      validation error ("Credit Limit Preference not valid") because its read/write encodings
      differ; omitting it is confirmed safe (verified unchanged before/after). */
+  // PostCustomer expects every field below to be a flat scalar. Some environments have a
+  // customer record where one of these (most often a custom "AdditionalInfoN" field configured
+  // as a multi-select) comes back from GetCustomerByAccountCode as an array/object instead of a
+  // string. Sending that shape straight through makes the server's Newtonsoft.Json binder throw
+  // "Value cannot be null" deep inside CreateJObject/PopulateList (CustomerController.cs:359) -
+  // it looks like an auth error but it isn't, and retrying does not help. Strip any such fields
+  // down to a safe scalar before we ever build the JSON body.
+  function sanitizeCustomerPayload(payload) {
+    Object.keys(payload).forEach(function (key) {
+      var val = payload[key];
+      if (Array.isArray(val)) {
+        addLog('Sanitized payload field "' + key + '": was an array, sending empty string instead');
+        payload[key] = '';
+      } else if (val !== null && typeof val === 'object') {
+        addLog('Sanitized payload field "' + key + '": was an object, sending empty string instead');
+        payload[key] = '';
+      }
+    });
+    return payload;
+  }
+
   function buildCustomerPayload(rec, newRemarks) {
-    return {
+    return sanitizeCustomerPayload({
       CompanyID: '548',
       AccountCode: rec.Cust_AccountCode,
       Name: rec.Cust_NAME,
@@ -818,7 +839,7 @@
       AdditionalInfo5: rec.Cust_AdditionalInfo5, AdditionalInfo6: rec.Cust_AdditionalInfo6,
       AdditionalInfo7: rec.Cust_AdditionalInfo7, AdditionalInfo8: rec.Cust_AdditionalInfo8,
       AdditionalInfo9: rec.Cust_AdditionalInfo9, AdditionalInfo10: rec.Cust_AdditionalInfo10,
-    };
+    });
   }
 
   function saveCollectionNote(callback) {
