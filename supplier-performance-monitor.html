@@ -270,7 +270,6 @@
     </div>
     <div class="btn-row">
       <button class="btn-primary" id="btn-load" disabled>Load Supplier Data</button>
-      <button class="btn-secondary" id="btn-debug" disabled>Debug: Resolve Table</button>
     </div>
   </div>
   <!-- KPI Row -->
@@ -484,7 +483,6 @@
         authToken = r.token_type + ' ' + r.access_token;
         addLog('Token obtained');
         $('#btn-load').prop('disabled', false);
-        $('#btn-debug').prop('disabled', false);
       },
       error: function (r) {
         var msg = '';
@@ -578,17 +576,6 @@
         renderDashboard(generateMockSuppliers());
       },
       complete: function() { $('#btn-load').prop('disabled',false).text('Load Supplier Data'); }
-    });
-  });
-
-  $('#btn-debug').on('click', function() {
-    if (!apiUrl || !authToken) { alert('Get a token first.'); return; }
-    var endpoint = apiUrl + 'api/Udf/GetUdfTableByCode?code=' + encodeURIComponent(SUPPLIER_TABLE_CODE);
-    addLog('GET ' + endpoint);
-    $.ajax({
-      url: endpoint, type:'GET', cache:false, headers:{'Authorization':authToken},
-      success: function(r) { addLog('Debug: '+JSON.stringify(r)); alert('Response:\n'+JSON.stringify(r,null,2)); },
-      error: function(xhr) { var msg; try{msg=JSON.stringify(JSON.parse(xhr.responseText),null,2);}catch(e){msg=xhr.responseText||('HTTP '+xhr.status);} alert('Failed: '+msg); }
     });
   });
 
