@@ -97,10 +97,6 @@
 
     /* ── AR workspace: KPI row + split queue/detail layout ── */
     .ar-toolbar { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-    .demo-tag {
-      display:inline-block; font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;
-      background:#f3f4f6; color:#9ca3af; padding:2px 7px; border-radius:999px; margin-left:6px; vertical-align:middle;
-    }
     .ready-badge {
       display:inline-block; font-size:0.68rem; font-weight:700; background:#dcfce7; color:#166534;
       padding:3px 10px; border-radius:999px; margin-left:8px; vertical-align:middle;
@@ -166,7 +162,7 @@
     .stat-value { font-size:0.92rem; font-weight:700; color:#111827; }
     .stat-value.stat-danger { color:#b91c1c; }
 
-    .detail-columns { display:grid; grid-template-columns:1fr 1.6fr 1fr; gap:16px; margin-bottom:16px; }
+    .detail-columns { display:grid; grid-template-columns:1fr 1.6fr; gap:16px; margin-bottom:16px; }
     .detail-col { min-width:0; }
     .mini-label {
       font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#9ca3af;
@@ -175,11 +171,6 @@
     .contact-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; font-size:0.82rem; }
     .contact-card .contact-name { font-weight:700; color:#111827; margin-bottom:2px; }
     .contact-card .contact-line { color:#4b5563; margin-top:4px; }
-    .attempts-log { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; font-size:0.76rem; max-height:180px; overflow-y:auto; }
-    .attempt-item { padding:6px 0; border-bottom:1px solid #eceef1; }
-    .attempt-item:last-child { border-bottom:none; }
-    .attempt-item .attempt-date { color:#9ca3af; font-size:0.7rem; }
-    .attempt-item .attempt-desc { color:#374151; margin-top:1px; }
 
     .btn-send { background:#2563eb; color:#fff; padding:11px 20px; font-size:0.88rem; }
     .btn-send:hover:not(:disabled) { background:#1d4ed8; }
@@ -284,10 +275,6 @@
             <div class="mini-label">AI-drafted reminder<span class="ready-badge">Ready to send</span></div>
             <textarea id="reminder-draft"></textarea>
             <div class="sub" style="margin-top:6px; margin-bottom:0;">Template-based, not a live LLM call - edit freely before use.</div>
-          </div>
-          <div class="detail-col">
-            <div class="mini-label">Contact attempts<span class="demo-tag">demo</span></div>
-            <div class="attempts-log" id="attempts-log"></div>
           </div>
         </div>
 
@@ -510,30 +497,6 @@
     return dt.toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
-  // Deterministic (not random) demo contact info + contact-attempt history, keyed off the debtor
-  // code/invoice so it stays stable across re-renders. Clearly labelled "demo" in the UI - this data
-  // isn't tracked anywhere real yet, unlike the amounts/dates/priority above which come from the
-  // real AROverdueSnapshot row.
-  function hashStr(s) { var h = 0; for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; } return h; }
-  function demoAttempts(d) {
-    var h = hashStr(d.uid);
-    var kinds = [
-      { icon: '📞', desc: 'No answer - left voice message' },
-      { icon: '✉️', desc: 'Email reminder sent (overdue notice)' },
-      { icon: '📞', desc: 'Spoke with contact - payment discussed' },
-      { icon: '✉️', desc: 'Initial reminder sent' },
-    ];
-    var n = 1 + (h % 3);
-    var out = [];
-    for (var i = 0; i < n; i++) {
-      var k = kinds[(h + i * 7) % kinds.length];
-      var daysAgo = 3 + ((h + i * 13) % 25);
-      var dt = new Date(); dt.setDate(dt.getDate() - daysAgo);
-      out.push({ icon: k.icon, desc: k.desc, date: dt.toLocaleDateString('en-MY', { day: '2-digit', month: 'short' }) + ' - ' + daysAgo + 'd ago' });
-    }
-    return out;
-  }
-
   function recomputeKpisAndTabs() {
     var high = 0, friendly = 0, promiseToday = 0, totalAmt = 0;
     $.each(allDebtors, function (i, d) {
@@ -648,13 +611,6 @@
       .append($('<div class="contact-name">').text(d.contactPerson || 'Not on file'))
       .append($('<div class="contact-line">').text('📞 ' + (d.phone || 'Not on file')))
       .append($('<div class="contact-line">').text('✉️ ' + (d.email || 'Not on file')));
-
-    var $attempts = $('#attempts-log').empty();
-    $.each(demoAttempts(d), function (i, a) {
-      $attempts.append($('<div class="attempt-item">')
-        .append($('<div class="attempt-date">').text(a.icon + ' ' + a.date))
-        .append($('<div class="attempt-desc">').text(a.desc)));
-    });
 
     $('#reminder-draft').val(draftReminder(d));
     var saved = promises[d.uid] || {};
