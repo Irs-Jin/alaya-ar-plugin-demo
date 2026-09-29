@@ -213,10 +213,6 @@
       <button class="btn-primary" id="btn-load-ar" disabled>Load Overdue Invoices</button>
     </div>
   </div>
-  <div class="company-filter-row" style="display:flex; align-items:center; gap:8px; margin-top:12px;">
-    <label style="font-size:0.82rem; font-weight:700; color:#374151;">Company:</label>
-    <select id="sel-company-filter" style="border:1px solid #d1d5db; border-radius:8px; padding:6px 10px; font-size:0.85rem; font-family:inherit;"></select>
-  </div>
   <div class="kpi-row" id="kpi-row" style="display:none;">
     <div class="kpi-card">
       <div class="kpi-icon">🚩</div>
@@ -385,13 +381,13 @@
     });
   }
 
-  /* ── Company selector (real, read-only via api/Company/GetAllCompany) ──
-     Note: the Collections command queue itself comes from the fixed AROverdueSnapshot
-     custom module table (not company-scoped by this API), so switching company here only
-     changes which company's Customer Master record gets read/written by Save note /
-     Send via WhatsApp - it does not re-filter the invoice queue. */
-  var DEFAULT_COMPANY_ID = 548; // JIN6 SDN BHD
-  var companies = [];
+  /* ── Company (no user-facing selector - resolved once via api/Company/GetAllCompany) ──
+     Fixed to Adidas Sdn Bhd. Its numeric CO_ID isn't hardcoded here since that can differ per
+     environment (SIT/prod) - it's looked up by name/code against the live company list, falling
+     back to DEFAULT_COMPANY_ID (JIN6) with a logged warning if no "Adidas" company is found. */
+  var TARGET_COMPANY_NAME = 'Adidas';
+  var DEFAULT_COMPANY_ID = 548; // fallback only: JIN6 SDN BHD
+  var resolvedCompanyID = null;
   function loadCompaniesFromApi() {
     if (!apiUrl || !authToken) return;
     var endpoint = apiUrl + 'api/Company/GetAllCompany';
@@ -402,29 +398,24 @@
       success: function (resp) {
         var data = (resp && resp.data) || [];
         if (!data.length || resp.success === false) {
-          addLog('GetAllCompany returned no rows (' + ((resp && resp.msg) || 'empty') + ') - keeping default company only');
+          addLog('GetAllCompany returned no rows (' + ((resp && resp.msg) || 'empty') + ') - keeping default company');
           return;
         }
-        companies = data.map(function (c) { return { id: c.CO_ID, code: String(c.CO_Code || '').trim(), name: c.CO_Name }; });
-        addLog('Loaded ' + companies.length + ' companies');
-        renderCompanyFilterOptions();
+        var match = data.filter(function (c) {
+          var code = String(c.CO_Code || '').toLowerCase(), name = String(c.CO_Name || '').toLowerCase();
+          return code.indexOf(TARGET_COMPANY_NAME.toLowerCase()) >= 0 || name.indexOf(TARGET_COMPANY_NAME.toLowerCase()) >= 0;
+        })[0];
+        if (!match) {
+          addLog('No company matching "' + TARGET_COMPANY_NAME + '" found in GetAllCompany - keeping default company');
+          return;
+        }
+        resolvedCompanyID = match.CO_ID;
+        addLog('Resolved company "' + TARGET_COMPANY_NAME + '" to CompanyID ' + resolvedCompanyID);
       },
-      error: function (xhr) { addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company only'); }
+      error: function (xhr) { addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company'); }
     });
   }
-  function renderCompanyFilterOptions() {
-    var $sel = $('#sel-company-filter');
-    var prev = $sel.val() || String(DEFAULT_COMPANY_ID);
-    var opts = companies.length ? companies.map(function (c) { return { id: c.id, name: c.code + ' - ' + c.name }; })
-      : [{ id: DEFAULT_COMPANY_ID, name: 'JIN6 SDN BHD' }];
-    $sel.empty();
-    opts.forEach(function (o) { $sel.append($('<option>').val(o.id).text(o.name)); });
-    if ($sel.find('option[value="' + prev + '"]').length) $sel.val(prev);
-    else if ($sel.find('option[value="' + DEFAULT_COMPANY_ID + '"]').length) $sel.val(DEFAULT_COMPANY_ID);
-    else $sel.prop('selectedIndex', 0);
-  }
-  function currentCompanyID() { return parseInt($('#sel-company-filter').val(), 10) || DEFAULT_COMPANY_ID; }
-  renderCompanyFilterOptions();
+  function currentCompanyID() { return resolvedCompanyID || DEFAULT_COMPANY_ID; }
 
   /* ── AR Collection Assistant (real data via AROverdueSnapshot custom module + template reminder logic) ── */
   // The Menu Code is the logical name the Udf API uses (NOT the physical ZZT_ table name) -
