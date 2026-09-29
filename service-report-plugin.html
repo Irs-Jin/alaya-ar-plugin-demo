@@ -297,7 +297,7 @@
         <div class="sub" style="margin-bottom:0;">Log customer equipment service visits &mdash; equipment received, action taken, and outcome.</div>
       </div>
     </div>
-    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span> <span id="save-status" class="badge" style="display:none;"></span></div>
+    <div class="status-row" style="margin-bottom:0;">Status: <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span> <span id="save-status" class="badge" style="display:none;"></span> <span class="badge" style="background:#e5e7eb;color:#374151;" id="ver-badge">v20260929e</span></div>
   </div>
 </div>
 
@@ -2055,7 +2055,22 @@
     COPY_TOOLBAR.forEach(function (s) { $(s).prop('disabled', busy); });
     $('#copy-busy-overlay').toggleClass('show', !!busy);
   }
-  function endCopy() { copyInFlight = false; setCopyToolbarBusy(false); }
+  /* The plugin's own overlay only covers the plugin iframe - host nav, tabs and
+     the host toolbar stayed clickable. This injects a blocker into the TOP
+     window through the existing host eval bridge. Shown only once confirm() is
+     accepted (the payment-mode modal lives inside the iframe and must stay
+     usable), removed by endCopy - i.e. everything everywhere is locked from the
+     POST until the Cash Sales document number is on screen. */
+  function hostEval(script) {
+    try { if (hostOrigin && window.top !== window) window.top.postMessage({ target: hostOrigin, eval: script }, '*'); } catch (e) {}
+  }
+  function injectTopBusy() {
+    hostEval('(function(){if(document.getElementById("plugin-copy-busy"))return;var d=document.createElement("div");d.id="plugin-copy-busy";d.style.cssText="position:fixed;left:0;top:0;right:0;bottom:0;z-index:999999;background:rgba(240,242,245,0.75);display:flex;align-items:center;justify-content:center;font:bold 16px Arial;color:#1565c0;cursor:wait;text-align:center;";d.textContent="Creating Cash Sales... please wait";document.body.appendChild(d);})();');
+  }
+  function removeTopBusy() {
+    hostEval('(function(){var d=document.getElementById("plugin-copy-busy");if(d&&d.parentNode)d.parentNode.removeChild(d);})();');
+  }
+  function endCopy() { copyInFlight = false; setCopyToolbarBusy(false); removeTopBusy(); }
 
   function copyToCashSales() {
     if (copyInFlight) { addLog('Copy To Sales already in progress - extra click ignored'); return; }
@@ -2432,11 +2447,14 @@
     }
 
     addLog('POST api/CashSales/PostCashSales (company ' + ctx.companyID + ', branch ' + ctx.branch.id + ', total ' + ctx.total.toFixed(2) + ', mode ' + mode.code + ')');
+    injectTopBusy();
     $.ajax({
       url: apiUrl + 'api/CashSales/PostCashSales', type: 'POST', cache: false, contentType: 'application/json',
+      // 60s timeout so a dead connection can't leave the busy overlay up forever
+      // (error handler runs on timeout and calls endCopy).
+      timeout: 60000,
       headers: { 'Authorization': authToken }, data: JSON.stringify(ctx.body),
       success: function (resp) {
-        endCopy();
         if (resp && resp.success !== false && resp.data) {
           // data is {id, docNo} - not a plain string (confirmed live).
           var docNo = (typeof resp.data === 'object') ? (resp.data.docNo || resp.data.DocNo || resp.data.id) : resp.data;
@@ -2453,6 +2471,8 @@
           if (/parameter name:\s*source/i.test(serverMsg)) serverMsg += ' (an ID the server cannot resolve - check the logged request body)';
           showToast('Copy to Sales failed: ' + serverMsg, true);
         }
+        // Unlock only AFTER the document number is on screen.
+        endCopy();
       },
       error: function (xhr) {
         endCopy();
