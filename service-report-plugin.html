@@ -648,14 +648,14 @@
   // (component serial) - mirroring the pkg-split that already moved Package
   // components into their own table when embedding blew the 400-char cap.
   var BATCH_TABLE_CODE = 'svcrptbat';
-  var DEFAULT_COMPANY_ID = 548; // matches jin's default test company (JIN6 SDN BHD)
+  var DEFAULT_COMPANY_ID = 527; // Adidas Sdn Bhd (was 548 = JIN6; changed per Ivan request 2026-09-29)
   var PACKAGE_ITEM_TYPE_ID = 5; // ItemMaster.IM_Type - confirmed live via item 'A000001'
   var MATRIX_ITEM_TYPE_ID = 4; // ItemMaster.IM_Type - confirmed live via item 841264 ("Matrix Item")
   var VARIANCE_ITEM_TYPE_ID = 11; // ItemMaster.IM_Type - confirmed live via item 100660 ("Variance Item")
   // Matrix/Variance items need their own size/color variant picker, which Service
   // Report doesn't have - excluded from the item list entirely rather than half-supported.
   var EXCLUDED_ITEM_TYPE_IDS = [MATRIX_ITEM_TYPE_ID, VARIANCE_ITEM_TYPE_ID];
-  var DEFAULT_COMPANY_NAME = 'JIN6 SDN BHD';
+  var DEFAULT_COMPANY_NAME = 'Adidas Sdn Bhd';
   /* No company-list API is confirmed reachable from a plugin iframe (ALAYA_INIT's
      payload only carries apiurl/nonce/client/username — no company/companyid field,
      confirmed against every other plugin in this repo). Until a real endpoint is
@@ -790,7 +790,7 @@
      Group Mapping (Module Editor > Users > User Group Mapping tab) - update this
      list by hand when access changes. Unlisted non-admin usernames fall back to
      their own default company only, never the full list. */
-  var ADMIN_USERNAMES = ['jin1'];
+  var ADMIN_USERNAMES = ['jin1', 'ivan'];
   var USER_COMPANY_ACCESS = {
     'jin2': ['JIN4', 'jin3', 'JIN5', 'JIN6', 'JIN9', 'JIN7', 'Adidas'],
   };
