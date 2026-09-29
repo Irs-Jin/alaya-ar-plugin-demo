@@ -244,6 +244,14 @@
     .toast.show { opacity:1; }
     .toast.toast-error { background:#dc2626; }
 
+    /* ── Copy To Sales busy overlay - covers the ENTIRE plugin viewport while
+       the Cash Sales POST is in flight, so nothing (buttons, grid, inputs) can
+       be clicked. z-index 400 = under the .modal-overlay (500) so the payment /
+       success modals stay usable, above everything else. ── */
+    #copy-busy-overlay { display:none; position:fixed; inset:0; background:rgba(240,242,245,0.75); z-index:400; align-items:center; justify-content:center; cursor:wait; }
+    #copy-busy-overlay.show { display:flex; }
+    .copy-busy-box { background:#1565c0; color:#fff; padding:14px 26px; border-radius:10px; font-weight:700; font-size:0.9rem; box-shadow:0 8px 24px rgba(0,0,0,0.25); }
+
     .log-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#9ca3af; margin:14px 0 6px 0; }
     #log { list-style:none; max-height:90px; overflow-y:auto; font-size:0.72rem; color:#4b5563; }
     #log li { padding:2px 0; border-bottom:1px solid #f5f5f5; }
@@ -277,6 +285,7 @@
 <body>
 
 <div id="toast" class="toast"></div>
+<div id="copy-busy-overlay"><div class="copy-busy-box">Creating Cash Sales... please wait</div></div>
 
 <!-- Status / handshake card -->
 <div class="card">
@@ -2042,7 +2051,10 @@
   var copyInFlight = false;
   var COPY_DEFERRED = {};
   var COPY_TOOLBAR = ['#btn-save-detail-top', '#btn-new-report-top', '#btn-delete-report', '#btn-print-report', '#btn-back-to-list', '#btn-cancel-detail', '#btn-copy-to-sales'];
-  function setCopyToolbarBusy(busy) { COPY_TOOLBAR.forEach(function (s) { $(s).prop('disabled', busy); }); }
+  function setCopyToolbarBusy(busy) {
+    COPY_TOOLBAR.forEach(function (s) { $(s).prop('disabled', busy); });
+    $('#copy-busy-overlay').toggleClass('show', !!busy);
+  }
   function endCopy() { copyInFlight = false; setCopyToolbarBusy(false); }
 
   function copyToCashSales() {
