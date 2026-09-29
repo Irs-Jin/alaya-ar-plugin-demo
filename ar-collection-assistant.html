@@ -213,6 +213,10 @@
       <button class="btn-primary" id="btn-load-ar" disabled>Load Overdue Invoices</button>
     </div>
   </div>
+  <div class="company-filter-row" style="display:flex; align-items:center; gap:8px; margin-top:12px;">
+    <label style="font-size:0.82rem; font-weight:700; color:#374151;">Company:</label>
+    <select id="sel-company-filter" style="border:1px solid #d1d5db; border-radius:8px; padding:6px 10px; font-size:0.85rem; font-family:inherit;"></select>
+  </div>
   <div class="kpi-row" id="kpi-row" style="display:none;">
     <div class="kpi-card">
       <div class="kpi-icon">🚩</div>
@@ -369,6 +373,7 @@
         $('#btn-save-note').prop('disabled', false);
         $('#btn-whatsapp').prop('disabled', false);
         $('#btn-load-ar').prop('disabled', false);
+        loadCompaniesFromApi();
       },
       error: function (response) {
         authToken = '';
@@ -379,6 +384,47 @@
       }
     });
   }
+
+  /* ── Company selector (real, read-only via api/Company/GetAllCompany) ──
+     Note: the Collections command queue itself comes from the fixed AROverdueSnapshot
+     custom module table (not company-scoped by this API), so switching company here only
+     changes which company's Customer Master record gets read/written by Save note /
+     Send via WhatsApp - it does not re-filter the invoice queue. */
+  var DEFAULT_COMPANY_ID = 548; // JIN6 SDN BHD
+  var companies = [];
+  function loadCompaniesFromApi() {
+    if (!apiUrl || !authToken) return;
+    var endpoint = apiUrl + 'api/Company/GetAllCompany';
+    addLog('GET ' + endpoint);
+    $.ajax({
+      url: endpoint, type: 'GET', cache: false,
+      headers: { 'Authorization': authToken },
+      success: function (resp) {
+        var data = (resp && resp.data) || [];
+        if (!data.length || resp.success === false) {
+          addLog('GetAllCompany returned no rows (' + ((resp && resp.msg) || 'empty') + ') - keeping default company only');
+          return;
+        }
+        companies = data.map(function (c) { return { id: c.CO_ID, code: String(c.CO_Code || '').trim(), name: c.CO_Name }; });
+        addLog('Loaded ' + companies.length + ' companies');
+        renderCompanyFilterOptions();
+      },
+      error: function (xhr) { addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company only'); }
+    });
+  }
+  function renderCompanyFilterOptions() {
+    var $sel = $('#sel-company-filter');
+    var prev = $sel.val() || String(DEFAULT_COMPANY_ID);
+    var opts = companies.length ? companies.map(function (c) { return { id: c.id, name: c.code + ' - ' + c.name }; })
+      : [{ id: DEFAULT_COMPANY_ID, name: 'JIN6 SDN BHD' }];
+    $sel.empty();
+    opts.forEach(function (o) { $sel.append($('<option>').val(o.id).text(o.name)); });
+    if ($sel.find('option[value="' + prev + '"]').length) $sel.val(prev);
+    else if ($sel.find('option[value="' + DEFAULT_COMPANY_ID + '"]').length) $sel.val(DEFAULT_COMPANY_ID);
+    else $sel.prop('selectedIndex', 0);
+  }
+  function currentCompanyID() { return parseInt($('#sel-company-filter').val(), 10) || DEFAULT_COMPANY_ID; }
+  renderCompanyFilterOptions();
 
   /* ── AR Collection Assistant (real data via AROverdueSnapshot custom module + template reminder logic) ── */
   // The Menu Code is the logical name the Udf API uses (NOT the physical ZZT_ table name) -
@@ -684,7 +730,7 @@
 
   function buildCustomerPayload(rec, newRemarks) {
     return sanitizeCustomerPayload({
-      CompanyID: '548',
+      CompanyID: String(currentCompanyID()),
       AccountCode: rec.Cust_AccountCode,
       Name: rec.Cust_NAME,
       RegNo: rec.Cust_RegNo,
@@ -770,13 +816,26 @@
     });
   }
 
+  // Prevents the double-submit / duplicate-remarks-entry problem where a slow API response left
+  // the buttons clickable, so an impatient extra click fired a second overlapping save.
+  var saveInFlight = false;
+  function setSaveButtonsBusy(busy) {
+    $('#btn-save-note').prop('disabled', busy).text(busy ? '⏳ Saving...' : '📨 Save note only');
+    $('#btn-whatsapp').prop('disabled', busy).text(busy ? '⏳ Saving...' : '📱 Send via WhatsApp & update note');
+  }
+
   function saveCollectionNote(callback) {
     if (!apiUrl || !authToken) { alert('Get a token first.'); return false; }
     if (!selectedDebtor) { alert('Select a debtor first.'); return false; }
+    if (saveInFlight) { return false; }
 
     var pDate = $('#inp-promise-date').val(), pAmt = $('#inp-promise-amount').val();
     var note = $('#inp-collection-note').val().trim();
     if (!pDate && !pAmt && !note) { alert('Enter a collection note, promise date, or promise amount first.'); return false; }
+
+    saveInFlight = true;
+    setSaveButtonsBusy(true);
+    function finish() { saveInFlight = false; setSaveButtonsBusy(false); if (callback) callback(); }
 
     // Keep local state too - drives the "Promise due today" KPI/tab immediately, independent
     // of the backend round-trip.
@@ -800,7 +859,7 @@
       $.ajax({
         url: getEndpoint, type: 'POST', cache: false, contentType: 'application/json',
         headers: { 'Authorization': authToken },
-        data: JSON.stringify({ accountCode: selectedDebtor.code, companyID: 548 }),
+        data: JSON.stringify({ accountCode: selectedDebtor.code, companyID: currentCompanyID() }),
         success: function (getResp) {
           if (!getResp || getResp.success === false || !getResp.data) {
             addLog('GetCustomerByAccountCode failed: ' + (getResp && getResp.msg));
@@ -824,7 +883,7 @@
               }
               addLog('Customer Master Notes updated for ' + selectedDebtor.code);
               showToast('Saved Successfully');
-              if (callback) callback();
+              finish();
             },
             error: function (xhr) {
               var msg;
@@ -848,7 +907,7 @@
     function retryOrFail(isRetry, failureToast) {
       if (isRetry) {
         showToast(failureToast);
-        if (callback) callback();
+        finish();
         return;
       }
       addLog('Refreshing token and retrying save once...');
@@ -863,7 +922,7 @@
         error: function () {
           addLog('Token refresh failed - giving up on retry');
           showToast(failureToast);
-          if (callback) callback();
+          finish();
         }
       });
     }
