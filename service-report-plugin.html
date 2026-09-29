@@ -253,7 +253,7 @@
 
     /* ── Print view (browser print/PDF - not native FastReport, but a real printable
        output). Only #print-view shows when printing; everything else is hidden. ── */
-    #print-view { display:none; }
+    #print-view { display:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     #print-view table { width:100%; border-collapse:collapse; margin:10px 0 18px 0; font-size:0.85rem; }
     #print-view th, #print-view td { border:1px solid #999; padding:6px 8px; text-align:left; }
     #print-view th { background:#f0f0f0; }
@@ -261,7 +261,8 @@
     #print-view .print-sub { color:#555; margin-bottom:16px; }
     #print-view .print-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 24px; margin-bottom:18px; font-size:0.88rem; }
     #print-view .print-grid div b { display:inline-block; min-width:130px; }
-    #print-view .print-letterhead { text-align:center; border:2px solid #c00; padding:12px 16px; margin-bottom:14px; }
+    #print-view .print-letterhead { text-align:center; border:none; padding:12px 16px; margin-bottom:14px; }
+    #print-view .print-logo { height:60px; max-width:240px; object-fit:contain; margin-bottom:6px; }
     #print-view .print-co-name { font-size:1.4rem; font-weight:800; color:#1a3c6e; }
     #print-view .print-co-detail { font-size:0.82rem; color:#444; margin-top:2px; }
     #print-view .print-banner { background:#c00; color:#fff; text-align:center; font-weight:700; font-size:0.95rem; padding:6px 0; margin-bottom:14px; letter-spacing:1px; }
@@ -647,14 +648,14 @@
   // (component serial) - mirroring the pkg-split that already moved Package
   // components into their own table when embedding blew the 400-char cap.
   var BATCH_TABLE_CODE = 'svcrptbat';
-  var DEFAULT_COMPANY_ID = 548; // matches jin's default test company (JIN6 SDN BHD)
+  var DEFAULT_COMPANY_ID = 527; // Adidas Sdn Bhd (was 548 = JIN6; changed per Ivan request 2026-09-29)
   var PACKAGE_ITEM_TYPE_ID = 5; // ItemMaster.IM_Type - confirmed live via item 'A000001'
   var MATRIX_ITEM_TYPE_ID = 4; // ItemMaster.IM_Type - confirmed live via item 841264 ("Matrix Item")
   var VARIANCE_ITEM_TYPE_ID = 11; // ItemMaster.IM_Type - confirmed live via item 100660 ("Variance Item")
   // Matrix/Variance items need their own size/color variant picker, which Service
   // Report doesn't have - excluded from the item list entirely rather than half-supported.
   var EXCLUDED_ITEM_TYPE_IDS = [MATRIX_ITEM_TYPE_ID, VARIANCE_ITEM_TYPE_ID];
-  var DEFAULT_COMPANY_NAME = 'JIN6 SDN BHD';
+  var DEFAULT_COMPANY_NAME = 'Adidas Sdn Bhd';
   /* No company-list API is confirmed reachable from a plugin iframe (ALAYA_INIT's
      payload only carries apiurl/nonce/client/username — no company/companyid field,
      confirmed against every other plugin in this repo). Until a real endpoint is
@@ -789,7 +790,7 @@
      Group Mapping (Module Editor > Users > User Group Mapping tab) - update this
      list by hand when access changes. Unlisted non-admin usernames fall back to
      their own default company only, never the full list. */
-  var ADMIN_USERNAMES = ['jin1'];
+  var ADMIN_USERNAMES = ['jin1', 'ivan'];
   var USER_COMPANY_ACCESS = {
     'jin2': ['JIN4', 'jin3', 'JIN5', 'JIN6', 'JIN9', 'JIN7', 'Adidas'],
   };
@@ -960,6 +961,9 @@
         // refreshZeroPrices because the item wasn't in cache yet. Re-run it now
         // that the full list is here so those rows finally resolve their price.
         refreshZeroPrices();
+        // Same late-arrival problem as prices: an already-open report's rows
+        // reference items that weren't in the cache yet when it opened.
+        refreshMissingBatchFlags();
         // Bulk enrich only first 80 items sequentially to avoid rate-limit; rest is lazy per-item
         (function enrichSeq(start){
           if(start>=Math.min(items.length,80)) return;
@@ -1590,7 +1594,7 @@
             else if (meta.s !== undefined) (serialsByComponent[ckey] = serialsByComponent[ckey] || []).push(meta.s);
           } else {
             var lkey = meta.dc + '-A' + li;
-            if (meta.n !== undefined) (batchesByLine[lkey] = batchesByLine[lkey] || []).push({ batchNo: meta.n, qty: meta.q });
+            if (meta.n !== undefined) (batchesByLine[lkey] = batchesByLine[lkey] || []).push({ batchNo: meta.n, qty: meta.q, expiryDate: meta.e || '' });
             else if (meta.s !== undefined) (serialsByLine[lkey] = serialsByLine[lkey] || []).push(meta.s);
           }
         });
@@ -1598,11 +1602,16 @@
           var meta = {}; try { meta = JSON.parse(r.ZZC_Description || '{}'); } catch (e) { meta = {}; }
           if (!meta.dc || !meta.li) return;
           var key = meta.dc + '-A' + meta.li;
-          // Component's P index = its 1-based position within this line's list -
-          // matches how buildReportInsertLines keyed the component's svcrptbat
-          // child rows ('-P<m>'), so child batches/serials map back per-component.
           var arr = (pkgByLine[key] = pkgByLine[key] || []);
-          var ckey = key + '-P' + (arr.length + 1);
+          // Component's P index comes from its OWN ZZC_Code ('-A<n>-P<p>'), not
+          // from array push order - ZZTGetDataTable gives no ordering guarantee,
+          // and matching by position silently swapped batches/serials between
+          // components whenever rows came back in a different order than they
+          // were written (mirrors how the action-line's own lineNo is parsed
+          // from its Code below rather than assumed from fetch order).
+          var piMatch = /-P(\d+)$/.exec(String(r.ZZC_Code || ''));
+          var pi = piMatch ? parseInt(piMatch[1], 10) : (arr.length + 1);
+          var ckey = key + '-P' + pi;
           var compBatches = batchesByComponent[ckey];
           var compSerials = serialsByComponent[ckey];
           // For components saved BEFORE the split, batch/serial data is embedded
@@ -1863,7 +1872,7 @@
     renderActionTable();
     // Reopened rows saved with price 0 never got a pick-time fetch - refresh
     // them now. Deleted docs are frozen views: no fetching, no re-render.
-    if (!isDeletedDoc) refreshZeroPrices();
+    if (!isDeletedDoc) { refreshZeroPrices(); refreshMissingBatchFlags(); }
     // Deleted = frozen: lock every field/button inside the detail view, then
     // re-enable Back / Print / Cancel (pure navigation + printing). The Doc No
     // link from the list stays the only way in.
@@ -1937,6 +1946,7 @@
     // Copied rows keep their saved prices, but a 0-price row deserves the same
     // lazy refresh as a reopened one.
     refreshZeroPrices();
+    refreshMissingBatchFlags();
     $('#view-list').hide();
     $('#view-detail').show();
     markDirty('copied from ' + code);
@@ -1971,6 +1981,7 @@
     var contactLine = [companyInfo.tel ? 'Tel: ' + companyInfo.tel : '', companyInfo.fax ? 'Fax: ' + companyInfo.fax : ''].filter(Boolean).join('  ');
     var html =
       '<div class="print-letterhead">' +
+        '<img class="print-logo" src="https://irs-jin.github.io/alaya-ar-plugin-demo/4.jpg" alt="Company Logo" />' +
         '<div class="print-co-name">' + escapeHtml(companyInfo.name || editingReport.companyName || '') + '</div>' +
         (companyInfo.regNo ? '<div class="print-co-detail">(Reg No: ' + escapeHtml(companyInfo.regNo) + ')</div>' : '') +
         (companyAddr ? '<div class="print-co-detail">' + escapeHtml(companyAddr) + '</div>' : '') +
@@ -2002,8 +2013,19 @@
       '</tbody></table>';
 
     $('#print-view').html(html);
-    window.print();
+    // Wait for the letterhead logo to load before printing, otherwise the
+    // first print can come out with a blank logo (image not yet cached).
+    var $logo = $('#print-view .print-logo');
+    var doPrint = function () { window.print(); };
+    if ($logo.length && !$logo[0].complete) {
+      $logo.one('load error', doPrint);
+      setTimeout(doPrint, 800);
+    } else {
+      doPrint();
+    }
   }
+  // Preload the letterhead logo so it's cached before the first print.
+  $(function () { try { new Image().src = 'https://irs-jin.github.io/alaya-ar-plugin-demo/4.jpg'; } catch (e) {} });
   $('#btn-print-report').on('click', printReport);
 
   /* ── Copy To Sales (real, writes a POSTED Cash Sales document) ──
@@ -2208,7 +2230,7 @@
       }
     });
 
-    // Final posted set is assembled below (package parents are REPLACED by
+    // Final posted set is assembled below (package PARENT rows are REPLACED by
     // their component child lines) - discount allocation and the header total
     // must run on that final set, never on the pre-explosion parents.
     var posted = null, subTotal = 0, footerDiscount = 0, total = 0;
@@ -2218,47 +2240,62 @@
     // posted rows exactly. Posting the parent alongside full-total children
     // counts the package total twice server-side ("Total not equal all item's
     // (Total) + RoundingAmount" - confirmed live on SR-000027: parent 208 +
-    // children 10/100/98 must sum to 208, not 832). GroupID linkage, batch and
-    // serial rows are unchanged - only the money duplication is removed.
+    // children 10/100/98 must sum to 208, not 832).
+    //
+    // Each component must post as an INDEPENDENT line with its OWN GroupID -
+    // NOT sharing the package line's group and NOT marked SubItem_YN. The
+    // server rejects a GroupID shared by two different items ("Duplicate group
+    // id found for different item" - reproduced on SIT 08/Sep with the parent
+    // under the old shared-guid/SubItem shape), and distinct-group children
+    // crash the post ("Value cannot be null. Parameter name: source"). The
+    // verified-working shape is exactly this one: components as plain lines,
+    // one group each, own money, batch rows keyed to each component's own group
+    // and nested under the line (posted live as CS-000000600).
     posted = [];
     lines.forEach(function (a, idx) {
       var parentDtl = dtl.filter(function (d) { return d.GroupID === lineGroupIds[idx]; })[0];
       if (!parentDtl) return;
       if (!a.packageComponents || !a.packageComponents.length) { posted.push(parentDtl); return; }
-      var grp = lineGroupIds[idx];
       a.packageComponents.forEach(function (c) {
         var compQty = (c.qty || 0).toFixed(4);
         var compPrice = parseFloat((c.price || 0).toFixed(2));
         var childTotal = (parseFloat(compQty) * compPrice).toFixed(4);
+        var childGrp = makeGuid();
+        var childRecord = items.filter(function (im) { return im.code === c.code; })[0];
         var childObj = {
           Description: c.desc || c.code, Qty: compQty, ItemID: String(c.id), ItemUOMID: String(c.uomID || ''),
           UnitPrice: compPrice.toFixed(6), NewUnitPrice: compPrice.toFixed(2), DiscountAmt: '0.00', DiscountFormula: '',
-          ItemTypeID: '1', WarehouseID: parentDtl.WarehouseID, BinLocationID: c.binLocationID ? String(c.binLocationID) : parentDtl.BinLocationID,
-          Remarks: '', GroupID: grp, SubItem_YN: true,
+          ItemTypeID: String(childRecord && childRecord.typeID ? childRecord.typeID : '1'),
+          WarehouseID: parentDtl.WarehouseID, BinLocationID: c.binLocationID ? String(c.binLocationID) : parentDtl.BinLocationID,
+          Remarks: '', GroupID: childGrp,
           SubTotal: childTotal, TaxAmt: '0.0000', TaxableAmt: childTotal, Total: childTotal, TaxCode: '',
           TaxableExcFooterDisc: childTotal, ItemFooterDiscount: '0.000000', TaxAdjustment: '0.0000', UOMRate: '1', Point: '0.0000',
         };
         posted.push(childObj);
         if (c.batches && c.batches.length) { childObj.BatchNo = c.batches[0].batchNo; childObj.CSB_BatchNo = c.batches[0].batchNo; }
         if (c.serialNos && c.serialNos.length) { childObj.SerialNo = c.serialNos[0]; childObj.CSSN_SerialNo = c.serialNos[0]; }
-        // Batch/serial for a package component shares the PACKAGE's GroupID
-        // (confirmed live: CashSalesBatch.CSB_GroupID matched the group's shared
-        // GUID, not a per-component one).
+        // Batch/serial rows for a component link to the COMPONENT's own GroupID
+        // (not the package line's group) so the server can tie each batch row
+        // back to its DTL line - missing or loosely-keyed batches come back as
+        // "Please enter item batch for item ID ...", so the rows are emitted
+        // both top-level AND nested under the line (verified live CS-000000600).
         if (c.batchControl && c.batches && c.batches.length) {
-          c.batches.forEach(function (b) {
+          var childBatchRows = c.batches.map(function (b) {
             var q = (typeof b.qty === 'number' ? b.qty : parseFloat(b.qty) || 0).toFixed(4);
             var expStr = b.expiryDate ? fmtCashSalesDate(new Date(b.expiryDate)) : '';
-            salesBatches.push({
-              GroupID: grp, ItemID: String(c.id), BatchNo: b.batchNo, Qty: q, BaseQty: q,
+            return {
+              GroupID: childGrp, ItemID: String(c.id), BatchNo: b.batchNo, Qty: q, BaseQty: q,
               BinLocationID: childObj.BinLocationID, WarehouseID: childObj.WarehouseID, ExpiryDate: expStr,
-              CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: grp, CSB_ExpiryDate: expStr
-            });
+              CSB_BatchNo: b.batchNo, CSB_Qty: q, CSB_GroupID: childGrp, CSB_ExpiryDate: expStr
+            };
           });
+          salesBatches = salesBatches.concat(childBatchRows);
+          childObj.CashSalesBatch = childBatchRows; childObj.SalesBatch = childBatchRows; childObj.Batch = childBatchRows; childObj.BatchDetail = childBatchRows;
         }
         if (c.serialControl && c.serialNos && c.serialNos.length) {
           c.serialNos.forEach(function (sn) {
             salesSNs.push({
-              GroupID: grp, ItemID: String(c.id), SerialNo: sn, BatchNo: (c.batches[0] && c.batches[0].batchNo) || '',
+              GroupID: childGrp, ItemID: String(c.id), SerialNo: sn, BatchNo: (c.batches[0] && c.batches[0].batchNo) || '',
               CSSN_SerialNo: sn, CSSN_BatchNo: (c.batches[0] && c.batches[0].batchNo) || '', BinLocationID: childObj.BinLocationID
             });
           });
@@ -2606,6 +2643,41 @@
       });
       if (dirty) renderActionTable();
     }
+    // A row's item comes from the shared items[] cache, not a fresh pick, when
+    // a report is reopened/copied - applyItemToRow's own lazy batch/serial-flag
+    // fetch (below) never runs for those rows, and enrichItemsBatchAndPrice only
+    // covers the first 80 items loaded (rate-limit guard) - any item beyond that
+    // stays batchControl/serialControl === undefined FOREVER once the report is
+    // open, with no button in the Action Taken table to force a fetch (need is
+    // falsy for undefined, same as for "confirmed not batch/serial"), which then
+    // permanently blocks Save with "loading item data, please wait" (found via
+    // code review after the identical Package Item bug, commit b11769e). Mirrors
+    // refreshZeroPrices - call after openDetail/copyReport and once the paged
+    // item list finishes loading.
+    function refreshMissingBatchFlags() {
+      if (!editingReport || !editingReport.actionTaken) return;
+      var ids = [];
+      (editingReport.actionTaken || []).forEach(function (a) {
+        if (!a.item) return;
+        var found = items.filter(function (x) { return String(x.code) === String(a.item); })[0];
+        if (found && found.id && found.typeID !== PACKAGE_ITEM_TYPE_ID
+            && (found.batchControl === undefined || found.serialControl === undefined)
+            && ids.indexOf(found.id) < 0) ids.push(parseInt(found.id, 10));
+      });
+      if (!ids.length) return;
+      qrySql("SELECT IM_ID, IM_BatchControl_YN, IM_SerializeControl_YN FROM ItemMaster WHERE IM_ID IN (" + ids.join(',') + ")", 500).then(function (resp) {
+        var rows = resp && resp.results && resp.results[0] && resp.results[0].rows || [];
+        var map = {};
+        rows.forEach(function (r) { map[r[0]] = { batch: !!r[1], serial: !!r[2] }; });
+        items.forEach(function (im) {
+          if (map[im.id] && (im.batchControl === undefined || im.serialControl === undefined)) {
+            im.batchControl = map[im.id].batch; im.serialControl = map[im.id].serial;
+          }
+        });
+        addLog('Refreshed batch/serial flags for ' + ids.length + ' item(s) missing from the enrichment cap');
+        renderActionTable();
+      }).fail(function (e) { addLog('refreshMissingBatchFlags failed: ' + (e && e.statusText || e)); });
+    }
     function applyItemToRow(i, itemRecord) {
     editingReport.actionTaken[i].item = itemRecord.code;
     editingReport.actionTaken[i].desc = itemRecord.desc;
@@ -2923,12 +2995,15 @@
   });
 
   /* ── Package Item handling (mirrors native Cash Sales "Package Item" popup) ──
-     Confirmed live against a real posted document: a package parent (IM_Type=5)
-     posts as ONE header line PLUS one child line per PackageItem component, all
-     sharing a single GroupID; each row's Total is the WHOLE PACKAGE's total (not
-     the individual component's own subtotal) - replicated exactly in
-     buildPackageDtlLines() below since deviating risks yet another opaque
-     server-side validation error. */
+     Live-verified against the SIT API on 08/Sep: a package row posts with the
+     PARENT row omitted and each component as an independent DTL line, each with
+     its OWN GroupID, its own subtotal, and no SubItem flag. Sharing one GroupID
+     across the components is rejected ("Duplicate group id found for different
+     item"), and distinct-group children while keeping the package plumbing
+     crashes the post ("Value cannot be null. Parameter name: source") - the
+     plain per-line shape below (implemented in the Copy To Sales payload build)
+     is the one that actually posts (verified as CS-000000600). Component
+     batch/serial rows link to each component's own GroupID. */
   var packageEditingIdx = null;
   /* First component still missing required batch/serial, or -1 when all filled -
      drives the auto-popup so batch/serial entry opens by itself, same as it
@@ -3277,7 +3352,15 @@
     lines.forEach(function (a) {
       var im = items.filter(function (x) { return x.code === a.item; })[0];
       if (!im) { reqErrors.push(a.item + ' (item not in catalog)'); return; }
-      if (im.serialControl === undefined || im.batchControl === undefined) { reqErrors.push(a.item + ' (loading item data, please wait)'); return; }
+      // Package items never get their OWN batch/serial flags fetched -
+      // applyItemToRow returns early for them (openPackageModalForRow instead),
+      // so im.batchControl/serialControl stay undefined forever, not just
+      // "still loading". Only components carry real batch/serial control,
+      // checked below - gating Save on the parent's flags here permanently
+      // blocked every report with a Package Item line ("loading item data,
+      // please wait" that never resolves). Copy To Sales already skips this
+      // gate the same way (line ~2043 has no such check).
+      if (im.typeID !== PACKAGE_ITEM_TYPE_ID && (im.serialControl === undefined || im.batchControl === undefined)) { reqErrors.push(a.item + ' (loading item data, please wait)'); return; }
       if (im.batchControl && !a.batchNo && !(a.batches && a.batches.length)) reqErrors.push(a.item + ' (batch required)');
       if (im.serialControl) {
         var need = parseInt(a.qty, 10) || 0;
@@ -3410,7 +3493,7 @@
       // 400-char cap on a line with 10+ batches exactly like components did
       // ("could not fit" toast, line silently dropped). Code '-B<m>' / '-S<m>'.
       (a.batches || []).forEach(function (b, m) {
-        lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-B' + (m + 1), { dc: r.code, li: li, n: b.batchNo, q: b.qty }, dateCreated, now, oversized, []));
+        lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-B' + (m + 1), { dc: r.code, li: li, n: b.batchNo, q: b.qty, e: b.expiryDate || '' }, dateCreated, now, oversized, []));
       });
       (a.serialNos || []).forEach(function (s, m) {
         lines.push(sqlInsertLine(BATCH_TABLE_CODE, r.code + '-A' + li + '-S' + (m + 1), { dc: r.code, li: li, s: s }, dateCreated, now, oversized, []));
