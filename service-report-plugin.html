@@ -1420,6 +1420,7 @@
 
   function doSaveReportsToDb(scopeCodes) {
     if (isSaving) { addLog('Save already in progress — please wait'); return Promise.resolve(false); }
+    if (copyInFlight) { addLog('Save blocked — Copy To Sales still in progress'); showToast('Cash Sales is still being created — please wait', true); return Promise.resolve(false); }
     if (!hostOrigin) { addLog('Save skipped — no host origin yet (ALAYA_INIT pending)'); showToast('Save failed — not connected to host', true); return Promise.resolve(false); }
     if (!hasUnsavedChanges) {
       addLog('Save clicked — no unsaved changes');
@@ -2035,14 +2036,27 @@
      real, hard-to-reverse accounting document (consumes a real document number,
      affects inventory/ledger) - not a sandboxed ZZT_ row. Requires explicit user
      confirmation every time; never fires automatically. */
+  /* Busy state: from the moment Copy To Sales is clicked until the POST answers
+     (or the flow aborts), the whole detail toolbar + Save are dead - a second
+     click can never fire a second PostCashSales. */
+  var copyInFlight = false;
+  var COPY_DEFERRED = {};
+  var COPY_TOOLBAR = ['#btn-save-detail-top', '#btn-new-report-top', '#btn-delete-report', '#btn-print-report', '#btn-back-to-list', '#btn-cancel-detail', '#btn-copy-to-sales'];
+  function setCopyToolbarBusy(busy) { COPY_TOOLBAR.forEach(function (s) { $(s).prop('disabled', busy); }); }
+  function endCopy() { copyInFlight = false; setCopyToolbarBusy(false); }
+
   function copyToCashSales() {
+    if (copyInFlight) { addLog('Copy To Sales already in progress - extra click ignored'); return; }
+    copyInFlight = true;
+    setCopyToolbarBusy(true);
     // Prefer the OPENED document's own company - the list filter can point at a
     // different company than SR-000024-style old records actually belong to.
     var companyID = (editingReport && editingReport.companyID) || currentFilterCompanyID();
-    $('#btn-copy-to-sales').prop('disabled', true);
     loadCopyToSalesPrereqs(companyID, function () {
-      $('#btn-copy-to-sales').prop('disabled', false);
-      doCopyToCashSales();
+      var deferred = doCopyToCashSales();
+      // COPY_DEFERRED = payment modal opened, flow continues there (it ends in
+      // endCopy too). Anything else = aborted validation - unlock now.
+      if (deferred !== COPY_DEFERRED) endCopy();
     });
   }
   function doCopyToCashSales() {
@@ -2353,12 +2367,13 @@
     if (defaultMode) $sel.val(defaultMode.id);
     $('#paymode-reference').val('');
     $('#paymode-modal').addClass('show');
+    return COPY_DEFERRED;
     }
   }
   var pendingCashSales = null;
   function closePaymodeModal() { $('#paymode-modal').removeClass('show'); pendingCashSales = null; }
-  $('#btn-paymode-cancel').on('click', closePaymodeModal);
-  $('#paymode-modal').on('click', function (e) { if (e.target.id === 'paymode-modal') closePaymodeModal(); });
+  $('#btn-paymode-cancel').on('click', function () { closePaymodeModal(); endCopy(); });
+  $('#paymode-modal').on('click', function (e) { if (e.target.id === 'paymode-modal') { closePaymodeModal(); endCopy(); } });
   $('#btn-paymode-ok').on('click', function () {
     if (!pendingCashSales) return;
     var modeID = $('#paymode-select').val();
@@ -2369,7 +2384,7 @@
     ctx.body.SalesPayment = [{ PaymentModeID: String(mode.id), Remarks: reference, ChequeNo: null, PaymentAmount: ctx.total.toFixed(4), Currency: 'RINGGIT MALAYSIA', CurrencyRate: '1.00', Reason: '', RedeemPoint: '0' }];
     closePaymodeModal();
 
-    if (!confirm('This creates a REAL posted Cash Sales document for ' + ctx.custRecord.name + ' totalling RM' + ctx.total.toFixed(2) + ' (' + mode.code + '). This cannot be undone (only reversed via a Sales Return). Continue?')) return;
+    if (!confirm('This creates a REAL posted Cash Sales document for ' + ctx.custRecord.name + ' totalling RM' + ctx.total.toFixed(2) + ' (' + mode.code + '). This cannot be undone (only reversed via a Sales Return). Continue?')) { endCopy(); return; }
 
     // Last net: no *ID field may ever go out empty/null/"undefined" (a wrong API
     // field mapping once sent CompanyPaymentTermID as the literal string
@@ -2400,6 +2415,7 @@
       addLog('Copy To Sales blocked: unresolved ID field(s): ' + badFields.join(', '));
       addLog('Blocked request body: ' + JSON.stringify(ctx.body).slice(0, 2000));
       showToast('Cannot Copy To Sales: ' + badFields.join(', ') + ' failed to resolve - reload and retry', true);
+      endCopy();
       return;
     }
 
@@ -2408,6 +2424,7 @@
       url: apiUrl + 'api/CashSales/PostCashSales', type: 'POST', cache: false, contentType: 'application/json',
       headers: { 'Authorization': authToken }, data: JSON.stringify(ctx.body),
       success: function (resp) {
+        endCopy();
         if (resp && resp.success !== false && resp.data) {
           // data is {id, docNo} - not a plain string (confirmed live).
           var docNo = (typeof resp.data === 'object') ? (resp.data.docNo || resp.data.DocNo || resp.data.id) : resp.data;
@@ -2426,6 +2443,7 @@
         }
       },
       error: function (xhr) {
+        endCopy();
         addLog('Cash Sales post error (' + xhr.status + '): ' + (xhr.responseText || '').slice(0, 300));
         showToast('Copy to Sales failed (' + xhr.status + ')', true);
       }
