@@ -421,7 +421,9 @@
   $('#co').on('change', onCompanyChange);
   function syncCoText() { $('#co-q').val($('#co option:selected').text()); }
   // pick by typing: exact "CODE - Name" from the list, else a single partial match
-  $('#co-q').on('focus', function () { this.select(); });
+  // the browser filters the datalist by what is typed, so a filled box shows only 1 option:
+  // empty it on focus (current company stays visible as the placeholder) to show the whole list
+  $('#co-q').on('focus click', function () { $(this).attr('placeholder', $('#co option:selected').text()); this.value = ''; });
   $('#co-q').on('input change', function () {
     var q = $.trim(this.value).toLowerCase(); if (!q) return;
     var opts = $('#co option').toArray(), hit = opts.filter(function (o) { return o.text.toLowerCase() === q; })[0];
