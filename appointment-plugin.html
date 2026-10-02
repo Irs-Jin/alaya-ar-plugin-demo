@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Appointment Plugin - Alaya</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', -apple-system, 'Segoe UI', Arial, sans-serif; background: #eaf0fa; color: #1a1a1a; padding: 10px 12px; font-size: 0.85rem; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    button { padding:6px 14px; border:1px solid #9fb3d1; border-radius:4px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; background:#dbe7f7; color:#1f2f4a; }
+    button:hover:not(:disabled) { background:#c6d8f2; }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .btn-primary { background:#1565c0; color:#fff; border-color:#1565c0; }
+    .btn-primary:hover:not(:disabled) { background:#0d47a1; }
+    .btn-danger { background:#dc2626; color:#fff; border-color:#dc2626; }
+    input, select, textarea { font-family:inherit; font-size:0.85rem; padding:5px 7px; border:1px solid #9fb3d1; border-radius:3px; background:#fff; }
+    input.req { background:#ffdfba; }
+
+    .bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#f3f7fd; border:1px solid #c5d3e8; padding:8px 12px; margin-bottom:8px; }
+    .bar label { font-size:1rem; color:#1f2f4a; }
+    .msel { position:relative; }
+    .msel-btn { min-width:150px; text-align:left; background:#fff; border:1px solid #9fb3d1; border-radius:3px; padding:5px 7px; cursor:pointer; font-weight:400; font-size:0.9rem; }
+    .msel-pop { display:none; position:absolute; top:100%; left:0; z-index:50; background:#fff; border:1px solid #9fb3d1; box-shadow:0 4px 12px rgba(0,0,0,.2); min-width:190px; padding:4px; }
+    .msel-pop.show { display:block; }
+    .msel-pop label { display:flex; gap:6px; align-items:center; font-size:0.82rem; padding:2px 4px; cursor:pointer; }
+    .msel-pop .btns { display:flex; justify-content:flex-end; gap:6px; margin-top:6px; }
+
+    #cal { background:#fff; border:1px solid #c5d3e8; overflow:auto; max-height:calc(100vh - 90px); }
+    .dgrid { display:grid; min-width:640px; }
+    .h { background:#dbe7f5; border:1px solid #c5d3e8; text-align:center; font-size:0.78rem; padding:3px; color:#1f2f4a; }
+    .tl { background:#dbe7f5; border-right:1px solid #c5d3e8; font-size:0.72rem; color:#475569; text-align:right; padding:2px 6px; height:46px; border-bottom:1px solid #c5d3e8; }
+    .col { position:relative; border-right:1px solid #c5d3e8; background-image:repeating-linear-gradient(to bottom, transparent 0, transparent 45px, #b8c6dc 45px, #b8c6dc 46px); }
+    .strip { border-right:1px solid #c5d3e8; border-bottom:1px solid #c5d3e8; min-height:22px; padding:1px; }
+    .ev { position:absolute; border:1px solid #6b7280; border-radius:3px; font-size:0.72rem; overflow:hidden; padding:1px 4px; cursor:pointer; line-height:1.25; }
+    .chip { display:block; border:1px solid #6b7280; border-radius:3px; font-size:0.72rem; padding:1px 4px; margin:1px 0; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .chip.off { background:repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 4px,#f3f4f6 4px,#f3f4f6 8px); color:#374151; }
+    .selbox { position:absolute; left:0; right:0; background:#2f66c4; pointer-events:none; }
+    table.cg { border-collapse:collapse; width:100%; table-layout:fixed; min-width:640px; }
+    table.cg th { background:#dbe7f5; border:1px solid #c5d3e8; font-size:0.78rem; padding:3px; font-weight:500; }
+    table.cg td { border:1px solid #b8c6dc; vertical-align:top; height:92px; padding:2px; }
+    table.cg td.rl { width:70px; background:#dbe7f5; text-align:center; vertical-align:middle; font-weight:600; height:auto; }
+    table.cg td .dn { text-align:right; font-size:0.74rem; color:#475569; }
+    table.cg td.dim { opacity:.55; }
+    table.cg td.selcell { outline:2px solid #2f66c4; outline-offset:-2px; background-color:#cfe0fb !important; }
+    .tlrow { position:relative; height:40px; border-bottom:1px solid #b8c6dc; background-image:repeating-linear-gradient(to right, transparent 0, transparent calc(100%/var(--n) - 1px), #b8c6dc calc(100%/var(--n) - 1px), #b8c6dc calc(100%/var(--n))); }
+    .tlbar { position:absolute; top:3px; height:34px; border:1px solid #6b7280; border-radius:3px; font-size:0.72rem; overflow:hidden; padding:1px 4px; cursor:pointer; }
+    .su-row { display:flex; gap:4px; margin-top:4px; }
+    .su-row input[type=text] { flex:1; min-width:0; }
+    .su-row input[type=color] { width:36px; padding:0; }
+    #pk-body tr { cursor:pointer; } #pk-body tr:hover { background:#cfe0fb; }
+    .empty { padding:40px; text-align:center; color:#6b7280; }
+
+    .ctx { display:none; position:fixed; z-index:100; background:#fff; border:1px solid #9aa7ba; box-shadow:2px 2px 6px rgba(0,0,0,.25); min-width:210px; padding:2px; }
+    .ctx.show { display:block; }
+    .ctx div { padding:5px 26px; font-size:0.84rem; cursor:pointer; position:relative; }
+    .ctx div:hover { background:#cfe0fb; }
+    .ctx .sep { height:1px; padding:0; margin:3px 0; background:#d1d5db; cursor:default; }
+    .ctx .sep:hover { background:#d1d5db; }
+    .ctx .sub { display:none; position:absolute; left:100%; top:-2px; background:#fff; border:1px solid #9aa7ba; box-shadow:2px 2px 6px rgba(0,0,0,.25); min-width:150px; padding:2px; }
+    .ctx .has-sub:hover > .sub { display:block; }
+    .ctx .has-sub::after { content:'\25B8'; position:absolute; right:8px; }
+
+    .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:200; align-items:flex-start; justify-content:center; padding-top:40px; overflow:auto; }
+    .modal.show { display:flex; }
+    .dlg { background:#eaf0fa; border:1px solid #6b7fa3; box-shadow:0 8px 24px rgba(0,0,0,.35); width:470px; max-width:96vw; padding:14px 18px 16px; }
+    .dlg h3 { font-size:0.9rem; margin-bottom:10px; color:#1f2f4a; }
+    .frow { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .frow > label { width:88px; text-align:right; font-size:0.95rem; flex-shrink:0; }
+    .frow > input[type=text], .frow > select, .frow > textarea { flex:1; min-width:0; }
+    .frow textarea { height:110px; resize:vertical; }
+    .stbox { display:inline-block; width:14px; height:14px; border:1px solid #333; vertical-align:middle; margin-right:4px; }
+    .dlg .btns { display:flex; gap:8px; margin-top:12px; margin-left:96px; }
+    #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#166534; color:#fff; padding:9px 18px; border-radius:6px; font-size:0.82rem; font-weight:600; opacity:0; pointer-events:none; transition:opacity .2s; z-index:300; }
+    #toast.show { opacity:1; }
+    #toast.toast-error { background:#991b1b; }
+    #log-wrap { margin-top:8px; font-size:0.72rem; color:#475569; }
+    #log { list-style:none; max-height:120px; overflow:auto; background:#fff; border:1px solid #c5d3e8; padding:4px 8px; }
+    #log .ts { color:#94a3b8; margin-right:6px; }
+    @media print { .bar, #log-wrap, .ctx, .modal, #toast { display:none !important; } body { background:#fff; } #cal { max-height:none; overflow:visible; } }
+  </style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="badge badge-waiting" id="badge">Waiting for ALAYA_INIT</span>
+  <label>Date</label><input type="date" id="dt" />
+  <button id="btn-prev" title="Previous">&#9664;</button><button id="btn-next" title="Next">&#9654;</button>
+  <button id="btn-today">Today</button>
+  <label style="margin-left:14px;">View Type</label>
+  <select id="vt">
+    <option value="day">Day View</option><option value="workweek">Work Week View</option>
+    <option value="week">Week View</option><option value="month">Month View</option><option value="timeline">Timeline View</option>
+  </select>
+  <label style="margin-left:6px;">Group By</label>
+  <select id="gb"><option value="none">None</option><option value="date" selected>Date</option><option value="sp">Salesperson</option></select>
+  <button id="btn-setup" style="display:none;" title="Maintain Status and Reason lists">Setup</button>
+  <div class="msel"><button class="msel-btn" id="sp-btn" type="button">-</button>
+    <div class="msel-pop" id="sp-pop"><div id="sp-list"></div>
+      <div class="btns"><button id="sp-ok" class="btn-primary">OK</button><button id="sp-cancel">Cancel</button></div></div></div>
+</div>
+
+<div id="cal"></div>
+
+<div class="ctx" id="ctx"></div>
+
+<div class="modal" id="m-appt"><div class="dlg">
+  <h3>Appointment</h3>
+  <div class="frow"><label>Status</label><select id="a-status"></select></div>
+  <div class="frow"><label>Salesperson</label><select id="a-sp"></select></div>
+  <div class="frow"><label>Start Date</label><input type="date" id="a-sd" /><input type="time" id="a-st" /></div>
+  <div class="frow"><label>End Date</label><input type="date" id="a-ed" /><input type="time" id="a-et" /></div>
+  <div class="frow"><label></label><label style="width:auto;text-align:left;"><input type="checkbox" id="a-ad" /> All day event</label></div>
+  <div class="frow"><label>Account</label><input type="text" id="a-ac" list="dl-cust" autocomplete="off" /><button id="a-f11" type="button" title="F11 - pick customer">F11</button></div>
+  <div class="frow"><label>Name</label><input type="text" id="a-nm" class="req" maxlength="60" /></div>
+  <div class="frow"><label>Telephone</label><input type="text" id="a-tl" maxlength="20" /></div>
+  <div class="frow"><label>Handphone</label><input type="text" id="a-hp" maxlength="20" /></div>
+  <div class="frow" style="align-items:flex-start;"><label>Notes</label><textarea id="a-no" maxlength="120"></textarea></div>
+  <div class="btns"><button id="a-save" class="btn-primary">&#10004; Save</button><button id="a-cancel">&#10006; Cancel</button><button id="a-del" class="btn-danger" style="display:none;">Delete</button></div>
+</div></div>
+
+<div class="modal" id="m-off"><div class="dlg">
+  <h3>Staff Off Day</h3>
+  <div class="frow"><label>Status</label><select id="o-status"></select><label style="width:auto;">Reason</label><select id="o-rs"></select></div>
+  <div class="frow"><label>Salesperson</label><select id="o-sp"></select></div>
+  <div class="frow"><label>Start Date</label><input type="date" id="o-sd" /></div>
+  <div class="frow"><label>End Date</label><input type="date" id="o-ed" /></div>
+  <div class="frow"><label></label><label style="width:auto;text-align:left;"><input type="checkbox" checked disabled /> All day event</label></div>
+  <div class="frow" style="align-items:flex-start;"><label>Notes</label><textarea id="o-no" maxlength="120"></textarea></div>
+  <div class="btns"><button id="o-save" class="btn-primary">&#10004; Save</button><button id="o-cancel">&#10006; Cancel</button><button id="o-del" class="btn-danger" style="display:none;">Delete</button></div>
+</div></div>
+
+<div class="modal" id="m-pick"><div class="dlg" style="width:560px;">
+  <h3>Select Customer</h3>
+  <div class="frow"><input type="text" id="pk-q" placeholder="Search code / name / phone" style="flex:1;" /></div>
+  <div style="max-height:360px;overflow:auto;background:#fff;border:1px solid #9fb3d1;"><table class="cg" style="min-width:0;"><tbody id="pk-body"></tbody></table></div>
+  <div class="btns" style="margin-left:0;"><button id="pk-close">Close</button><span id="pk-count" style="align-self:center;color:#475569;"></span></div>
+</div></div>
+
+<div class="modal" id="m-setup"><div class="dlg" style="width:560px;">
+  <h3>Appointment Setup (master data)</h3>
+  <div style="display:flex;gap:16px;">
+    <div style="flex:1;"><b>Status</b><div id="su-stat"></div><button id="su-add-stat" type="button" style="margin-top:6px;">+ Add</button></div>
+    <div style="flex:1;"><b>Staff Off Reason</b><div id="su-rsn"></div><button id="su-add-rsn" type="button" style="margin-top:6px;">+ Add</button></div>
+  </div>
+  <div class="btns" style="margin-left:0;"><button id="su-save" class="btn-primary">&#10004; Save</button><button id="su-cancel">&#10006; Cancel</button></div>
+</div></div>
+
+<datalist id="dl-cust"></datalist>
+<div id="toast"></div>
+<details id="log-wrap"><summary>Log</summary><ul id="log"></ul></details>
+
+<script>
+  /* Appointment scheduler plugin for the Alaya Module Editor.
+     Plumbing (ALAYA_INIT, token, host SQL bridge, UDF read/write) is the same proven
+     pattern as service-report-plugin.html. Storage: ONE UDF table 'appt' (create it
+     once via Module Editor > User Defined Field), one row per appointment / staff-off
+     day, JSON in ZZC_Description (400 char cap -> short keys, empty keys omitted). */
+  var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+  var apiUrl = '', nonce = '', authToken = '', clientId = '', username = '';
+  var hostOrigin = '';
+  var canView = true, canSaveEdit = true, canDelete = true;
+  var pendingDcbCallbacks = {};
+  var TABLE = 'appt';
+  var DEFAULT_COMPANY_ID = 527; // ponytail: fixed company, add a company dropdown if multi-company use is needed
+
+  // Defaults, used until the master UDF tables (apptstat / apptrsn) have rows. Edited via the Setup button.
+  var STAT_TABLE = 'apptstat', REASON_TABLE = 'apptrsn';
+  var STATUS = { BOOKED: '#ffff00', CONFIRMED: '#8fd18f', ARRIVED: '#7cc4ff', COMPLETED: '#c8c8c8', CANCELLED: '#ff9a9a' };
+  var REASONS = ['ON LEAVE', 'MEDICAL LEAVE', 'ABSENT', 'TRAINING', 'OTHERS'];
+  var SP_COLORS = ['#fdfcd0', '#ffffff', '#d9ead3', '#dbeafe', '#fde2e2', '#ede9fe'];
+  var H0 = 9, H1 = 22, HP = 46; // day axis 9AM..9PM, one hour = 46px
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  var appts = [], staffList = [], customers = [];
+  var selSp = null; // null = all
+  var cur = new Date(); cur.setHours(0, 0, 0, 0);
+  var sel = null;   // { sp, day, hr } highlighted slot
+  var isSaving = false;
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function pd(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function addDays(d, n) { var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
+  function mins(s) { return +s.slice(11, 13) * 60 + +s.slice(14, 16); }
+  function hhmm(s) { return s.slice(11, 16); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function ts() { return new Date().toLocaleTimeString(); }
+  function addLog(m) { $('#log').prepend($('<li>').append($('<span class="ts">').text(ts()), document.createTextNode(m))); }
+  function postToParent(type, data) { if (window.parent && window.parent !== window) { window.parent.postMessage({ type: type, data: data }, '*'); addLog('Sent -> ' + type); } }
+  function showToast(msg, isError) {
+    var $t = $('#toast'); $t.text(msg).toggleClass('toast-error', !!isError).addClass('show');
+    clearTimeout(showToast._t); showToast._t = setTimeout(function () { $t.removeClass('show'); }, 2500);
+  }
+
+  /* ── ALAYA_INIT handshake ── */
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.type !== 'ALAYA_INIT') return;
+    addLog('Received <- ALAYA_INIT');
+    hostOrigin = e.originalEvent.origin || '';
+    var p = msg.data !== undefined ? msg.data : msg;
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    if (p && p.apiurl) apiUrl = p.apiurl.endsWith('/') ? p.apiurl : p.apiurl + '/';
+    if (p && p.nonce) nonce = p.nonce;
+    if (p && p.client) clientId = p.client;
+    if (p && p.username) username = p.username;
+    if (p && p.menuInfo && p.menuInfo.ListAccess) {
+      var la = p.menuInfo.ListAccess;
+      canView = !!la.VIEW; canSaveEdit = !!la.ADD; canDelete = !!la.DELETE;
+      $('#btn-setup').toggle(canSaveEdit);
+      addLog('Permissions: view=' + canView + ' saveEdit=' + canSaveEdit + ' delete=' + canDelete);
+    }
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+    if (apiUrl && nonce && clientId && username) requestToken();
+    if (hostOrigin) {
+      window.top.postMessage({ target: hostOrigin, eval:
+        '(function(){' +
+        'if(document.getElementById("hidden-memo-frame"))return;' +
+        'var f=document.createElement("iframe");f.id="hidden-memo-frame";f.style.display="none";' +
+        'f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";document.body.appendChild(f);' +
+        '})();' }, '*');
+      addLog('Pre-loading hidden memoQuery iframe in host window');
+    }
+  });
+  // every change saves immediately from the dialog, so the host toolbar Save has nothing pending
+  window.pluginSave = window.AlayaSave = window.onSave = function () { return Promise.resolve(true); };
+
+  function requestToken() {
+    $.ajax({
+      url: apiUrl + 'token', type: 'POST', cache: false,
+      data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+      success: function (r) {
+        authToken = r.token_type + ' ' + r.access_token;
+        addLog('Token obtained');
+        loadMaster(); loadStaff(); loadCustomers(); loadAppts();
+      },
+      error: function (r) { addLog('Token failed: ' + (r.responseText || 'Unknown')); }
+    });
+  }
+
+  var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
+
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.source !== 'alaya-dcb-result' || !msg.requestId) return;
+    var cb = pendingDcbCallbacks[msg.requestId];
+    if (!cb) return;
+    delete pendingDcbCallbacks[msg.requestId];
+    clearTimeout(cb.timer);
+    cb.resolve(msg);
+  });
+
+  function executeSqlViaHost(sql) {
+    return new Promise(function (resolve, reject) {
+      if (!hostOrigin) { reject(new Error('Host origin unknown — ALAYA_INIT not received yet')); return; }
+      var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      var timer = setTimeout(function () {
+        delete pendingDcbCallbacks[requestId];
+        reject(new Error('Database callback timed out after 60s'));
+      }, 60000);
+      pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+      var evalScript =
+        '(function(){' +
+        'try{' +
+          'var sql=result.sql, reqId=result.requestId;' +
+          'function findMemoFrame(win){' +
+            'try{ if(typeof win.memoQuery==="object" && typeof win.WebForm_DoCallback==="function") return win; }catch(e){}' +
+            'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){}' +
+            'return null;' +
+          '}' +
+          'function bcast(m){' +
+            'function postAll(win){' +
+              'try{ win.postMessage(m,"*"); }catch(e){}' +
+              'try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}' +
+            '}' +
+            'postAll(window);' +
+          '}' +
+          'function runOnMemo(mf){' +
+            'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+            'var hdr={Rowcount:100,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+            'var arg="RunQuery|"+JSON.stringify(hdr);' +
+            'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+            'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+            'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+          '}' +
+          'var mf=findMemoFrame(window);' +
+          'if(mf){ runOnMemo(mf); return; }' +
+          'var hidden=document.getElementById("hidden-memo-frame");' +
+          'if(hidden && hidden.contentWindow){' +
+            'try{ if(typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+          '}' +
+          'if(!hidden){' +
+            'hidden=document.createElement("iframe");' +
+            'hidden.id="hidden-memo-frame";' +
+            'hidden.style.display="none";' +
+            'hidden.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+            'document.body.appendChild(hidden);' +
+          '}' +
+          'var attempts=0;' +
+          'function poll(){' +
+            'attempts++;' +
+            'try{ if(hidden.contentWindow && typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+            'if(attempts<40){ setTimeout(poll,500); }' +
+            'else { bcast({source:"alaya-dcb-result",requestId:reqId,error:"memoQuery not available after 20s (hidden iframe load failed)"}); }' +
+          '}' +
+          'poll();' +
+        '}catch(e){ bcast({source:"alaya-dcb-result",requestId:result.requestId,error:e.message}); }' +
+        '})();';
+      window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
+      addLog('POST eval-bridge RunQuery (sql ' + sql.length + ' chars, id ' + requestId + ')');
+    });
+  }
+
+  /* ── Reads ── */
+  function fetchUdfTable(tableCode) {
+    return $.ajax({
+      url: apiUrl + 'api/Udf/ZZTGetDataTable', type: 'POST', cache: false, contentType: 'application/json; charset=UTF-8',
+      headers: { 'Authorization': authToken }, data: JSON.stringify({ tableName: tableCode })
+    }).then(function (response) {
+      if (!response || response.Result === false) { addLog('API Error (' + tableCode + '): ' + (response && response.Message)); return []; }
+      return (response.Obj || []).filter(function (o) { return o && typeof o === 'object' && o.ZZC_Code; });
+    });
+  }
+  function loadAppts() {
+    if (!apiUrl || !authToken) return;
+    fetchUdfTable(TABLE).then(function (rows) {
+      appts = [];
+      rows.forEach(function (r) {
+        var m; try { m = JSON.parse(r.ZZC_Description); } catch (e) { return; }
+        if (!m || !m.s || !m.e || (m.cid && m.cid !== DEFAULT_COMPANY_ID)) return;
+        m.code = r.ZZC_Code; m.t = m.t || 'A';
+        appts.push(m);
+      });
+      addLog('Loaded ' + appts.length + ' appointment rows');
+      render();
+    }, function (xhr) { addLog('Load failed (' + (xhr && xhr.status) + ')'); });
+  }
+  function loadStaff() {
+    var sql = "SELECT ST_ID, ST_Code, ST_Description FROM Staff WHERE ST_CompanyID = " + DEFAULT_COMPANY_ID + " AND ST_Active_YN = 1 AND ST_SalesAgent_YN = 1 AND ST_SalesAgentActive_YN = 1 ORDER BY ST_Description";
+    executeSqlViaHost(sql).then(function (msg) {
+      var parsed = null; try { parsed = JSON.parse(msg.result); } catch (e) {}
+      var rows = parsed && parsed.success && parsed.results && parsed.results[0] && parsed.results[0].rows;
+      if (!rows) { addLog('Staff load failed: ' + (msg.error || (msg.result || '').slice(0, 200))); return; }
+      staffList = rows.map(function (r) { return { code: r[1], name: r[2] || r[1] }; });
+      addLog('Loaded ' + staffList.length + ' staff');
+      applyLayout(); renderSpPicker(); fillSpSelects(); render();
+    }).catch(function (err) { addLog('Staff load failed: ' + err.message); });
+  }
+  // GetAllCustomer is paged by MaxID (cursor = last Cust_ID + 1, first page 0); loop until an empty page.
+  function loadCustomers() {
+    var acc = {}, pages = 0;
+    function page(maxID) {
+      $.ajax({
+        url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: DEFAULT_COMPANY_ID, MaxID: maxID })
+      }).then(function (resp) {
+        var data = (resp && resp.data) || [], top = maxID;
+        data.forEach(function (c) {
+          if (c.Cust_AccountCode) acc[c.Cust_ID] = { code: c.Cust_AccountCode, name: c.Cust_NAME, tel: c.Cust_Phone1 || '', hp: c.Cust_Mobile || '' };
+          if (c.Cust_ID >= top) top = c.Cust_ID + 1;
+        });
+        if (data.length && top > maxID && ++pages < 60) setTimeout(function () { page(top); }, 300);
+        else done();
+      }, function (xhr) { addLog('GetAllCustomer failed (' + xhr.status + ')'); done(); });
+    }
+    function done() {
+      customers = Object.keys(acc).map(function (k) { return acc[k]; });
+      var $dl = $('#dl-cust').empty();
+      customers.forEach(function (c) { $dl.append($('<option>').attr('value', c.code).text(c.name)); });
+      addLog('Loaded ' + customers.length + ' customers');
+    }
+    page(0);
+  }
+
+  /* ── Master data: Status (+colour) and Staff Off Reason, one small UDF table each ── */
+  function loadMaster() {
+    fetchUdfTable(STAT_TABLE).then(function (rows) {
+      var m = {};
+      rows.forEach(function (r) { var j = {}; try { j = JSON.parse(r.ZZC_Description); } catch (e) {} m[r.ZZC_Code] = j.c || '#ffff00'; });
+      if (Object.keys(m).length) STATUS = m;
+      refillMaster();
+    }, function () { addLog('Status master not available - using defaults'); });
+    fetchUdfTable(REASON_TABLE).then(function (rows) {
+      if (rows.length) REASONS = rows.map(function (r) { return r.ZZC_Code; });
+      refillMaster();
+    }, function () { addLog('Reason master not available - using defaults'); });
+  }
+  function refillMaster() {
+    var s1 = $('#a-status').val(), s2 = $('#o-status').val(), r = $('#o-rs').val();
+    fillStatus('#a-status'); fillStatus('#o-status'); fillReasons();
+    $('#a-status').val(s1); $('#o-status').val(s2); $('#o-rs').val(r);
+    render();
+  }
+
+  /* ── Writes (one row per appointment, scoped delete + insert) ── */
+  function fmtAuditDate(d) { return ymd(d) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+  function payloadOf(a) {
+    var p = { t: a.t, sp: a.sp, s: a.s, e: a.e, st: a.st, cid: DEFAULT_COMPANY_ID };
+    if (a.ad) p.ad = 1;
+    ['ac', 'nm', 'tl', 'hp', 'no', 'rs', 'cb'].forEach(function (k) { if (a[k]) p[k] = a[k]; });
+    // 400-char hard cap on ZZC_Description: shave free text (notes first) rather than fail the save
+    var json = JSON.stringify(p);
+    ['no', 'nm'].forEach(function (k) {
+      while (json.length > 400 && p[k]) { p[k] = p[k].slice(0, Math.max(0, p[k].length - 10)); if (!p[k]) delete p[k]; json = JSON.stringify(p); }
+    });
+    return json;
+  }
+  function sqlQ(s) { return String(s).replace(/'/g, "''"); }
+  function buildSaveSql(a) {
+    var now = fmtAuditDate(new Date());
+    return "DELETE FROM ZZT_" + TABLE + " WHERE ZZC_Code='" + sqlQ(a.code) + "';\n" +
+      "INSERT INTO ZZT_" + TABLE + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified) VALUES ('" +
+      sqlQ(a.code) + "', '" + sqlQ(payloadOf(a)) + "', '" + now + "', '" + now + "');";
+  }
+  function buildDeleteSql(code) { return "DELETE FROM ZZT_" + TABLE + " WHERE ZZC_Code='" + sqlQ(code) + "';"; }
+  function runSql(sql) {
+    if (isSaving) return Promise.reject(new Error('Another save is in progress'));
+    isSaving = true;
+    return executeSqlViaHost(sql).then(function (msg) {
+      isSaving = false;
+      if (msg.error) throw new Error(msg.error);
+      var p = null; try { p = JSON.parse(msg.result); } catch (e) {}
+      var ok = p && p.success;
+      if (ok && p.results) p.results.forEach(function (r) { if (r.success === false) ok = false; });
+      if (!ok) throw new Error('server rejected: ' + (msg.result || '').slice(0, 200));
+    }, function (err) { isSaving = false; throw err; });
+  }
+  function nextCode() {
+    // ponytail: client-side max+1, two users saving at the same instant could collide - move to a server sequence if that matters
+    var max = 0;
+    appts.forEach(function (a) { var n = parseInt(String(a.code).replace(/\D/g, ''), 10); if (n > max) max = n; });
+    return 'AP-' + String(max + 1).padStart(6, '0');
+  }
+  function saveRecord(a) {
+    if (!hostOrigin) { showToast('Not connected to host', true); return; }
+    runSql(buildSaveSql(a)).then(function () {
+      showToast('Save successful');
+      postToParent('ALAYA_SAVE_COMPLETED', { success: true });
+      var i = appts.findIndex(function (x) { return x.code === a.code; });
+      if (i >= 0) appts[i] = a; else appts.push(a);
+      render(); loadAppts();
+    }).catch(function (err) { addLog('Save ERROR: ' + err.message); showToast('Save failed - ' + err.message, true); });
+  }
+  function deleteRecord(code) {
+    runSql(buildDeleteSql(code)).then(function () {
+      showToast('Deleted');
+      appts = appts.filter(function (x) { return x.code !== code; });
+      render(); loadAppts();
+    }).catch(function (err) { addLog('Delete ERROR: ' + err.message); showToast('Delete failed - ' + err.message, true); });
+  }
+
+  /* ── View state ── */
+  function vt() { return $('#vt').val(); }
+  function gb() { return $('#gb').val(); }
+  function visSp() {
+    var l = staffList.filter(function (s) { return !selSp || selSp.indexOf(s.code) >= 0; });
+    return l;
+  }
+  function spColor(code) { var i = staffList.findIndex(function (s) { return s.code === code; }); return SP_COLORS[(i < 0 ? 0 : i) % SP_COLORS.length]; }
+  function spName(code) { var s = staffList.filter(function (x) { return x.code === code; })[0]; return s ? s.name : code; }
+  function evOnDay(a, day) { return a.s.slice(0, 10) <= day && a.e.slice(0, 10) >= day; }
+  function evsFor(sp, day) { return appts.filter(function (a) { return (sp == null || a.sp === sp) && evOnDay(a, day); }); }
+  function isAllDay(a) { return a.ad || a.t === 'O'; }
+  function evLabel(a, withSp) {
+    var base = a.t === 'O' ? 'OFF: ' + (a.rs || 'ON LEAVE') : (isAllDay(a) ? '' : hhmm(a.s) + ' ') + (a.nm || '');
+    return (withSp ? '[' + esc(spName(a.sp)) + '] ' : '') + esc(base);
+  }
+  function evColor(a) { return a.t === 'O' ? '' : (STATUS[a.st] || '#ffff00'); }
+  function chip(a, withSp) {
+    return '<span class="chip' + (a.t === 'O' ? ' off' : '') + '" data-code="' + esc(a.code) + '" style="' + (a.t === 'O' ? '' : 'background:' + evColor(a)) + '" title="' + esc(a.code + ' ' + (a.nm || a.rs || '') + (a.no ? ' - ' + a.no : '')) + '">' + evLabel(a, withSp) + '</span>';
+  }
+
+  function render() {
+    $('#dt').val(ymd(cur));
+    var v = vt(), h;
+    if (!staffList.length && gb() !== 'none') h = '<div class="empty">No salespersons loaded yet (waiting for host / Staff list).</div>';
+    else if (v === 'day') h = renderDay();
+    else if (v === 'timeline') h = renderTimeline();
+    else if (v === 'month') h = renderMonth();
+    else h = renderWeek(v === 'workweek' ? 5 : 7);
+    $('#cal').html(h);
+  }
+  function columns() { return gb() === 'none' ? [{ code: null, name: 'All' }] : visSp(); }
+
+  function renderDay() {
+    var cols = columns(), day = ymd(cur), n = cols.length;
+    if (!n) return '<div class="empty">No salesperson selected.</div>';
+    var h = '<div class="dgrid" style="grid-template-columns:56px repeat(' + n + ',1fr)">';
+    if (gb() === 'date') h += '<div class="h"></div><div class="h" style="grid-column:span ' + n + '">' + pad(cur.getDate()) + '/' + MONTHS[cur.getMonth()] + '</div>';
+    h += '<div class="h"></div>' + cols.map(function (c) { return '<div class="h">' + esc(c.name) + '</div>'; }).join('');
+    h += '<div class="h"></div>' + cols.map(function (c) {
+      return '<div class="strip" style="background:' + (c.code ? spColor(c.code) : '#fff') + '">' + evsFor(c.code, day).filter(isAllDay).map(function (a) { return chip(a, c.code == null); }).join('') + '</div>';
+    }).join('');
+    h += '<div>';
+    for (var hr = H0; hr < H1; hr++) h += '<div class="tl">' + (hr === 12 ? '12 PM' : hr > 12 ? (hr - 12) + ':00' : hr + (hr === H0 ? ' AM' : ':00')) + '</div>';
+    h += '</div>';
+    cols.forEach(function (c) {
+      var evs = evsFor(c.code, day).filter(function (a) { return !isAllDay(a); }).map(function (a) {
+        return { a: a, s: a.s.slice(0, 10) < day ? 0 : mins(a.s), e: a.e.slice(0, 10) > day ? 1440 : mins(a.e) };
+      }).filter(function (x) { return x.e > H0 * 60 && x.s < H1 * 60; }).sort(function (x, y) { return x.s - y.s; });
+      var lanes = [];
+      evs.forEach(function (x) {
+        var l = 0; while (lanes[l] !== undefined && lanes[l] > x.s) l++;
+        lanes[l] = x.e; x.lane = l;
+      });
+      var nl = Math.max(1, lanes.length);
+      h += '<div class="col" data-slot="v" data-sp="' + esc(c.code || '') + '" data-day="' + day + '" style="height:' + (H1 - H0) * HP + 'px;background-color:' + (c.code ? spColor(c.code) : '#fff') + '">';
+      if (sel && sel.day === day && (sel.sp || '') === (c.code || '')) h += '<div class="selbox" style="top:' + (sel.hr - H0) * HP + 'px;height:' + HP + 'px"></div>';
+      evs.forEach(function (x) {
+        var top = (Math.max(x.s, H0 * 60) - H0 * 60) / 60 * HP, ht = Math.max(18, (Math.min(x.e, H1 * 60) - Math.max(x.s, H0 * 60)) / 60 * HP);
+        h += '<div class="ev" data-code="' + esc(x.a.code) + '" style="top:' + top + 'px;height:' + ht + 'px;left:' + (x.lane * 100 / nl) + '%;width:' + (100 / nl) + '%;background:' + evColor(x.a) + '" title="' + esc(x.a.code + ' ' + (x.a.nm || '') + (x.a.no ? ' - ' + x.a.no : '')) + '">' + evLabel(x.a, c.code == null) + (x.a.ac ? '<br>' + esc(x.a.ac) : '') + '</div>';
+      });
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  function cellHtml(sp, day, dim, withSp, dn) {
+    var on = sel && sel.day === day && (sel.sp || '') === (sp || '');
+    return '<td data-slot="c" data-sp="' + esc(sp || '') + '" data-day="' + day + '" class="' + (dim ? 'dim ' : '') + (on ? 'selcell' : '') + '" style="background:' + (sp ? spColor(sp) : '#fff') + '">' +
+      (dn ? '<div class="dn">' + dn + '</div>' : '') + evsFor(sp, day).map(function (a) { return chip(a, withSp); }).join('') + '</td>';
+  }
+  function weekStart(d) { var x = new Date(d.getTime()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+  function renderWeek(nDays) {
+    var ws = weekStart(cur), cols = columns();
+    if (!cols.length) return '<div class="empty">No salesperson selected.</div>';
+    var h = '<table class="cg"><tr>' + (gb() === 'none' ? '' : '<th style="width:70px"></th>');
+    for (var i = 0; i < nDays; i++) { var d = addDays(ws, i); h += '<th>' + DAYS[d.getDay()] + ' ' + d.getDate() + (d.getDate() === 1 ? '/' + MONTHS[d.getMonth()] : '') + '</th>'; }
+    h += '</tr>';
+    cols.forEach(function (c) {
+      h += '<tr>' + (gb() === 'none' ? '' : '<td class="rl">' + esc(c.name) + '</td>');
+      for (var i = 0; i < nDays; i++) h += cellHtml(c.code, ymd(addDays(ws, i)), false, c.code == null, addDays(ws, i).getDate());
+      h += '</tr>';
+    });
+    return h + '</table>';
+  }
+  function renderMonth() {
+    var first = new Date(cur.getFullYear(), cur.getMonth(), 1), ws = weekStart(first);
+    var h = '<table class="cg"><tr>' + ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(function (n) { return '<th>' + n + '</th>'; }).join('') + '</tr>';
+    for (var w = 0; w < 6; w++) {
+      h += '<tr>';
+      for (var i = 0; i < 7; i++) {
+        var d = addDays(ws, w * 7 + i);
+        // month view merges salespersons into one cell (chips show who), honouring the salesperson filter
+        var inSel = visSp().map(function (s) { return s.code; });
+        h += cellHtmlMonth(d, inSel);
+      }
+      h += '</tr>';
+    }
+    return h + '</table>';
+  }
+  function cellHtmlMonth(d, spCodes) {
+    var day = ymd(d), on = sel && sel.day === day;
+    var evs = appts.filter(function (a) { return evOnDay(a, day) && (!staffList.length || spCodes.indexOf(a.sp) >= 0); });
+    return '<td data-slot="c" data-sp="" data-day="' + day + '" class="' + (d.getMonth() !== cur.getMonth() ? 'dim ' : '') + (on ? 'selcell' : '') + '"><div class="dn">' + d.getDate() + (d.getDate() === 1 ? '/' + MONTHS[d.getMonth()] : '') + '</div>' +
+      evs.map(function (a) { return chip(a, true); }).join('') + '</td>';
+  }
+  function renderTimeline() {
+    var cols = columns(), day = ymd(cur), n = H1 - H0;
+    if (!cols.length) return '<div class="empty">No salesperson selected.</div>';
+    var h = '<div class="dgrid" style="grid-template-columns:90px 1fr"><div class="h">' + pad(cur.getDate()) + '/' + MONTHS[cur.getMonth()] + '</div><div style="display:grid;grid-template-columns:repeat(' + n + ',1fr)">';
+    for (var hr = H0; hr < H1; hr++) h += '<div class="h">' + hr + ':00</div>';
+    h += '</div>';
+    cols.forEach(function (c) {
+      h += '<div class="h" style="display:flex;align-items:center;justify-content:center;">' + esc(c.name) + '</div>';
+      h += '<div class="tlrow" data-slot="h" data-sp="' + esc(c.code || '') + '" data-day="' + day + '" style="--n:' + n + ';background-color:' + (c.code ? spColor(c.code) : '#fff') + '">';
+      if (sel && sel.day === day && (sel.sp || '') === (c.code || '')) h += '<div class="selbox" style="top:0;bottom:0;left:' + (sel.hr - H0) / n * 100 + '%;width:' + 100 / n + '%"></div>';
+      evsFor(c.code, day).forEach(function (a) {
+        var s = isAllDay(a) || a.s.slice(0, 10) < day ? H0 * 60 : Math.max(mins(a.s), H0 * 60);
+        var e = isAllDay(a) || a.e.slice(0, 10) > day ? H1 * 60 : Math.min(mins(a.e), H1 * 60);
+        if (e <= s) return;
+        h += '<div class="tlbar" data-code="' + esc(a.code) + '" style="left:' + (s - H0 * 60) / (n * 60) * 100 + '%;width:' + (e - s) / (n * 60) * 100 + '%;background:' + (a.t === 'O' ? '#d1d5db' : evColor(a)) + '" title="' + esc(a.code + ' ' + (a.nm || a.rs || '')) + '">' + evLabel(a, c.code == null) + '</div>';
+      });
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  /* ── Navigation / toolbar ── */
+  function step(dir) {
+    var v = vt();
+    if (v === 'month') cur = new Date(cur.getFullYear(), cur.getMonth() + dir, 1);
+    else if (v === 'week' || v === 'workweek') cur = addDays(cur, 7 * dir);
+    else cur = addDays(cur, dir);
+    render();
+  }
+  $('#btn-prev').on('click', function () { step(-1); });
+  $('#btn-next').on('click', function () { step(1); });
+  $('#btn-today').on('click', goToday);
+  $('#dt').on('change', function () { if (this.value) { cur = pd(this.value); render(); } });
+  $('#vt, #gb').on('change', render);
+  function goToday() { cur = new Date(); cur.setHours(0, 0, 0, 0); render(); }
+
+  // Salesperson multi-select (Select All + per-person checkboxes + OK/Cancel)
+  function renderSpPicker() {
+    var $l = $('#sp-list').empty();
+    $l.append('<label><input type="checkbox" id="sp-all"> (Select All)</label>');
+    staffList.forEach(function (s) { $l.append($('<label>').append($('<input type="checkbox" class="sp-chk">').val(s.code).prop('checked', !selSp || selSp.indexOf(s.code) >= 0), ' ' + s.name)); });
+    $('#sp-all').prop('checked', !selSp || selSp.length === staffList.length);
+    spBtnLabel();
+  }
+  function spBtnLabel() { var l = visSp(); $('#sp-btn').text(l.length ? l.map(function (s) { return s.name; }).join(', ') : '(none)'); }
+  $('#sp-btn').on('click', function (e) { e.stopPropagation(); renderSpPicker(); $('#sp-pop').toggleClass('show'); });
+  $('#sp-pop').on('click', function (e) { e.stopPropagation(); });
+  $(document).on('change', '#sp-all', function () { $('.sp-chk').prop('checked', this.checked); });
+  $(document).on('change', '.sp-chk', function () { $('#sp-all').prop('checked', $('.sp-chk:not(:checked)').length === 0); });
+  $('#sp-ok').on('click', function () {
+    var l = $('.sp-chk:checked').map(function () { return this.value; }).get();
+    selSp = l.length === staffList.length ? null : l;
+    spBtnLabel(); $('#sp-pop').removeClass('show'); render();
+  });
+  $('#sp-cancel').on('click', function () { $('#sp-pop').removeClass('show'); });
+  $(document).on('click', function () { $('#sp-pop').removeClass('show'); $('#ctx').removeClass('show'); });
+
+  // Saved view layout (per browser)
+  var LAYOUT_KEY = 'alayaApptLayout';
+  function applyLayout() {
+    try {
+      var l = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null');
+      if (l) { $('#vt').val(l.vt); $('#gb').val(l.gb); selSp = l.sp && l.sp.length ? l.sp : null; }
+    } catch (e) {}
+  }
+  function saveLayout() { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify({ vt: vt(), gb: gb(), sp: selSp })); showToast('View layout saved'); } catch (e) { showToast('Cannot save layout here', true); } }
+  function restoreLayout() { try { localStorage.removeItem(LAYOUT_KEY); } catch (e) {} $('#vt').val('day'); $('#gb').val('date'); selSp = null; renderSpPicker(); render(); showToast('Default layout restored'); }
+
+  /* ── Selection / right-click menu ── */
+  function slotAt(e) {
+    var $t = $(e.target).closest('[data-slot]'); if (!$t.length) return null;
+    var r = $t[0].getBoundingClientRect(), k = $t.attr('data-slot'), hr = H0;
+    if (k === 'v') hr = H0 + Math.floor((e.clientY - r.top) / HP);
+    else if (k === 'h') hr = H0 + Math.floor((e.clientX - r.left) / r.width * (H1 - H0));
+    hr = Math.max(H0, Math.min(H1 - 1, hr));
+    return { sp: $t.attr('data-sp') || '', day: $t.attr('data-day'), hr: hr };
+  }
+  function findAppt(code) { return appts.filter(function (a) { return a.code === code; })[0]; }
+  // slot double-click is detected by hand: the first click re-renders the grid, which replaces
+  // the element and stops the browser firing a native dblclick
+  var lastClick = { at: 0, key: '' };
+  $('#cal').on('click', function (e) {
+    var $c = $(e.target).closest('[data-code]');
+    if ($c.length) { if (e.detail >= 2) openEdit(findAppt($c.attr('data-code'))); return; }
+    var s = slotAt(e); if (!s) return;
+    var key = s.sp + '|' + s.day + '|' + s.hr, now = Date.now();
+    var dbl = lastClick.key === key && now - lastClick.at < 500;
+    lastClick = { at: now, key: key }; sel = s;
+    if (dbl) { lastClick.at = 0; newAppt(); } else render();
+  });
+  $('#cal').on('contextmenu', function (e) {
+    e.preventDefault();
+    var $c = $(e.target).closest('[data-code]'), s = slotAt(e);
+    if (s && !$c.length) { sel = s; render(); }
+    var items = [];
+    if ($c.length) {
+      var a = findAppt($c.attr('data-code'));
+      if (canSaveEdit) items.push(['Edit', function () { openEdit(a); }]);
+      if (canDelete) items.push(['Delete...', function () { openEdit(a); }]);
+      items.push('-');
+    } else if (canSaveEdit) {
+      items.push(['New Appointment', newAppt], ['New Staff Off Day', newOff], '-');
+    }
+    var wk = vt() === 'week' || vt() === 'workweek';
+    if (wk && s) items.push(['Go to This Day', function () { cur = pd(s.day); $('#vt').val('day'); render(); }]);
+    items.push(['Go to Today', goToday], ['Go to Date...', function () { var el = $('#dt')[0]; try { el.showPicker(); } catch (x) { el.focus(); } }], '-');
+    var views = [['Day View', 'day'], ['Work Week View', 'workweek'], ['Week View', 'week'], ['Month View', 'month'], ['Timeline View', 'timeline']];
+    items.push(['Change View To', null, views.map(function (v) { return [v[0], function () { $('#vt').val(v[1]); render(); }]; })]);
+    items.push(['Save View Layout', saveLayout], ['Restore Default View Layout', restoreLayout], ['Print Preview', function () { window.print(); }]);
+    showCtx(e.clientX, e.clientY, items);
+  });
+  function showCtx(x, y, items) {
+    var $m = $('#ctx').empty();
+    function build(list, $into) {
+      list.forEach(function (it) {
+        if (it === '-') { $into.append('<div class="sep"></div>'); return; }
+        var $d = $('<div>').text(it[0]);
+        if (it[2]) { var $s = $('<div class="sub">'); build(it[2], $s); $d.addClass('has-sub').append($s); }
+        else $d.on('click', function () { $('#ctx').removeClass('show'); it[1](); });
+        $into.append($d);
+      });
+    }
+    build(items, $m);
+    $m.addClass('show').css({ left: Math.min(x, window.innerWidth - 230), top: Math.min(y, window.innerHeight - $m.outerHeight() - 6) });
+  }
+
+  /* ── Dialogs ── */
+  function fillSpSelects() {
+    ['#a-sp', '#o-sp'].forEach(function (id) {
+      var prev = $(id).val(); $(id).empty();
+      staffList.forEach(function (s) { $(id).append($('<option>').val(s.code).text(s.name)); });
+      if (prev) $(id).val(prev);
+    });
+  }
+  function fillStatus(id) { $(id).empty(); Object.keys(STATUS).forEach(function (k) { $(id).append($('<option>').val(k).text(k)); }); }
+  fillStatus('#a-status'); fillStatus('#o-status');
+  function fillReasons() { $('#o-rs').empty(); REASONS.forEach(function (r) { $('#o-rs').append($('<option>').val(r).text(r)); }); }
+  fillReasons();
+
+  var editing = null; // record being edited, null = new
+  var prevStart = 0;
+  function dtv(d, t) { return d + 'T' + (t || '00:00'); }
+  function defaultSp() { return (sel && sel.sp) || (visSp()[0] || staffList[0] || {}).code || ''; }
+  function newAppt() {
+    if (!canSaveEdit) return;
+    editing = null; var day = (sel && sel.day) || ymd(cur), hr = sel ? sel.hr : H0;
+    $('#a-status').val('BOOKED'); $('#a-sp').val(defaultSp());
+    $('#a-sd, #a-ed').val(day); $('#a-st').val(pad(hr) + ':00'); $('#a-et').val(pad(Math.min(hr + 1, 23)) + ':00');
+    $('#a-ad').prop('checked', false); $('#a-ac, #a-nm, #a-tl, #a-hp, #a-no').val('');
+    openAppt();
+  }
+  function openAppt() { toggleAllDay(); prevStart = Date.parse(dtv($('#a-sd').val(), $('#a-st').val())); $('#a-del').hide().text('Delete').removeData('arm'); if (editing && canDelete) $('#a-del').show(); $('#m-appt').addClass('show'); $('#a-nm').focus(); }
+  function newOff() {
+    if (!canSaveEdit) return;
+    editing = null; var day = (sel && sel.day) || ymd(cur);
+    $('#o-status').val('BOOKED'); $('#o-rs').val('ON LEAVE'); $('#o-sp').val(defaultSp()); $('#o-sd, #o-ed').val(day); $('#o-no').val('');
+    openOff();
+  }
+  function openOff() { $('#o-del').hide().text('Delete').removeData('arm'); if (editing && canDelete) $('#o-del').show(); $('#m-off').addClass('show'); }
+  function openEdit(a) {
+    if (!a) return;
+    editing = a;
+    if (a.t === 'O') {
+      $('#o-status').val(a.st); $('#o-rs').val(a.rs); $('#o-sp').val(a.sp); $('#o-sd').val(a.s.slice(0, 10)); $('#o-ed').val(a.e.slice(0, 10)); $('#o-no').val(a.no || '');
+      openOff();
+    } else {
+      $('#a-status').val(a.st); $('#a-sp').val(a.sp); $('#a-sd').val(a.s.slice(0, 10)); $('#a-ed').val(a.e.slice(0, 10));
+      $('#a-st').val(hhmm(a.s)); $('#a-et').val(hhmm(a.e)); $('#a-ad').prop('checked', !!a.ad);
+      $('#a-ac').val(a.ac || ''); $('#a-nm').val(a.nm || ''); $('#a-tl').val(a.tl || ''); $('#a-hp').val(a.hp || ''); $('#a-no').val(a.no || '');
+      openAppt();
+    }
+  }
+  function toggleAllDay() { $('#a-st, #a-et').prop('disabled', $('#a-ad').is(':checked')); }
+  $('#a-ad').on('change', toggleAllDay);
+  // keep the appointment's duration when Start moves
+  $('#a-sd, #a-st').on('change', function () {
+    var ns = Date.parse(dtv($('#a-sd').val(), $('#a-st').val())), oe = Date.parse(dtv($('#a-ed').val(), $('#a-et').val()));
+    if (isNaN(ns) || isNaN(prevStart) || isNaN(oe)) { prevStart = ns; return; }
+    var ne = new Date(oe + (ns - prevStart));
+    $('#a-ed').val(ymd(ne)); $('#a-et').val(pad(ne.getHours()) + ':' + pad(ne.getMinutes())); prevStart = ns;
+  });
+  // picking an Account fills Name/Telephone/Handphone
+  $('#a-ac').on('change', function () {
+    var v = $.trim(this.value), c = customers.filter(function (x) { return x.code === v; })[0];
+    if (c) { $('#a-nm').val(c.name); $('#a-tl').val(c.tel); $('#a-hp').val(c.hp); }
+  });
+  function renderPicker() {
+    var q = $.trim($('#pk-q').val()).toLowerCase();
+    var l = customers.filter(function (c) { return !q || (c.code + ' ' + c.name + ' ' + c.tel + ' ' + c.hp).toLowerCase().indexOf(q) >= 0; });
+    $('#pk-count').text(l.length + ' customers' + (l.length > 200 ? ' (first 200 shown)' : ''));
+    $('#pk-body').html(l.slice(0, 200).map(function (c) { return '<tr data-code="' + esc(c.code) + '"><td style="width:120px">' + esc(c.code) + '</td><td>' + esc(c.name) + '</td><td style="width:110px">' + esc(c.tel || c.hp) + '</td></tr>'; }).join(''));
+  }
+  $('#a-f11').on('click', function () { $('#pk-q').val(''); renderPicker(); $('#m-pick').addClass('show'); $('#pk-q').focus(); });
+  $('#pk-q').on('input', renderPicker);
+  $('#pk-close').on('click', function () { $('#m-pick').removeClass('show'); });
+  $('#pk-body').on('click', 'tr', function () { $('#a-ac').val($(this).attr('data-code')).trigger('change'); $('#m-pick').removeClass('show'); });
+
+  /* ── Setup (master data maintenance) ── */
+  function suRow(kind, name, color) {
+    return '<div class="su-row"><input type="text" value="' + esc(name) + '" maxlength="30">' + (kind === 'stat' ? '<input type="color" value="' + esc(color || '#ffff00') + '">' : '') + '<button type="button" class="su-x">&times;</button></div>';
+  }
+  $('#btn-setup').on('click', function () {
+    $('#su-stat').html(Object.keys(STATUS).map(function (k) { return suRow('stat', k, STATUS[k]); }).join(''));
+    $('#su-rsn').html(REASONS.map(function (r) { return suRow('rsn', r); }).join(''));
+    $('#m-setup').addClass('show');
+  });
+  $('#su-add-stat').on('click', function () { $('#su-stat').append(suRow('stat', '', '#ffff00')); });
+  $('#su-add-rsn').on('click', function () { $('#su-rsn').append(suRow('rsn', '')); });
+  $('#m-setup').on('click', '.su-x', function () { $(this).closest('.su-row').remove(); });
+  $('#su-cancel').on('click', function () { $('#m-setup').removeClass('show'); });
+  $('#su-save').on('click', function () {
+    var stat = {}, rsn = [];
+    $('#su-stat .su-row').each(function () { var n = $.trim($(this).find('input[type=text]').val()).toUpperCase(); if (n) stat[n] = $(this).find('input[type=color]').val(); });
+    $('#su-rsn .su-row').each(function () { var n = $.trim($(this).find('input[type=text]').val()).toUpperCase(); if (n && rsn.indexOf(n) < 0) rsn.push(n); });
+    if (!Object.keys(stat).length || !rsn.length) { showToast('Keep at least one Status and one Reason', true); return; }
+    if (!hostOrigin) { showToast('Not connected to host', true); return; }
+    var now = fmtAuditDate(new Date());
+    function ins(tbl, code, j) { return "INSERT INTO ZZT_" + tbl + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified) VALUES ('" + sqlQ(code) + "', '" + sqlQ(JSON.stringify(j)) + "', '" + now + "', '" + now + "');"; }
+    var sql = ['DELETE FROM ZZT_' + STAT_TABLE + ';', 'DELETE FROM ZZT_' + REASON_TABLE + ';']
+      .concat(Object.keys(stat).map(function (k) { return ins(STAT_TABLE, k, { c: stat[k] }); }))
+      .concat(rsn.map(function (r) { return ins(REASON_TABLE, r, {}); })).join('\n');
+    runSql(sql).then(function () { STATUS = stat; REASONS = rsn; $('#m-setup').removeClass('show'); refillMaster(); showToast('Setup saved'); })
+      .catch(function (err) { addLog('Setup save ERROR: ' + err.message); showToast('Setup save failed - ' + err.message, true); });
+  });
+  $('#a-cancel').on('click', function () { $('#m-appt').removeClass('show'); });
+  $('#o-cancel').on('click', function () { $('#m-off').removeClass('show'); });
+  $(document).on('keydown', function (e) {
+    if (e.key === 'Escape') { $('.modal').removeClass('show'); $('#ctx').removeClass('show'); }
+    if (e.key === 'F11' && $('#m-appt').hasClass('show')) { e.preventDefault(); $('#a-f11').click(); }
+  });
+
+  function recBase(t) {
+    return editing ? $.extend({}, editing) : { code: nextCode(), t: t, cb: username || '' };
+  }
+  $('#a-save').on('click', function () {
+    var sd = $('#a-sd').val(), ed = $('#a-ed').val(), ad = $('#a-ad').is(':checked');
+    var s = dtv(sd, ad ? '00:00' : $('#a-st').val()), e = dtv(ed, ad ? '00:00' : $('#a-et').val());
+    if (!$('#a-sp').val()) { showToast('Salesperson is required', true); return; }
+    if (!$.trim($('#a-nm').val())) { showToast('Name is required', true); $('#a-nm').focus(); return; }
+    if (!sd || !ed || (ad ? ed < sd : e <= s)) { showToast('End must be after Start', true); return; }
+    var a = recBase('A');
+    $.extend(a, { t: 'A', st: $('#a-status').val(), sp: $('#a-sp').val(), s: s, e: e, ad: ad ? 1 : 0, ac: $.trim($('#a-ac').val()), nm: $.trim($('#a-nm').val()), tl: $.trim($('#a-tl').val()), hp: $.trim($('#a-hp').val()), no: $('#a-no').val() });
+    $('#m-appt').removeClass('show'); saveRecord(a);
+  });
+  $('#o-save').on('click', function () {
+    var sd = $('#o-sd').val(), ed = $('#o-ed').val();
+    if (!$('#o-sp').val()) { showToast('Salesperson is required', true); return; }
+    if (!sd || !ed || ed < sd) { showToast('End Date must not be before Start Date', true); return; }
+    var a = recBase('O');
+    $.extend(a, { t: 'O', st: $('#o-status').val(), rs: $('#o-rs').val(), sp: $('#o-sp').val(), s: dtv(sd), e: dtv(ed), ad: 1, no: $('#o-no').val() });
+    $('#m-off').removeClass('show'); saveRecord(a);
+  });
+  // two-click delete (window.confirm can be blocked inside a sandboxed iframe)
+  $('#a-del, #o-del').on('click', function () {
+    var $b = $(this);
+    if (!$b.data('arm')) { $b.data('arm', 1).text('Click again to confirm'); return; }
+    $('.modal').removeClass('show'); if (editing) deleteRecord(editing.code);
+  });
+
+  /* ── Init ── */
+  applyLayout();
+  spBtnLabel();
+  $('#btn-setup').show();
+  render();
+  addLog('Page loaded - listening for ALAYA_INIT');
+</script>
+</body>
+</html>
