@@ -54,7 +54,9 @@
     .su-row { display:flex; gap:4px; margin-top:4px; }
     .su-row input[type=text] { flex:1; min-width:0; }
     .su-row input[type=color] { width:36px; padding:0; }
-    #pk-body tr { cursor:pointer; } #pk-body tr:hover { background:#cfe0fb; }
+    #pk-body tr { cursor:pointer; } #pk-body tr:hover { background:#e3edfc; } #pk-body tr.on { background:#2f66c4 !important; color:#fff; }
+    table.pk th { cursor:pointer; white-space:nowrap; text-align:left; padding:4px 8px; position:sticky; top:0; }
+    table.pk td { height:auto; padding:3px 8px; white-space:nowrap; }
     .empty { padding:40px; text-align:center; color:#6b7280; }
 
     .ctx { display:none; position:fixed; z-index:100; background:#fff; border:1px solid #9aa7ba; box-shadow:2px 2px 6px rgba(0,0,0,.25); min-width:210px; padding:2px; }
@@ -140,11 +142,20 @@
   <div class="btns"><button id="o-save" class="btn-primary">&#10004; Save</button><button id="o-cancel">&#10006; Cancel</button><button id="o-del" class="btn-danger" style="display:none;">Delete</button></div>
 </div></div>
 
-<div class="modal" id="m-pick"><div class="dlg" style="width:560px;">
-  <h3>Select Customer</h3>
-  <div class="frow"><input type="text" id="pk-q" placeholder="Search code / name / phone" style="flex:1;" /></div>
-  <div style="max-height:360px;overflow:auto;background:#fff;border:1px solid #9fb3d1;"><table class="cg" style="min-width:0;"><tbody id="pk-body"></tbody></table></div>
-  <div class="btns" style="margin-left:0;"><button id="pk-close">Close</button><span id="pk-count" style="align-self:center;color:#475569;"></span></div>
+<div class="modal" id="m-pick"><div class="dlg" style="width:860px;">
+  <h3>Customer List</h3>
+  <div class="frow" style="gap:6px;">
+    <label style="width:auto;">Search</label><select id="pk-by" style="width:190px;flex:none;"></select>
+    <input type="text" id="pk-q" placeholder="Type to filter..." style="flex:1;" />
+    <label style="width:auto;margin-left:8px;">Sort By</label><select id="pk-sort" style="width:190px;flex:none;"></select>
+    <button id="pk-dir" type="button" title="Ascending / Descending">A&#8595;Z</button>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <div style="flex:1;max-height:380px;overflow:auto;background:#fff;border:1px solid #9fb3d1;"><table class="cg pk" style="min-width:0;table-layout:auto;"><thead id="pk-head"></thead><tbody id="pk-body"></tbody></table></div>
+    <div style="display:flex;flex-direction:column;gap:8px;"><button id="pk-up" type="button" title="Previous">&#9650;</button><button id="pk-down" type="button" title="Next">&#9660;</button></div>
+  </div>
+  <div style="margin-top:6px;color:#475569;" id="pk-count"></div>
+  <div class="btns" style="margin-left:0;"><button id="pk-ok" class="btn-primary">&#10004; OK</button><button id="pk-close">&#10006; Cancel</button></div>
 </div></div>
 
 <div class="modal" id="m-setup"><div class="dlg" style="width:560px;">
@@ -376,7 +387,7 @@
         if (forCo !== cid()) return; // company changed, drop this page
         var data = (resp && resp.data) || [], top = maxID;
         data.forEach(function (c) {
-          if (c.Cust_AccountCode) acc[c.Cust_ID] = { code: c.Cust_AccountCode, name: c.Cust_NAME, tel: c.Cust_Phone1 || '', hp: c.Cust_Mobile || '' };
+          if (c.Cust_AccountCode) acc[c.Cust_ID] = { code: c.Cust_AccountCode, name: c.Cust_NAME || '', tel: c.Cust_Phone1 || '', tel2: c.Cust_Phone2 || '', hp: c.Cust_Mobile || '', email: c.Cust_Email || '', cp: c.Cust_ContactPerson || '' };
           if (c.Cust_ID >= top) top = c.Cust_ID + 1;
         });
         if (data.length && top > maxID && ++pages < 60) setTimeout(function () { page(top); }, 300);
@@ -810,18 +821,48 @@
   // picking an Account fills Name/Telephone/Handphone
   $('#a-ac').on('change', function () {
     var v = $.trim(this.value), c = customers.filter(function (x) { return x.code === v; })[0];
-    if (c) { $('#a-nm').val(c.name); $('#a-tl').val(c.tel); $('#a-hp').val(c.hp); }
+    if (c) { $('#a-nm').val(c.name); $('#a-tl').val(c.tel || c.tel2); $('#a-hp').val(c.hp); }
   });
+  // Customer List picker - same columns / search-by / sort-by as the native screen
+  var PK_COLS = [['CUST_NAME', 'name'], ['CUST_ACCTCODE', 'code'], ['CUST_TELEPHONE', 'tel'], ['CUST_TELEPHONE2', 'tel2'], ['CUST_MOBILE', 'hp'], ['CUST_EMAIL', 'email'], ['CUST_CONTACTPERSON', 'cp']];
+  var pkSort = 'name', pkAsc = true, pkRows = [], pkIdx = 0;
+  PK_COLS.forEach(function (c) { $('#pk-by, #pk-sort').append($('<option>').val(c[1]).text(c[0])); });
   function renderPicker() {
-    var q = $.trim($('#pk-q').val()).toLowerCase();
-    var l = customers.filter(function (c) { return !q || (c.code + ' ' + c.name + ' ' + c.tel + ' ' + c.hp).toLowerCase().indexOf(q) >= 0; });
-    $('#pk-count').text(l.length + ' customers' + (l.length > 200 ? ' (first 200 shown)' : ''));
-    $('#pk-body').html(l.slice(0, 200).map(function (c) { return '<tr data-code="' + esc(c.code) + '"><td style="width:120px">' + esc(c.code) + '</td><td>' + esc(c.name) + '</td><td style="width:110px">' + esc(c.tel || c.hp) + '</td></tr>'; }).join(''));
+    var q = $.trim($('#pk-q').val()).toLowerCase(), by = $('#pk-by').val();
+    pkRows = customers.filter(function (c) { return !q || String(c[by] || '').toLowerCase().indexOf(q) >= 0; });
+    pkRows.sort(function (x, y) { var r = String(x[pkSort] || '').toLowerCase().localeCompare(String(y[pkSort] || '').toLowerCase()); return pkAsc ? r : -r; });
+    if (pkIdx >= pkRows.length) pkIdx = Math.max(0, pkRows.length - 1);
+    $('#pk-head').html('<tr>' + PK_COLS.map(function (c) { return '<th data-k="' + c[1] + '">' + c[0] + (c[1] === pkSort ? (pkAsc ? ' &#9650;' : ' &#9660;') : '') + '</th>'; }).join('') + '</tr>');
+    $('#pk-body').html(pkRows.slice(0, 500).map(function (c, i) {
+      return '<tr data-i="' + i + '"' + (i === pkIdx ? ' class="on"' : '') + '>' + PK_COLS.map(function (k) { return '<td>' + esc(c[k[1]]) + '</td>'; }).join('') + '</tr>';
+    }).join(''));
+    $('#pk-count').text('Record ' + (pkRows.length ? pkIdx + 1 : 0) + ' of ' + pkRows.length + (pkRows.length > 500 ? ' (first 500 shown - type to filter)' : ''));
+    var $on = $('#pk-body tr.on'); if ($on.length && $on[0].scrollIntoView) $on[0].scrollIntoView({ block: 'nearest' });
   }
-  $('#a-f11').on('click', function () { $('#pk-q').val(''); renderPicker(); $('#m-pick').addClass('show'); $('#pk-q').focus(); });
-  $('#pk-q').on('input', renderPicker);
+  function pkPick() {
+    var c = pkRows[pkIdx]; if (!c) return;
+    $('#a-ac').val(c.code).trigger('change'); $('#m-pick').removeClass('show');
+  }
+  $('#a-f11').on('click', function () { $('#pk-q').val(''); pkIdx = 0; renderPicker(); $('#m-pick').addClass('show'); $('#pk-q').focus(); });
+  $('#pk-q').on('input', function () { pkIdx = 0; renderPicker(); });
+  $('#pk-by').on('change', function () { pkIdx = 0; renderPicker(); });
+  $('#pk-sort').on('change', function () { pkSort = this.value; renderPicker(); });
+  $('#pk-dir').on('click', function () { pkAsc = !pkAsc; $(this).html(pkAsc ? 'A&#8595;Z' : 'Z&#8595;A'); renderPicker(); });
+  $('#pk-head').on('click', 'th', function () {
+    var k = $(this).attr('data-k'); if (k === pkSort) pkAsc = !pkAsc; else { pkSort = k; pkAsc = true; }
+    $('#pk-sort').val(pkSort); $('#pk-dir').html(pkAsc ? 'A&#8595;Z' : 'Z&#8595;A'); renderPicker();
+  });
+  $('#pk-body').on('click', 'tr', function () { pkIdx = +$(this).attr('data-i'); renderPicker(); });
+  $('#pk-body').on('dblclick', 'tr', function () { pkIdx = +$(this).attr('data-i'); pkPick(); });
+  $('#pk-up').on('click', function () { if (pkIdx > 0) { pkIdx--; renderPicker(); } });
+  $('#pk-down').on('click', function () { if (pkIdx < pkRows.length - 1) { pkIdx++; renderPicker(); } });
+  $('#pk-ok').on('click', pkPick);
   $('#pk-close').on('click', function () { $('#m-pick').removeClass('show'); });
-  $('#pk-body').on('click', 'tr', function () { $('#a-ac').val($(this).attr('data-code')).trigger('change'); $('#m-pick').removeClass('show'); });
+  $('#m-pick').on('keydown', function (e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); $('#pk-down').click(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); $('#pk-up').click(); }
+    else if (e.key === 'Enter') { e.preventDefault(); pkPick(); }
+  });
 
   /* ── Setup (master data maintenance) ── */
   function suRow(kind, name, color) {
