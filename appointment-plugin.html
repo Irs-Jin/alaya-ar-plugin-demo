@@ -90,7 +90,9 @@
 
 <div class="bar">
   <span class="badge badge-waiting" id="badge">Waiting for ALAYA_INIT</span>
-  <label>Company</label><select id="co" style="max-width:220px;"><option value="527">Adidas Sdn Bhd</option></select>
+  <label>Company</label><input type="text" id="co-q" list="dl-co" autocomplete="off" placeholder="Search company" style="width:260px;" title="Click, then type to search" />
+  <datalist id="dl-co"></datalist>
+  <select id="co" style="display:none;"><option value="527">Adidas Sdn Bhd</option></select>
   <label>Date</label><input type="date" id="dt" />
   <button id="btn-prev" title="Previous">&#9664;</button><button id="btn-next" title="Next">&#9654;</button>
   <button id="btn-today">Today</button>
@@ -402,11 +404,12 @@
       else if (username && USER_COMPANY_ACCESS[username]) list = all.filter(function (c) { return USER_COMPANY_ACCESS[username].indexOf(c.code) >= 0; });
       else list = all.filter(function (c) { return c.id === DEFAULT_COMPANY_ID; });
       if (!list.length) { addLog('GetAllCompany returned no usable companies - keeping default'); return; }
-      var keep = cid(), $s = $('#co').empty();
-      list.forEach(function (c) { $s.append($('<option>').val(c.id).text(c.code + ' - ' + c.name)); });
+      list.sort(function (a, b) { return a.code.toLowerCase().localeCompare(b.code.toLowerCase()); });
+      var keep = cid(), $s = $('#co').empty(), $dl = $('#dl-co').empty();
+      list.forEach(function (c) { $s.append($('<option>').val(c.id).text(c.code + ' - ' + c.name)); $dl.append($('<option>').attr('value', c.code + ' - ' + c.name)); });
       $s.val(list.some(function (c) { return c.id === keep; }) ? keep : list[0].id);
       addLog('Loaded ' + list.length + ' companies');
-      onCompanyChange();
+      syncCoText(); onCompanyChange();
     }, function (xhr) { addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company'); onCompanyChange(); });
   }
   // company drives Salesperson, Customer and the appointments shown
@@ -416,6 +419,16 @@
     loadStaff(); if (authToken) loadCustomers();
   }
   $('#co').on('change', onCompanyChange);
+  function syncCoText() { $('#co-q').val($('#co option:selected').text()); }
+  // pick by typing: exact "CODE - Name" from the list, else a single partial match
+  $('#co-q').on('focus', function () { this.select(); });
+  $('#co-q').on('input change', function () {
+    var q = $.trim(this.value).toLowerCase(); if (!q) return;
+    var opts = $('#co option').toArray(), hit = opts.filter(function (o) { return o.text.toLowerCase() === q; })[0];
+    if (!hit) { var part = opts.filter(function (o) { return o.text.toLowerCase().indexOf(q) >= 0; }); if (part.length === 1) hit = part[0]; }
+    if (hit && String(hit.value) !== String($('#co').val())) { $('#co').val(hit.value); onCompanyChange(); }
+  });
+  $('#co-q').on('blur', syncCoText); // anything that didn't match snaps back to the current company
 
   /* ── Master data: Status (+colour) and Staff Off Reason, one small UDF table each ── */
   function loadMaster() {
