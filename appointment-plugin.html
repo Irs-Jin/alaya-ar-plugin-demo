@@ -90,6 +90,7 @@
 
 <div class="bar">
   <span class="badge badge-waiting" id="badge">Waiting for ALAYA_INIT</span>
+  <label>Company</label><select id="co" style="max-width:220px;"><option value="527">Adidas Sdn Bhd</option></select>
   <label>Date</label><input type="date" id="dt" />
   <button id="btn-prev" title="Previous">&#9664;</button><button id="btn-next" title="Next">&#9654;</button>
   <button id="btn-today">Today</button>
@@ -101,6 +102,7 @@
   <label style="margin-left:6px;">Group By</label>
   <select id="gb"><option value="none">None</option><option value="date" selected>Date</option><option value="sp">Salesperson</option></select>
   <button id="btn-setup" style="display:none;" title="Maintain Status and Reason lists">Setup</button>
+  <label style="margin-left:6px;">Salesperson</label>
   <div class="msel"><button class="msel-btn" id="sp-btn" type="button">-</button>
     <div class="msel-pop" id="sp-pop"><div id="sp-list"></div>
       <div class="btns"><button id="sp-ok" class="btn-primary">OK</button><button id="sp-cancel">Cancel</button></div></div></div>
@@ -168,18 +170,19 @@
   var canView = true, canSaveEdit = true, canDelete = true;
   var pendingDcbCallbacks = {};
   var TABLE = 'appt';
-  var DEFAULT_COMPANY_ID = 527; // ponytail: fixed company, add a company dropdown if multi-company use is needed
+  var DEFAULT_COMPANY_ID = 527; // Adidas Sdn Bhd - used until the Company list loads
+  function cid() { return parseInt($('#co').val(), 10) || DEFAULT_COMPANY_ID; }
 
   // Defaults, used until the master UDF tables (apptstat / apptrsn) have rows. Edited via the Setup button.
   var STAT_TABLE = 'apptstat', REASON_TABLE = 'apptrsn';
-  var STATUS = { BOOKED: '#ffff00', CONFIRMED: '#8fd18f', ARRIVED: '#7cc4ff', COMPLETED: '#c8c8c8', CANCELLED: '#ff9a9a' };
+  var STATUS = { 'BOOKED': '#ffff00', 'FOLLOW-UP': '#ff0000', 'CONFIRMED': '#99cc33', 'SERVICE COMPLETED': '#ffa500' };
   var REASONS = ['ON LEAVE', 'MEDICAL LEAVE', 'ABSENT', 'TRAINING', 'OTHERS'];
   var SP_COLORS = ['#fdfcd0', '#ffffff', '#d9ead3', '#dbeafe', '#fde2e2', '#ede9fe'];
   var H0 = 9, H1 = 22, HP = 46; // day axis 9AM..9PM, one hour = 46px
   var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  var appts = [], staffList = [], customers = [];
+  var allAppts = [], appts = [], staffList = [], customers = [];
   var selSp = null; // null = all
   var cur = new Date(); cur.setHours(0, 0, 0, 0);
   var sel = null;   // { sp, day, hr } highlighted slot
@@ -228,6 +231,7 @@
         'f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";document.body.appendChild(f);' +
         '})();' }, '*');
       addLog('Pre-loading hidden memoQuery iframe in host window');
+      loadStaff(); // SQL bridge only, does not need the REST token
     }
   });
   // every change saves immediately from the dialog, so the host toolbar Save has nothing pending
@@ -240,9 +244,9 @@
       success: function (r) {
         authToken = r.token_type + ' ' + r.access_token;
         addLog('Token obtained');
-        loadMaster(); loadStaff(); loadCustomers(); loadAppts();
+        loadMaster(); loadCompanies(); loadAppts();
       },
-      error: function (r) { addLog('Token failed: ' + (r.responseText || 'Unknown')); }
+      error: function (r) { addLog('Token failed: ' + (r.responseText || 'Unknown')); showToast('Token failed - check the module DevKey (see Log)', true); }
     });
   }
 
@@ -332,36 +336,42 @@
   function loadAppts() {
     if (!apiUrl || !authToken) return;
     fetchUdfTable(TABLE).then(function (rows) {
-      appts = [];
+      allAppts = [];
       rows.forEach(function (r) {
         var m; try { m = JSON.parse(r.ZZC_Description); } catch (e) { return; }
-        if (!m || !m.s || !m.e || (m.cid && m.cid !== DEFAULT_COMPANY_ID)) return;
+        if (!m || !m.s || !m.e) return;
         m.code = r.ZZC_Code; m.t = m.t || 'A';
-        appts.push(m);
+        m.cid = m.cid || DEFAULT_COMPANY_ID;
+        allAppts.push(m);
       });
-      addLog('Loaded ' + appts.length + ' appointment rows');
-      render();
+      addLog('Loaded ' + allAppts.length + ' appointment rows');
+      scopeAppts(); render();
     }, function (xhr) { addLog('Load failed (' + (xhr && xhr.status) + ')'); });
   }
+  function scopeAppts() { appts = allAppts.filter(function (a) { return a.cid === cid(); }); }
   function loadStaff() {
-    var sql = "SELECT ST_ID, ST_Code, ST_Description FROM Staff WHERE ST_CompanyID = " + DEFAULT_COMPANY_ID + " AND ST_Active_YN = 1 AND ST_SalesAgent_YN = 1 AND ST_SalesAgentActive_YN = 1 ORDER BY ST_Description";
+    var forCo = cid();
+    var sql = "SELECT ST_ID, ST_Code, ST_Description FROM Staff WHERE ST_CompanyID = " + forCo + " AND ST_Active_YN = 1 AND ST_SalesAgent_YN = 1 AND ST_SalesAgentActive_YN = 1 ORDER BY ST_Description";
     executeSqlViaHost(sql).then(function (msg) {
+      if (forCo !== cid()) return; // company changed while this was loading
       var parsed = null; try { parsed = JSON.parse(msg.result); } catch (e) {}
       var rows = parsed && parsed.success && parsed.results && parsed.results[0] && parsed.results[0].rows;
       if (!rows) { addLog('Staff load failed: ' + (msg.error || (msg.result || '').slice(0, 200))); return; }
       staffList = rows.map(function (r) { return { code: r[1], name: r[2] || r[1] }; });
-      addLog('Loaded ' + staffList.length + ' staff');
+      addLog('Loaded ' + staffList.length + ' salespersons for company ' + forCo);
+      if (!staffList.length) showToast('No active salesperson found for this company', true);
       applyLayout(); renderSpPicker(); fillSpSelects(); render();
     }).catch(function (err) { addLog('Staff load failed: ' + err.message); });
   }
   // GetAllCustomer is paged by MaxID (cursor = last Cust_ID + 1, first page 0); loop until an empty page.
   function loadCustomers() {
-    var acc = {}, pages = 0;
+    var acc = {}, pages = 0, forCo = cid();
     function page(maxID) {
       $.ajax({
         url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
-        headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: DEFAULT_COMPANY_ID, MaxID: maxID })
+        headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: forCo, MaxID: maxID })
       }).then(function (resp) {
+        if (forCo !== cid()) return; // company changed, drop this page
         var data = (resp && resp.data) || [], top = maxID;
         data.forEach(function (c) {
           if (c.Cust_AccountCode) acc[c.Cust_ID] = { code: c.Cust_AccountCode, name: c.Cust_NAME, tel: c.Cust_Phone1 || '', hp: c.Cust_Mobile || '' };
@@ -372,6 +382,7 @@
       }, function (xhr) { addLog('GetAllCustomer failed (' + xhr.status + ')'); done(); });
     }
     function done() {
+      if (forCo !== cid()) return;
       customers = Object.keys(acc).map(function (k) { return acc[k]; });
       var $dl = $('#dl-cust').empty();
       customers.forEach(function (c) { $dl.append($('<option>').attr('value', c.code).text(c.name)); });
@@ -379,6 +390,32 @@
     }
     page(0);
   }
+
+  /* ── Company list (same GetAllCompany + per-user access stopgap as service-report-plugin) ── */
+  var ADMIN_USERNAMES = ['jin1', 'ivan'];
+  var USER_COMPANY_ACCESS = { 'jin2': ['JIN4', 'jin3', 'JIN5', 'JIN6', 'JIN9', 'JIN7', 'Adidas'] };
+  function loadCompanies() {
+    $.ajax({ url: apiUrl + 'api/Company/GetAllCompany', type: 'GET', cache: false, headers: { 'Authorization': authToken } }).then(function (resp) {
+      var all = ((resp && resp.data) || []).map(function (c) { return { id: c.CO_ID, code: String(c.CO_Code || '').trim(), name: c.CO_Name }; });
+      var list;
+      if (username && ADMIN_USERNAMES.indexOf(username) >= 0) list = all;
+      else if (username && USER_COMPANY_ACCESS[username]) list = all.filter(function (c) { return USER_COMPANY_ACCESS[username].indexOf(c.code) >= 0; });
+      else list = all.filter(function (c) { return c.id === DEFAULT_COMPANY_ID; });
+      if (!list.length) { addLog('GetAllCompany returned no usable companies - keeping default'); return; }
+      var keep = cid(), $s = $('#co').empty();
+      list.forEach(function (c) { $s.append($('<option>').val(c.id).text(c.code + ' - ' + c.name)); });
+      $s.val(list.some(function (c) { return c.id === keep; }) ? keep : list[0].id);
+      addLog('Loaded ' + list.length + ' companies');
+      onCompanyChange();
+    }, function (xhr) { addLog('GetAllCompany failed (' + xhr.status + ') - keeping default company'); onCompanyChange(); });
+  }
+  // company drives Salesperson, Customer and the appointments shown
+  function onCompanyChange() {
+    staffList = []; customers = []; selSp = null; sel = null;
+    $('#dl-cust').empty(); renderSpPicker(); fillSpSelects(); scopeAppts(); render();
+    loadStaff(); if (authToken) loadCustomers();
+  }
+  $('#co').on('change', onCompanyChange);
 
   /* ── Master data: Status (+colour) and Staff Off Reason, one small UDF table each ── */
   function loadMaster() {
@@ -403,7 +440,7 @@
   /* ── Writes (one row per appointment, scoped delete + insert) ── */
   function fmtAuditDate(d) { return ymd(d) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
   function payloadOf(a) {
-    var p = { t: a.t, sp: a.sp, s: a.s, e: a.e, st: a.st, cid: DEFAULT_COMPANY_ID };
+    var p = { t: a.t, sp: a.sp, s: a.s, e: a.e, st: a.st, cid: a.cid || cid() };
     if (a.ad) p.ad = 1;
     ['ac', 'nm', 'tl', 'hp', 'no', 'rs', 'cb'].forEach(function (k) { if (a[k]) p[k] = a[k]; });
     // 400-char hard cap on ZZC_Description: shave free text (notes first) rather than fail the save
@@ -436,7 +473,7 @@
   function nextCode() {
     // ponytail: client-side max+1, two users saving at the same instant could collide - move to a server sequence if that matters
     var max = 0;
-    appts.forEach(function (a) { var n = parseInt(String(a.code).replace(/\D/g, ''), 10); if (n > max) max = n; });
+    allAppts.forEach(function (a) { var n = parseInt(String(a.code).replace(/\D/g, ''), 10); if (n > max) max = n; });
     return 'AP-' + String(max + 1).padStart(6, '0');
   }
   function saveRecord(a) {
@@ -444,16 +481,16 @@
     runSql(buildSaveSql(a)).then(function () {
       showToast('Save successful');
       postToParent('ALAYA_SAVE_COMPLETED', { success: true });
-      var i = appts.findIndex(function (x) { return x.code === a.code; });
-      if (i >= 0) appts[i] = a; else appts.push(a);
-      render(); loadAppts();
+      var i = allAppts.findIndex(function (x) { return x.code === a.code; });
+      if (i >= 0) allAppts[i] = a; else allAppts.push(a);
+      scopeAppts(); render(); loadAppts();
     }).catch(function (err) { addLog('Save ERROR: ' + err.message); showToast('Save failed - ' + err.message, true); });
   }
   function deleteRecord(code) {
     runSql(buildDeleteSql(code)).then(function () {
       showToast('Deleted');
-      appts = appts.filter(function (x) { return x.code !== code; });
-      render(); loadAppts();
+      allAppts = allAppts.filter(function (x) { return x.code !== code; });
+      scopeAppts(); render(); loadAppts();
     }).catch(function (err) { addLog('Delete ERROR: ' + err.message); showToast('Delete failed - ' + err.message, true); });
   }
 
@@ -516,7 +553,7 @@
       if (sel && sel.day === day && (sel.sp || '') === (c.code || '')) h += '<div class="selbox" style="top:' + (sel.hr - H0) * HP + 'px;height:' + HP + 'px"></div>';
       evs.forEach(function (x) {
         var top = (Math.max(x.s, H0 * 60) - H0 * 60) / 60 * HP, ht = Math.max(18, (Math.min(x.e, H1 * 60) - Math.max(x.s, H0 * 60)) / 60 * HP);
-        h += '<div class="ev" data-code="' + esc(x.a.code) + '" style="top:' + top + 'px;height:' + ht + 'px;left:' + (x.lane * 100 / nl) + '%;width:' + (100 / nl) + '%;background:' + evColor(x.a) + '" title="' + esc(x.a.code + ' ' + (x.a.nm || '') + (x.a.no ? ' - ' + x.a.no : '')) + '">' + evLabel(x.a, c.code == null) + (x.a.ac ? '<br>' + esc(x.a.ac) : '') + '</div>';
+        h += '<div class="ev" data-code="' + esc(x.a.code) + '" style="top:' + top + 'px;height:' + ht + 'px;left:' + (x.lane * 100 / nl) + '%;width:' + (100 / nl) + '%;background:' + evColor(x.a) + '" title="' + esc(x.a.code + ' ' + (x.a.nm || '') + (x.a.no ? ' - ' + x.a.no : '')) + '">' + (x.a.t === 'O' ? evLabel(x.a, false) : (c.code == null ? '[' + esc(spName(x.a.sp)) + '] ' : '') + (x.a.ac ? esc(x.a.ac) + '<br>' : '') + esc(x.a.nm || '')) + '</div>';
       });
       h += '</div>';
     });
@@ -625,7 +662,11 @@
   function applyLayout() {
     try {
       var l = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null');
-      if (l) { $('#vt').val(l.vt); $('#gb').val(l.gb); selSp = l.sp && l.sp.length ? l.sp : null; }
+      if (l) {
+        $('#vt').val(l.vt); $('#gb').val(l.gb);
+        selSp = l.sp && l.sp.length ? l.sp.filter(function (c) { return staffList.some(function (s) { return s.code === c; }); }) : null;
+        if (selSp && !selSp.length) selSp = null;
+      }
     } catch (e) {}
   }
   function saveLayout() { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify({ vt: vt(), gb: gb(), sp: selSp })); showToast('View layout saved'); } catch (e) { showToast('Cannot save layout here', true); } }
@@ -660,8 +701,9 @@
     var items = [];
     if ($c.length) {
       var a = findAppt($c.attr('data-code'));
-      if (canSaveEdit) items.push(['Edit', function () { openEdit(a); }]);
-      if (canDelete) items.push(['Delete...', function () { openEdit(a); }]);
+      items.push(['Open', function () { openEdit(a); }]);
+      if (canSaveEdit && a) items.push(['Label As', null, Object.keys(STATUS).map(function (k) { return [k, function () { var n = $.extend({}, a, { st: k }); saveRecord(n); }, null, STATUS[k]]; })]);
+      if (canDelete) { items.push('-'); items.push(['Delete', function () { openEdit(a); }]); }
       items.push('-');
     } else if (canSaveEdit) {
       items.push(['New Appointment', newAppt], ['New Staff Off Day', newOff], '-');
@@ -680,6 +722,7 @@
       list.forEach(function (it) {
         if (it === '-') { $into.append('<div class="sep"></div>'); return; }
         var $d = $('<div>').text(it[0]);
+        if (it[3]) $d.prepend($('<span class="stbox">').css({ background: it[3], position: 'absolute', left: 6, top: 7 }));
         if (it[2]) { var $s = $('<div class="sub">'); build(it[2], $s); $d.addClass('has-sub').append($s); }
         else $d.on('click', function () { $('#ctx').removeClass('show'); it[1](); });
         $into.append($d);
@@ -708,6 +751,7 @@
   function defaultSp() { return (sel && sel.sp) || (visSp()[0] || staffList[0] || {}).code || ''; }
   function newAppt() {
     if (!canSaveEdit) return;
+    $('#a-save').show();
     editing = null; var day = (sel && sel.day) || ymd(cur), hr = sel ? sel.hr : H0;
     $('#a-status').val('BOOKED'); $('#a-sp').val(defaultSp());
     $('#a-sd, #a-ed').val(day); $('#a-st').val(pad(hr) + ':00'); $('#a-et').val(pad(Math.min(hr + 1, 23)) + ':00');
@@ -717,6 +761,7 @@
   function openAppt() { toggleAllDay(); prevStart = Date.parse(dtv($('#a-sd').val(), $('#a-st').val())); $('#a-del').hide().text('Delete').removeData('arm'); if (editing && canDelete) $('#a-del').show(); $('#m-appt').addClass('show'); $('#a-nm').focus(); }
   function newOff() {
     if (!canSaveEdit) return;
+    $('#o-save').show();
     editing = null; var day = (sel && sel.day) || ymd(cur);
     $('#o-status').val('BOOKED'); $('#o-rs').val('ON LEAVE'); $('#o-sp').val(defaultSp()); $('#o-sd, #o-ed').val(day); $('#o-no').val('');
     openOff();
@@ -725,6 +770,7 @@
   function openEdit(a) {
     if (!a) return;
     editing = a;
+    $('#a-save, #o-save').toggle(canSaveEdit);
     if (a.t === 'O') {
       $('#o-status').val(a.st); $('#o-rs').val(a.rs); $('#o-sp').val(a.sp); $('#o-sd').val(a.s.slice(0, 10)); $('#o-ed').val(a.e.slice(0, 10)); $('#o-no').val(a.no || '');
       openOff();
@@ -795,7 +841,7 @@
   });
 
   function recBase(t) {
-    return editing ? $.extend({}, editing) : { code: nextCode(), t: t, cb: username || '' };
+    return editing ? $.extend({}, editing) : { code: nextCode(), t: t, cb: username || '', cid: cid() };
   }
   $('#a-save').on('click', function () {
     var sd = $('#a-sd').val(), ed = $('#a-ed').val(), ad = $('#a-ad').is(':checked');
