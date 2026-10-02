@@ -394,14 +394,16 @@
   }
 
   /* ── Company list (same GetAllCompany + per-user access stopgap as service-report-plugin) ── */
-  var ADMIN_USERNAMES = ['jin1', 'ivan'];
+  var ADMIN_USERNAMES = ['jin1', 'ivan', 'admin']; // compared lower-case
   var USER_COMPANY_ACCESS = { 'jin2': ['JIN4', 'jin3', 'JIN5', 'JIN6', 'JIN9', 'JIN7', 'Adidas'] };
   function loadCompanies() {
     $.ajax({ url: apiUrl + 'api/Company/GetAllCompany', type: 'GET', cache: false, headers: { 'Authorization': authToken } }).then(function (resp) {
       var all = ((resp && resp.data) || []).map(function (c) { return { id: c.CO_ID, code: String(c.CO_Code || '').trim(), name: c.CO_Name }; });
       var list;
-      if (username && ADMIN_USERNAMES.indexOf(username) >= 0) list = all;
-      else if (username && USER_COMPANY_ACCESS[username]) list = all.filter(function (c) { return USER_COMPANY_ACCESS[username].indexOf(c.code) >= 0; });
+      var u = (username || '').toLowerCase();
+      addLog('Company access for user "' + username + '"');
+      if (u && ADMIN_USERNAMES.indexOf(u) >= 0) list = all;
+      else if (u && USER_COMPANY_ACCESS[u]) list = all.filter(function (c) { return USER_COMPANY_ACCESS[u].indexOf(c.code) >= 0; });
       else list = all.filter(function (c) { return c.id === DEFAULT_COMPANY_ID; });
       if (!list.length) { addLog('GetAllCompany returned no usable companies - keeping default'); return; }
       list.sort(function (a, b) { return a.code.toLowerCase().localeCompare(b.code.toLowerCase()); });
