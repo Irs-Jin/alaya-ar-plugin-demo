@@ -977,6 +977,8 @@ function destPost(path, body, cb) {
 function showDest(d) {
   $('#d-mode').val(d.mode);
   $('#d-rest').toggle(d.mode === 'rest');
+  window.DEST_REST = d.mode === 'rest';   // API key is bound to one SQL company: no company picker
+  $('#sql-company, #s-sql-company').closest('.form-group').toggle(!window.DEST_REST);
   $('#d-access').val(d.accessKey || '');
   $('#d-secret').attr('placeholder', d.secretKeySet ? '(unchanged)' : '');
   $('#d-host').val(d.host || '');
@@ -2916,7 +2918,7 @@ $('#btn-transfer').on('click', function() {
   var company = $('#sql-company').val();
 
   if (!from || !to) { showToast('Please select date range', true); return; }
-  if (!company) { showToast('Please select SQL Account company', true); return; }
+  if (!company && !window.DEST_REST) { showToast('Please select SQL Account company', true); return; }
   var alayaCid = currentAlayaCompanyID();
   if (!alayaCid) { showToast('Please select an Alaya company', true); return; }
 
