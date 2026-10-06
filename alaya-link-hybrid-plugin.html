@@ -1,0 +1,3427 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Link to SQL Hybrid - Module Editor Plugin</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5; color: #1a1a1a; min-height: 100vh; padding: 24px 20px; line-height: 1.5;
+    }
+    .card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06); padding: 24px 28px; max-width: 1280px; margin: 0 auto 16px auto;
+    }
+    h1 { font-size: 1.3rem; font-weight: 800; color: #111827; }
+    h2 { font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 12px; }
+    .sub { font-size: 0.82rem; color: #6b7280; margin-bottom: 14px; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    .badge-fail { background:#fee2e2; color:#991b1b; }
+    .status-row { display:flex; align-items:center; gap:8px; font-size:0.82rem; color:#6b7280; }
+    .hero-card { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    .hero-title-row { display:flex; align-items:center; gap:12px; }
+    .hero-icon {
+      flex-shrink:0; height:44px; max-width:230px; border-radius:8px;
+      overflow:hidden; display:flex; align-items:center; justify-content:center; background:#fff;
+    }
+    .hero-icon img { height:100%; width:auto; max-width:100%; object-fit:contain; }
+    button { padding:9px 18px; border:none; border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition: background 0.15s; }
+    button:disabled { opacity:0.45; cursor:not-allowed; }
+    .btn-primary { background:#1565c0; color:#fff; }
+    .btn-primary:hover:not(:disabled) { background:#0d47a1; }
+    .btn-secondary { background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
+    .btn-secondary:hover:not(:disabled) { background:#e5e7eb; }
+    .btn-success { background:#16a34a; color:#fff; }
+    .btn-success:hover:not(:disabled) { background:#15803d; }
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
+
+    /* Tab bar */
+    .tab-bar { display:flex; gap:2px; border-bottom:2px solid #e5e7eb; margin-bottom:20px; }
+    .tab-btn {
+      padding:10px 18px; background:transparent; border:none; border-bottom:2px solid transparent;
+      margin-bottom:-2px; font-size:0.85rem; font-weight:600; color:#6b7280; cursor:pointer; font-family:inherit;
+    }
+    .tab-btn.active { color:#1565c0; border-bottom-color:#1565c0; }
+    .tab-btn:hover:not(.active) { color:#374151; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    /* Form */
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+    .form-row > * { min-width:0; }
+    .form-group { display:flex; flex-direction:column; gap:4px; min-width:0; }
+    .form-group label { font-size:0.7rem; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.04em; }
+    .form-group input, .form-group select {
+      border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.85rem; color:#111827; outline:none;
+      font-family:inherit; transition:border-color 0.15s; width:100%; max-width:100%;
+    }
+    .form-group input:focus, .form-group select:focus { border-color:#1565c0; box-shadow:0 0 0 3px rgba(21,101,192,0.1); }
+
+    /* Transfer list */
+    .transfer-item {
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px 16px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px;
+      background:#fafafa;
+    }
+    .transfer-item .info { flex:1; }
+    .transfer-item .name { font-size:0.88rem; font-weight:600; color:#111827; }
+    .transfer-item .detail { font-size:0.75rem; color:#6b7280; }
+    .transfer-item .status { font-size:0.75rem; font-weight:600; }
+    .transfer-item .status.pending { color:#92400e; }
+    .transfer-item .status.done { color:#166534; }
+    .transfer-item .status.error { color:#991b1b; }
+    .transfer-sub { margin-left:16px; margin-bottom:4px; padding:6px 12px;
+      background:#ffffff; border-color:#f1f5f9; }
+    .transfer-sub .name { font-size:0.78rem; font-weight:500; color:#374151; }
+
+    /* Log panel */
+    .log-panel {
+      background:#1e293b; color:#e2e8f0; border-radius:10px; padding:14px 16px;
+      font-family:'JetBrains Mono', 'Fira Code', monospace; font-size:0.72rem;
+      max-height:300px; overflow-y:auto; line-height:1.6;
+    }
+    .log-panel .log-entry { margin-bottom:2px; }
+    .log-panel .log-time { color:#64748b; }
+    .log-panel .log-ok { color:#4ade80; }
+    .log-panel .log-err { color:#f87171; }
+    .log-panel .log-info { color:#60a5fa; }
+
+    /* Progress */
+    .progress-bar { background:#e5e7eb; border-radius:999px; height:8px; overflow:hidden; margin-top:10px; }
+    .progress-fill { background:#1565c0; height:100%; width:0%; transition:width 0.3s; }
+
+    /* Settings */
+    .settings-section { margin-bottom:20px; }
+    .settings-section h3 { font-size:0.9rem; font-weight:700; color:#1565c0; margin-bottom:12px; border-bottom:1px solid #e5e7eb; padding-bottom:6px; }
+    .settings-col { display:flex; gap:20px; }
+    .settings-col > div { flex:1; }
+    .settings-col h4 { font-size:0.82rem; font-weight:600; color:#374151; margin-bottom:8px; }
+
+    /* Account Codes: two independent, visually separated columns */
+    .acct-cols { display:flex; gap:16px; margin-bottom:16px; align-items:flex-start; }
+    .acct-col { flex:1; border:1px solid #e5e7eb; border-radius:10px; padding:14px 16px; background:#fafbfc; }
+    .acct-col h4 {
+      font-size:0.78rem; font-weight:700; color:#1565c0; text-transform:uppercase; letter-spacing:0.04em;
+      margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #e5e7eb;
+    }
+    .acct-col .form-group { margin-bottom:10px; }
+    .acct-col .form-group:last-child { margin-bottom:0; }
+
+    /* Checkbox option grid (Transfer Options) */
+    .opt-grid {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:8px 16px;
+      border:1px solid #e5e7eb; border-radius:10px; background:#fafbfc; padding:14px 16px;
+    }
+    .opt-grid label {
+      display:flex; align-items:center; gap:7px; font-size:0.82rem; color:#374151; cursor:pointer;
+      padding:4px 0; min-width:0;
+    }
+    .opt-grid label input[type="checkbox"] { flex-shrink:0; }
+    .opt-grid label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* Vertical checkbox list (Transfer Options, grouped by Customer/Vendor) */
+    .opt-list { display:flex; flex-direction:column; gap:2px; }
+    .opt-list label { display:flex; align-items:center; gap:7px; font-size:0.82rem; color:#374151; cursor:pointer; padding:4px 0; }
+
+    /* Mapping section toolbar: actions row + description on its own line */
+    .map-toolbar { margin-bottom:12px; }
+    .map-toolbar .map-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
+    .map-toolbar .map-desc { font-size:0.75rem; color:#6b7280; }
+  </style>
+</head>
+<body>
+
+<!-- ΓòÉΓòÉΓòÉ HERO ΓòÉΓòÉΓòÉ -->
+<div class="card hero-card">
+  <div class="hero-title-row">
+    <div class="hero-icon"><img src="https://irs-jin.github.io/alaya-ar-plugin-demo/alaya-sql-logo.png" alt="Alaya to SQL Account"></div>
+    <div>
+      <h1>Link to SQL Hybrid</h1>
+      <div class="sub">Transfer data from Alaya to SQL Account - SDK Live (COM) or Restful API</div>
+      <div class="sub" style="margin-bottom:0;color:#9ca3af;font-size:0.7rem;">build: <span id="build-tag">…</span></div>
+    </div>
+  </div>
+  <div class="status-row">
+    <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span>
+    <span id="backend-badge" class="badge badge-waiting">Backend: checking...</span>
+  </div>
+</div>
+
+<!-- ΓòÉΓòÉΓòÉ MAIN CONTENT ΓòÉΓòÉΓòÉ -->
+<div class="card">
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="transfer">Transfer</button>
+    <button class="tab-btn" data-tab="advanced">Advanced</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
+    <button class="tab-btn" data-tab="log">Log</button>
+  </div>
+
+  <!-- ΓöÇΓöÇ Transfer Tab ΓöÇΓöÇ -->
+  <div id="tab-transfer" class="tab-panel active">
+    <div class="form-row">
+      <div class="form-group">
+        <label>From Date</label>
+        <input type="date" id="from-date" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label>To Date</label>
+        <input type="date" id="to-date" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Alaya Company</label>
+        <input type="text" id="alaya-company-filter" placeholder="Type to filter (e.g. JIN6)..." style="margin-bottom:6px;" />
+        <select id="alaya-company-select">
+          <option value="">Loading companies...</option>
+        </select>
+        <div id="company-scope-note" style="font-size:0.72rem;color:#6b7280;margin-top:4px;"></div>
+        <div style="margin-top:6px;">
+          <button id="btn-save-default-company" class="btn-secondary" style="padding:6px 14px;font-size:0.8rem;">Save as default</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>SQL Account Company</label>
+        <select id="sql-company">
+          <option value="">Loading companies...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:16px;">
+      <label>Transfer Method</label>
+      <select id="transfer-method">
+        <option value="summary">Summary</option>
+        <option value="itemize">By Item</option>
+      </select>
+    </div>
+
+    <div class="sub" style="margin-top:4px;">Which documents get transferred is controlled by <b>Transfer Options</b> on the Settings tab.</div>
+
+    <div class="btn-row" style="align-items:center;margin-top:12px;">
+      <button id="btn-transfer" class="btn-primary">Transfer</button>
+    </div>
+
+    <div id="transfer-progress" style="margin-top:16px;display:none;">
+      <div style="font-size:0.82rem;color:#6b7280;margin-bottom:8px;">Transferring... <span id="progress-text"></span></div>
+      <div class="progress-bar">
+        <div id="progress-bar" class="progress-fill"></div>
+      </div>
+    </div>
+
+    <div id="transfer-results" style="margin-top:16px;display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <h2 style="margin:0;"><button id="results-collapse" title="Collapse/Expand" style="border:none;background:none;cursor:pointer;font-size:16px;padding:0 6px 0 0;">&#9662;</button>Transfer Results</h2>
+        <label style="font-size:12px;color:#4b5563;">Status
+          <select id="results-filter" title="Filter rows by transfer status" style="margin-left:6px;padding:4px 8px;">
+            <option value="all">All</option>
+            <option value="transferred">Transferred</option>
+            <option value="created">Created</option>
+            <option value="updated">Updated</option>
+            <option value="skipped">Skipped</option>
+            <option value="failed">Failed</option>
+          </select>
+        </label>
+      </div>
+      <div id="results-list"></div>
+    </div>
+    <div id="transfer-summary" style="margin-top:16px;display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <h2 style="margin:0;"><button id="summary-collapse" title="Collapse/Expand" style="border:none;background:none;cursor:pointer;font-size:16px;padding:0 6px 0 0;">&#9662;</button>Transfer Summary</h2>
+      </div>
+      <div id="summary-list"></div>
+    </div>
+  </div>
+
+  <!-- ΓöÇΓöÇ Advanced Tab ΓöÇΓöÇ -->
+  <div id="tab-advanced" class="tab-panel">
+    <h2>Advanced - Document Selection</h2>
+    <div class="form-row" style="align-items:flex-end;">
+      <div class="form-group">
+        <label>Party Type</label>
+        <div style="display:flex;gap:16px;font-size:0.85rem;padding:8px 0;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="adv-type" value="customer" checked /> Customer
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="adv-type" value="vendor" /> Vendor
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Doc Type</label>
+        <select id="adv-preview-doctype">
+          <option value="CASH SALES">CASH SALES</option>
+          <option value="INVOICE">INVOICE</option>
+          <option value="CREDIT NOTE">CREDIT NOTE</option>
+          <option value="PAYMENT">PAYMENT</option>
+          <option value="CASH PURCHASES">CASH PURCHASES</option>
+          <option value="VENDOR INVOICE">VENDOR INVOICE</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <div class="btn-row">
+          <button id="btn-adv-reload" class="btn-secondary">Reload Data</button>
+          <button id="btn-adv-transfer" class="btn-primary">Transfer Ticked</button>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:0.75rem;color:#6b7280;margin-bottom:10px;">Tick rows to transfer; unticked rows are skipped.</div>
+    <div id="adv-summary-note" style="display:none;font-size:0.75rem;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:6px 10px;margin-bottom:10px;">Note: Cash Sales Summary mode ignores row ticks - the whole date range is aggregated (same as the desktop tool, whose grid is disabled for this mode).</div>
+    <div id="adv-doc-grid" style="margin-bottom:16px;">
+      <p style="color:#6b7280;font-size:0.85rem;">Click "Reload Data" to load documents.</p>
+    </div>
+    <div id="preview-content" style="max-height:400px;overflow-y:auto;">
+      <p style="color:#6b7280;font-size:0.85rem;">Data loads automatically when you click Transfer.</p>
+    </div>
+  </div>
+
+  <!-- ΓöÇΓöÇ Settings Tab ΓöÇΓöÇ -->
+  <div id="tab-settings" class="tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2>Settings</h2>
+      <button id="btn-save-settings" class="btn-success">Save</button>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin-bottom:12px;">Backend Connection</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Backend URL</label>
+        <input type="text" id="s-backend-url" placeholder="https://localhost:3101" />
+      </div>
+      <div class="form-group">
+        <label>Alaya Company (Client ID)</label>
+        <input type="text" id="s-alaya-company" placeholder="qa3" />
+      </div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Destination (Connect Method)</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Connect Method</label>
+        <select id="d-mode">
+          <option value="sdk">SDK Live (local SQL Account, COM)</option>
+          <option value="rest">Restful API (api.sql.my)</option>
+        </select>
+      </div>
+    </div>
+    <div id="d-rest" style="display:none;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>AWSv4 Access Key</label>
+          <input type="text" id="d-access" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>AWSv4 Secret Key</label>
+          <input type="password" id="d-secret" autocomplete="new-password" placeholder="" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>API Host</label>
+          <input type="text" id="d-host" placeholder="https://api.sql.my" />
+        </div>
+        <div class="form-group">
+          <label>Region / Service (auto-detected on Test)</label>
+          <input type="text" id="d-regsvc" readonly />
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin:4px 0 8px;">
+        <button id="d-test" class="btn-secondary">Test Connection</button>
+        <span id="d-result" style="font-weight:600;"></span>
+      </div>
+      <div class="sub">Keys are stored only in the backend's <code>config.json</code> (never in the Alaya settings table).
+        v1 over Restful API: Customer + Cash Sales (Itemize).</div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">SQL Account Connection (SDK Live only)</h3>
+    <div class="sub" style="margin-top:-4px;">
+      Saved to the Alaya UDF settings table along with everything else on this page (use the
+      main <b>Save</b> button above) - and mirrored to the backend's <code>config.json</code>
+      automatically so it stays in sync.
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>SQL Account Company</label>
+        <select id="s-sql-company">
+          <option value="">Loading companies...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Default.DCF Path</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="s-dcf-path" placeholder="C:\eStream\SQLAccounting\Share\Default.DCF" style="flex:1;min-width:0;" />
+          <button id="btn-browse-dcf" class="btn-secondary" style="flex-shrink:0;">Browse...</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Firebird Host</label>
+        <input type="text" id="s-fb-host" placeholder="127.0.0.1" />
+      </div>
+      <div class="form-group">
+        <label>Firebird Port</label>
+        <input type="text" id="s-fb-port" placeholder="3050" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Firebird Username</label>
+        <input type="text" id="s-fb-user" placeholder="SYSDBA" />
+      </div>
+      <div class="form-group">
+        <label>Firebird Password</label>
+        <input type="password" id="s-fb-password" placeholder="(unchanged)" autocomplete="new-password" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Estream Login Username</label>
+        <input type="text" id="s-estream-user" placeholder="ADMIN" />
+      </div>
+      <div class="form-group">
+        <label>Estream Login Password</label>
+        <input type="password" id="s-estream-password" placeholder="(unchanged)" autocomplete="new-password" />
+      </div>
+    </div>
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Settings</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Cash Sales Method</label>
+        <select id="s-cashsales-method">
+          <option value="summary">Summary</option>
+          <option value="itemize">Itemize</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cash Sales Doc No. Prefix</label>
+        <input type="text" id="s-cashsales-prefix" placeholder="CS" />
+      </div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Account Codes</h3>
+    <div class="acct-cols">
+      <div class="acct-col">
+        <h4>Customer</h4>
+        <div class="form-group">
+          <label>Cash Sales A/C</label>
+          <input type="text" id="s-ac-cashsales" placeholder="500-000" />
+        </div>
+        <div class="form-group">
+          <label>Cash Sales Rounding A/C</label>
+          <input type="text" id="s-ac-cashrounding" placeholder="500-000" />
+        </div>
+        <div class="form-group">
+          <label>Credit Sales A/C</label>
+          <input type="text" id="s-ac-creditsales" placeholder="500-000" />
+        </div>
+        <div class="form-group">
+          <label>Credit Sales Rounding A/C</label>
+          <input type="text" id="s-ac-creditrounding" placeholder="500-000" />
+        </div>
+        <div class="form-group">
+          <label>Service Charge A/C</label>
+          <input type="text" id="s-ac-servicecharge" placeholder="500-000" />
+        </div>
+        <div class="form-group">
+          <label>Cash Sales Description</label>
+          <input type="text" id="s-desc-cashsales" placeholder="CASH SALES - BY ITEMIZED" />
+        </div>
+        <div class="form-group">
+          <label>Credit Sales Description</label>
+          <input type="text" id="s-desc-creditsales" placeholder="INVOICE" />
+        </div>
+        <div class="form-group">
+          <label>Credit Note A/C</label>
+          <input type="text" id="s-ac-creditnote" placeholder="612-000" />
+        </div>
+        <div class="form-group">
+          <label>Credit Note Description (Max 150 Char.)</label>
+          <input type="text" id="s-desc-creditnote" placeholder="RETURN" maxlength="150" />
+        </div>
+      </div>
+      <div class="acct-col">
+        <h4>Vendor</h4>
+        <div class="form-group">
+          <label>Purchase A/C</label>
+          <input type="text" id="s-ac-purchase" placeholder="610-000" />
+        </div>
+        <div class="form-group">
+          <label>Purchase Rounding A/C</label>
+          <input type="text" id="s-ac-purchrounding" placeholder="610-000" />
+        </div>
+        <div class="form-group">
+          <label>Purchase Description (Max 70 Char.)</label>
+          <input type="text" id="s-desc-purchase" placeholder="INVOICE - BY ITEMIZE" maxlength="70" />
+        </div>
+        <div class="form-group">
+          <label>Purchase Project Code (max 20 char.)</label>
+          <input type="text" id="s-proj-purchase" placeholder="e.g. JIN6-PROJ" maxlength="20" />
+        </div>
+        <div class="form-group">
+          <label>Debit Note A/C</label>
+          <input type="text" id="s-ac-debitnote" placeholder="612-000" />
+        </div>
+        <div class="form-group">
+          <label>Debit Note Description (Max 150 Char.)</label>
+          <input type="text" id="s-desc-debitnote" placeholder="RETURN" maxlength="150" />
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Options</h3>
+    <div class="acct-cols">
+      <div class="acct-col">
+        <h4>Customer</h4>
+        <div class="opt-list">
+          <label>
+            <input type="checkbox" id="s-t-customer" /> <span>Transfer Customer Data</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashsales" checked /> <span>Transfer Cash Sales</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpayment" /> <span>Transfer Cash Sales Payment</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-invoice" checked /> <span>Transfer Invoice</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cn" /> <span>Transfer Credit Note</span>
+          </label>
+        </div>
+      </div>
+      <div class="acct-col">
+        <h4>Vendor</h4>
+        <div class="opt-list">
+          <label>
+            <input type="checkbox" id="s-t-vendor" /> <span>Transfer Vendor Data</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpurch" /> <span>Transfer Cash Purchases</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpurchpay" /> <span>Transfer Cash Purchases Payment</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-vendorinv" /> <span>Transfer Vendor Invoice</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Payment Mode Mapping</h3>
+    <div class="map-toolbar">
+      <div class="map-actions">
+        <button id="btn-refresh-paymodes" class="btn-secondary">Refresh Alaya Payment Mode</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+          <input type="checkbox" id="s-pm-bybranch" disabled title="Not yet implemented - payment modes currently map globally, not per branch" /> Payment Mode by Sales Branch <span style="color:#9ca3af;">(Not yet implemented)</span>
+        </label>
+      </div>
+      <div class="map-desc">Map each Alaya payment mode to its Control Account in SQL Acct</div>
+    </div>
+    <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead><tr style="background:#f9fafb;position:sticky;top:0;">
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Payment Mode in Alaya</th>
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Control Account in SQL Acct</th>
+        </tr></thead>
+        <tbody id="paymode-tbody">
+          <tr><td colspan="2" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Payment Mode" to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Sales Branch Mapping</h3>
+    <div class="map-toolbar">
+      <div class="map-actions">
+        <button id="btn-refresh-branches" class="btn-secondary">Refresh Alaya Sales Branch Code</button>
+      </div>
+      <div class="map-desc">Per-branch Cash Sales A/C, Acct Code, and Item-Group A/C flag</div>
+    </div>
+    <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead><tr style="background:#f9fafb;position:sticky;top:0;">
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Sales Branch Code in Alaya</th>
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Cash Sales A/C in SQL Acct</th>
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Acct Code in SQL Acct</th>
+          <th style="padding:8px;text-align:center;border-bottom:2px solid #e5e7eb;">Item Group A/C in Alaya</th>
+        </tr></thead>
+        <tbody id="branch-tbody">
+          <tr><td colspan="4" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Sales Branch Code" to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Purchase Division Mapping</h3>
+    <div class="map-toolbar">
+      <div class="map-actions">
+        <button id="btn-refresh-divisions" class="btn-secondary">Refresh Alaya Purchase Division Code</button>
+        <button id="btn-add-division" class="btn-secondary">+ Add Row</button>
+      </div>
+      <div class="map-desc">Tick = use Purchase A/C Code (Item Group) in Alaya</div>
+    </div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead><tr style="background:#f9fafb;position:sticky;top:0;">
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Purchase Division in Alaya</th>
+          <th style="padding:8px;text-align:center;border-bottom:2px solid #e5e7eb;">Item Group A/C in Alaya</th>
+          <th style="padding:8px;width:60px;border-bottom:2px solid #e5e7eb;"></th>
+        </tr></thead>
+        <tbody id="division-tbody">
+          <tr><td colspan="3" style="padding:10px;color:#6b7280;">No divisions yet. Refresh or add manually.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ΓöÇΓöÇ Log Tab ΓöÇΓöÇ -->
+  <div id="tab-log" class="tab-panel">
+    <div class="btn-row" style="margin-bottom:12px;">
+      <button id="btn-clear-log" class="btn-secondary">Clear Log</button>
+    </div>
+    <div id="log-panel" class="log-panel">
+      <div class="log-entry"><span class="log-time">[--:--:--]</span> <span class="log-info">Plugin loaded. Waiting for ALAYA_INIT...</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+   ALAYA MODULE EDITOR PLUGIN - ALAYA TO SQL TRANSFER
+   ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+
+// ΓöÇΓöÇ Config ΓöÇΓöÇ
+var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+var PLUGIN_VERSION = '2026-09-04-fetch-bridge';
+var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
+
+// ΓöÇΓöÇ Default Settings ΓöÇΓöÇ
+var defaultSettings = {
+  backendUrl: 'https://localhost:3101',
+  alayaCompany: 'qa3',
+  alayaCompanyId: 0,
+  cashsalesMethod: 'summary',
+  transferMethod: 'summary',
+  cashsalesPrefix: '',
+  acCashsales: '500-000',
+  acCashrounding: '500-000',
+  acCreditsales: '500-000',
+  acCreditrounding: '500-000',
+  acServicecharge: '500-000',
+  descCashsales: 'CASH SALES - BY ITEMIZED',
+  descCreditsales: 'INVOICE',
+  acPurchase: '610-000',
+  acPurchRounding: '610-000',
+  descPurchase: 'INVOICE - BY ITEMIZE',
+  projPurchase: '',
+  acCreditnote: '612-000',
+  descCreditnote: 'RETURN',
+  acDebitnote: '612-000',
+  descDebitnote: 'RETURN',
+  tCustomer: false,
+  tVendor: false,
+  tCashsales: true,
+  // ON by default to match desktop (m_Common.p_bTransferCSPayment = true):
+  // the backend posts cash-sales receipts unless explicitly unchecked.
+  tCashpayment: true,
+  tInvoice: true,
+  tCn: false,
+  tCashpurch: false,
+  tCashpurchpay: false,
+  tVendorinv: false,
+  pmByBranch: false,
+  paymodes: [],
+  branches: [],
+  divisions: [],
+  advType: 'customer',
+  advPreviewDoc: 'CASH SALES',
+  // SQL Account connection - single source of truth is the UDF table now (was
+  // previously only in the backend's own config.json via a separate save button).
+  sqlCompanyCode: '',
+  dcfPath: 'C:\\eStream\\SQLAccounting\\Share\\Default.DCF',
+  fbHost: '127.0.0.1',
+  fbPort: '3050',
+  fbUser: 'SYSDBA',
+  fbPassword: '',
+  estreamUser: 'ADMIN',
+  estreamPassword: ''
+};
+
+// ΓöÇΓöÇ State ΓöÇΓöÇ
+var BACKEND_URL = defaultSettings.backendUrl;
+var hostOrigin = '';
+var apiUrl = '';
+var nonce = '';
+var clientId = '';
+var username = '';
+var authToken = '';
+var companies = [];
+var alayaData = { customers: [], vendors: [], items: [], sales: [], _masterCid: null };
+var pendingDcbCallbacks = {};
+var pendingFetchCallbacks = {};
+var SETTINGS_TABLE = 'ZZT_LINKSQLHYB';
+var LOCAL_BACKUP_KEY = 'alaya-to-sql-settings-v2';
+var settings = {};
+
+// The backend only listens on HTTPS now. Any stale http:// value saved in
+// settings (pre-HTTPS migration) must be upgraded or every API call dies with
+// ERR_CONNECTION_RESET before it even reaches the server.
+function normalizeBackendUrl(u) {
+  if (!u) return defaultSettings.backendUrl;
+  u = String(u).replace(/\/+$/, '');
+  if (u.indexOf('http:') === 0) u = 'https:' + u.slice(5);
+  return u;
+}
+
+// Company-scoped mapping keys: PM_<cid>_<code>, BR_<cid>_<code>,
+// DV_<cid>_<code>. Rows saved before scoping (bare PM_<code> etc.) belong
+// to the company id stored in the GENERAL row at load time.
+function scopedKey(prefix, cid, code) { return prefix + cid + '_' + code; }
+function parseScopedKey(code) {
+  var m = /^(PM_|BR_|DV_)(\d+)_(.*)$/.exec(code || '');
+  return m ? { prefix: m[1], cid: parseInt(m[2], 10), code: m[3] } : null;
+}
+
+// Short-key packing keeps every UDF row far below the NVARCHAR(400) limit
+function packRows(s, cid) {
+  cid = cid || 0;
+  var rows = [];
+  function B(v) { return v ? 1 : 0; }
+  rows.push(['GENERAL', JSON.stringify({
+    bu: s.backendUrl, ac: s.alayaCompany, aid: s.alayaCompanyId,
+    cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod,
+    pb: B(s.pmByBranch), at: s.advType, apd: s.advPreviewDoc
+  })]);
+  rows.push(['CUSTOMER', JSON.stringify({
+    cs: s.acCashsales, cr: s.acCashrounding, is: s.acCreditsales,
+    ir: s.acCreditrounding, sc: s.acServicecharge,
+    dc: s.descCashsales, di: s.descCreditsales,
+    cn: s.acCreditnote, cnd: s.descCreditnote
+  })]);
+  rows.push(['VENDOR', JSON.stringify({
+    p: s.acPurchase, pr: s.acPurchRounding, dp: s.descPurchase,
+    pj: s.projPurchase, dn: s.acDebitnote, dnd: s.descDebitnote
+  })]);
+  rows.push(['OPTS', JSON.stringify({
+    c: B(s.tCustomer), v: B(s.tVendor), cs: B(s.tCashsales),
+    cp: B(s.tCashpayment), i: B(s.tInvoice), n: B(s.tCn),
+    cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv)
+  })]);
+  rows.push(['CONN', JSON.stringify({
+    sc: s.sqlCompanyCode, dp: s.dcfPath, h: s.fbHost, po: s.fbPort,
+    u: s.fbUser, pw: s.fbPassword, eu: s.estreamUser, epw: s.estreamPassword
+  })]);
+  (s.paymodes || []).forEach(function(pm) {
+    if (pm && pm.code) rows.push([scopedKey('PM_', cid, pm.code), String(pm.acct || '')]);
+  });
+  (s.branches || []).forEach(function(b) {
+    if (b && b.code) rows.push([scopedKey('BR_', cid, b.code), JSON.stringify({ c: b.cashAcct || '', a: b.acct || '', ig: B(b.itemGroup) })]);
+  });
+  (s.divisions || []).forEach(function(d) {
+    if (d && d.code) rows.push([scopedKey('DV_', cid, d.code), B(d.itemGroup) ? '1' : '0']);
+  });
+  return rows;
+}
+
+function unpackRows(rowArr) {
+  var s = {};
+  function flag(v) { return v === 1 || v === '1' || v === true; }
+  // Scoped rows are authoritative post-migration: if a legacy unscoped row
+  // and a scoped row for the same code coexist (partial save, old-tab race),
+  // the scoped value wins instead of producing duplicate mapping entries.
+  var scopedSeen = {};
+  // Pass 1: the company that owns any legacy (unscoped) mapping rows is the
+  // one stored in GENERAL at load time.
+  var ownerCid = 0;
+  rowArr.forEach(function(r) {
+    if (r[0] === 'GENERAL') {
+      try { var g = JSON.parse(r[1] || '{}'); if (g.aid) ownerCid = parseInt(g.aid, 10) || 0; } catch(e) {}
+    }
+  });
+  window._legacyMapOwnerCid = ownerCid;
+  rowArr.forEach(function(r) {
+    var code = r[0], val = r[1] || '';
+    try {
+      if (code === 'GENERAL') {
+        var g = JSON.parse(val);
+        s.backendUrl = g.bu; s.alayaCompany = g.ac; s.alayaCompanyId = g.aid;
+        s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp; s.transferMethod = g.tm;
+        s.pmByBranch = flag(g.pb); s.advType = g.at; s.advPreviewDoc = g.apd;
+      } else if (code === 'CUSTOMER') {
+        var c = JSON.parse(val);
+        s.acCashsales = c.cs; s.acCashrounding = c.cr; s.acCreditsales = c.is;
+        s.acCreditrounding = c.ir; s.acServicecharge = c.sc;
+        s.descCashsales = c.dc; s.descCreditsales = c.di;
+        s.acCreditnote = c.cn; s.descCreditnote = c.cnd;
+      } else if (code === 'VENDOR') {
+        var v = JSON.parse(val);
+        s.acPurchase = v.p; s.acPurchRounding = v.pr; s.descPurchase = v.dp;
+        s.projPurchase = v.pj; s.acDebitnote = v.dn; s.descDebitnote = v.dnd;
+      } else if (code === 'OPTS') {
+        var o = JSON.parse(val);
+        s.tCustomer = flag(o.c); s.tVendor = flag(o.v); s.tCashsales = flag(o.cs);
+        s.tCashpayment = flag(o.cp); s.tInvoice = flag(o.i); s.tCn = flag(o.n);
+        s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi);
+      } else if (code === 'CONN') {
+        var cn = JSON.parse(val);
+        s.sqlCompanyCode = cn.sc; s.dcfPath = cn.dp; s.fbHost = cn.h; s.fbPort = cn.po;
+        s.fbUser = cn.u; s.fbPassword = cn.pw; s.estreamUser = cn.eu; s.estreamPassword = cn.epw;
+      } else if (code.indexOf('PM_') === 0) {
+        var pmk = parseScopedKey(code);
+        s.paymodes = s.paymodes || [];
+        if (pmk) {
+          if (pmk.cid !== ownerCid) return; // another company's mapping
+          // drop any legacy (or earlier scoped dupe) entry: last scoped wins
+          s.paymodes = s.paymodes.filter(function(e) { return e.code !== pmk.code; });
+          scopedSeen['PM:' + pmk.code] = true;
+          s.paymodes.push({ code: pmk.code, acct: val });
+        } else if (!scopedSeen['PM:' + code.slice(3)]) {
+          // legacy unscoped rows belong to the owner company: keep
+          s.paymodes.push({ code: code.slice(3), acct: val });
+        }
+      } else if (code.indexOf('BR_') === 0) {
+        var brk = parseScopedKey(code);
+        s.branches = s.branches || [];
+        if (brk) {
+          if (brk.cid !== ownerCid) return;
+          s.branches = s.branches.filter(function(e) { return e.code !== brk.code; });
+          scopedSeen['BR:' + brk.code] = true;
+          var bb = JSON.parse(val);
+          s.branches.push({ code: brk.code, cashAcct: bb.c, acct: bb.a, itemGroup: flag(bb.ig) });
+        } else if (!scopedSeen['BR:' + code.slice(3)]) {
+          var b = JSON.parse(val);
+          s.branches.push({ code: code.slice(3), cashAcct: b.c, acct: b.a, itemGroup: flag(b.ig) });
+        }
+      } else if (code.indexOf('DV_') === 0) {
+        var dvk = parseScopedKey(code);
+        s.divisions = s.divisions || [];
+        if (dvk) {
+          if (dvk.cid !== ownerCid) return;
+          s.divisions = s.divisions.filter(function(e) { return e.code !== dvk.code; });
+          scopedSeen['DV:' + dvk.code] = true;
+          s.divisions.push({ code: dvk.code, itemGroup: (val === '1') });
+        } else if (!scopedSeen['DV:' + code.slice(3)]) {
+          s.divisions.push({ code: code.slice(3), itemGroup: (val === '1') });
+        }
+      }
+    } catch(e) { /* skip bad row */ }
+  });
+  return s;
+}
+
+// ΓöÇΓöÇ Load/Save Settings (UDF table, localStorage backup) ΓöÇΓöÇ
+function loadSettings() {
+  var sql = "SELECT ZZC_Code, ZZC_Description FROM " + SETTINGS_TABLE;
+  executeSqlViaHost(sql).then(function(msg) {
+    if (msg.error) throw new Error(msg.error);
+    var result = JSON.parse(msg.result);
+    var rows = (result.success && result.results && result.results[0] && result.results[0].rows) ? result.results[0].rows : [];
+    if (!rows.length) {
+      addLog('No saved settings in UDF table, using defaults', 'log-info');
+      settings = {};
+      window._allSettingRows = [];
+    } else {
+      window._allSettingRows = rows.slice();
+      settings = unpackRows(rows);
+      addLog('Settings loaded from UDF table (' + rows.length + ' rows)', 'log-ok');
+    }
+    // What's on screen from here on is this company's mappings - the swap
+    // handler files edits under this id until the next company change.
+    window._currentCompanyId = settings.alayaCompanyId || 0;
+    applySettings();
+  }).catch(function(err) {
+    addLog('UDF load failed (' + err.message + ') - trying local backup', 'log-warn');
+    try {
+      var saved = localStorage.getItem(LOCAL_BACKUP_KEY);
+      settings = saved ? JSON.parse(saved) : {};
+      if (saved) addLog('Settings loaded from local backup', 'log-info');
+    } catch(e) { settings = {}; }
+    window._currentCompanyId = settings.alayaCompanyId || 0;
+    applySettings();
+  });
+}
+
+function collectMappingsFromUI() {
+  var paymodes = [];
+  $('#paymode-tbody tr').each(function() {
+    var code = $(this).data('pm-code');
+    if (code) paymodes.push({ code: code, acct: $(this).find('.pm-acct').val() || '' });
+  });
+  var branches = [];
+  $('#branch-tbody tr').each(function() {
+    var code = $(this).data('br-code');
+    if (code) branches.push({
+      code: code,
+      cashAcct: $(this).find('.br-cash').val() || '',
+      acct: $(this).find('.br-acct').val() || '',
+      itemGroup: $(this).find('.br-ig').is(':checked')
+    });
+  });
+  var divisions = [];
+  $('#division-tbody tr').each(function() {
+    var code = $(this).find('.dv-code').val() || '';
+    if ($.trim(code)) divisions.push({ code: $.trim(code), itemGroup: $(this).find('.dv-ig').is(':checked') });
+  });
+  return { paymodes: paymodes, branches: branches, divisions: divisions };
+}
+
+function applySettings() {
+  var s = $.extend({}, defaultSettings, settings);
+  // Always reset date range to today (LOCAL date, not UTC) on page load /
+  // settings apply. toISOString() converts to UTC first - for any timezone
+  // ahead of UTC (e.g. MYT/UTC+8), that rolls back to "yesterday" for the
+  // first several hours of every local day, which is exactly the bug this
+  // block exists to fix. Match the local-date pattern already used by
+  // saveSettings()'s dateStr below (getFullYear/getMonth/getDate).
+  var _now = new Date();
+  function _p2(n) { return (n < 10 ? '0' : '') + n; }
+  var today = _now.getFullYear() + '-' + _p2(_now.getMonth() + 1) + '-' + _p2(_now.getDate());
+  $('#from-date').val(today);
+  $('#to-date').val(today);
+  $('#s-backend-url').val(s.backendUrl);
+  $('#s-alaya-company').val(s.alayaCompany);
+  // Transfer tab method is the operative choice at transfer time (server
+  // prefers transferMethod); keep the Settings-tab twin in sync on load so
+  // the two can never silently disagree after a reload.
+  var _m = s.transferMethod || s.cashsalesMethod || 'summary';
+  $('#transfer-method').val(_m);
+  $('#s-cashsales-method').val(_m);
+  $('#s-cashsales-prefix').val(s.cashsalesPrefix);
+  $('#s-ac-cashsales').val(s.acCashsales);
+  $('#s-ac-cashrounding').val(s.acCashrounding);
+  $('#s-ac-creditsales').val(s.acCreditsales);
+  $('#s-ac-creditrounding').val(s.acCreditrounding);
+  $('#s-ac-servicecharge').val(s.acServicecharge);
+  $('#s-desc-cashsales').val(s.descCashsales);
+  $('#s-desc-creditsales').val(s.descCreditsales);
+  $('#s-ac-purchase').val(s.acPurchase);
+  $('#s-ac-purchrounding').val(s.acPurchRounding);
+  $('#s-desc-purchase').val(s.descPurchase);
+  $('#s-proj-purchase').val(s.projPurchase);
+  $('#s-ac-creditnote').val(s.acCreditnote);
+  $('#s-desc-creditnote').val(s.descCreditnote);
+  $('#s-ac-debitnote').val(s.acDebitnote);
+  $('#s-desc-debitnote').val(s.descDebitnote);
+  // "Payment Mode by Sales Branch" is not implemented (checkbox disabled):
+  // always off, even if an old save had it on (it never took effect anyway).
+  $('#s-pm-bybranch').prop('checked', false);
+  $('#s-t-customer').prop('checked', s.tCustomer);
+  $('#s-t-cashpayment').prop('checked', s.tCashpayment !== false);
+  $('#s-t-vendor').prop('checked', s.tVendor);
+  $('#s-t-cashsales').prop('checked', s.tCashsales);
+  $('#s-t-invoice').prop('checked', s.tInvoice);
+  $('#s-t-cn').prop('checked', s.tCn);
+  $('#s-t-cashpurch').prop('checked', s.tCashpurch);
+  $('#s-t-cashpurchpay').prop('checked', s.tCashpurchpay);
+  $('#s-t-vendorinv').prop('checked', s.tVendorinv);
+  $('input[name="adv-type"][value="' + (s.advType || 'customer') + '"]').prop('checked', true);
+  updateAdvDocTypeOptions();
+  if (s.advPreviewDoc && ADV_DOCTYPES_BY_PARTY[s.advType || 'customer'].indexOf(s.advPreviewDoc) >= 0) {
+    $('#adv-preview-doctype').val(s.advPreviewDoc);
+  }
+  if (s.alayaCompanyId) $('#alaya-company-select').val(String(s.alayaCompanyId));
+  s.backendUrl = normalizeBackendUrl(s.backendUrl);
+  BACKEND_URL = s.backendUrl;
+  loadDestination();
+  renderPaymodeTable(s.paymodes || []);
+  renderBranchTable(s.branches || []);
+  renderDivisionTable(s.divisions || []);
+
+  // SQL Account connection - UDF table is now the single source of truth (see saveSettings).
+  $('#s-dcf-path').val(s.dcfPath);
+  $('#s-fb-host').val(s.fbHost);
+  $('#s-fb-port').val(s.fbPort);
+  $('#s-fb-user').val(s.fbUser);
+  $('#s-fb-password').val(s.fbPassword);
+  $('#s-estream-user').val(s.estreamUser);
+  $('#s-estream-password').val(s.estreamPassword);
+  if (s.sqlCompanyCode) $('#sql-company, #s-sql-company').val(s.sqlCompanyCode);
+  pushConnectionSettingsToBackend(s);
+}
+
+// Keep the backend's config.json in sync with whatever's in the UDF table, so the
+// two never drift apart. Called after every load and every save - no separate
+// "Save Connection Settings" button anymore.
+function pushConnectionSettingsToBackend(s) {
+  var body = {
+    dcfPath: s.dcfPath, host: s.fbHost, port: s.fbPort, user: s.fbUser,
+    password: s.fbPassword, estreamUsername: s.estreamUser, estreamPassword: s.estreamPassword
+  };
+  backendAjax({
+    url: BACKEND_URL + '/api/settings/connection', type: 'POST', contentType: 'application/json',
+    data: JSON.stringify(body),
+    success: function(r) { if (!r.success) addLog('Backend rejected connection settings: ' + r.error, 'log-err'); },
+    error: function() { addLog('Could not sync connection settings to backend (unreachable)', 'log-warn'); }
+  });
+  if (s.sqlCompanyCode) selectActiveCompany(s.sqlCompanyCode);
+}
+
+// ── Destination (SDK Live | Restful API): lives in the backend config, not in the Alaya UDF table ──
+function destPost(path, body, cb) {
+  backendAjax({ url: BACKEND_URL + path, type: 'POST', contentType: 'application/json',
+    data: JSON.stringify(body || {}), success: cb,
+    error: function() { cb({ success: false, error: 'Backend unreachable' }); } });
+}
+function showDest(d) {
+  $('#d-mode').val(d.mode);
+  $('#d-rest').toggle(d.mode === 'rest');
+  $('#d-access').val(d.accessKey || '');
+  $('#d-secret').attr('placeholder', d.secretKeySet ? '(unchanged)' : '');
+  $('#d-host').val(d.host || '');
+  $('#d-regsvc').val((d.region || '') + ' / ' + (d.service || ''));
+}
+function loadDestination() {
+  backendAjax({ url: BACKEND_URL + '/api/settings/destination', type: 'GET',
+    success: function(r) { if (r.success) showDest(r.data); } });
+}
+function destBody() {
+  return { mode: $('#d-mode').val(), accessKey: $('#d-access').val(), secretKey: $('#d-secret').val(),
+           host: $('#d-host').val() };
+}
+$('#d-mode').on('change', function() {
+  destPost('/api/settings/destination', { mode: $(this).val() }, function(r) {
+    if (r.success) { showDest(r.data); addLog('Destination: ' + r.data.mode, 'log-ok'); }
+  });
+});
+$('#d-test').on('click', function() {
+  $('#d-result').css('color', '#6b7280').text('Testing...');
+  destPost('/api/settings/destination', destBody(), function(s) {
+    if (!s.success) { $('#d-result').css('color', '#b91c1c').text(s.error || 'Save failed'); return; }
+    $('#d-secret').val('');
+    destPost('/api/settings/destination/test', {}, function(r) {
+      $('#d-result').css('color', r.success ? '#15803d' : '#b91c1c').text(r.success ? r.message : (r.error || 'Failed'));
+      addLog('REST Test Connection: ' + (r.message || r.error), r.success ? 'log-ok' : 'log-err');
+      loadDestination();
+    });
+  });
+});
+
+// mappingCid (optional): the company id the on-screen mappings are filed
+// under. Defaults to the currently selected company. The company-switch
+// handler passes the OUTGOING id so its edits are stored before the swap,
+// while GENERAL (the global default-company pointer) still advances to the
+// newly selected company from the dropdown.
+function saveSettings(mappingCid) {
+  var maps = collectMappingsFromUI();
+  settings = {
+    backendUrl: normalizeBackendUrl($('#s-backend-url').val() || defaultSettings.backendUrl),
+    // NOTE: #s-alaya-company is the Client ID field (e.g. "qa3"), NOT the selected
+    // company code - keep whatever code btn-save-default-company (or a prior load)
+    // already put in settings.alayaCompany instead of clobbering it here.
+    alayaCompany: settings.alayaCompany || $('#s-alaya-company').val(),
+    alayaCompanyId: parseInt($('#alaya-company-select').val(), 10) || 0,
+    cashsalesMethod: $('#s-cashsales-method').val(),
+    transferMethod: $('#transfer-method').val() || 'summary',
+    cashsalesPrefix: $('#s-cashsales-prefix').val(),
+    acCashsales: $('#s-ac-cashsales').val(),
+    acCashrounding: $('#s-ac-cashrounding').val(),
+    acCreditsales: $('#s-ac-creditsales').val(),
+    acCreditrounding: $('#s-ac-creditrounding').val(),
+    acServicecharge: $('#s-ac-servicecharge').val(),
+    descCashsales: $('#s-desc-cashsales').val(),
+    descCreditsales: $('#s-desc-creditsales').val(),
+    acPurchase: $('#s-ac-purchase').val(),
+    acPurchRounding: $('#s-ac-purchrounding').val(),
+    descPurchase: $('#s-desc-purchase').val(),
+    projPurchase: $('#s-proj-purchase').val(),
+    acCreditnote: $('#s-ac-creditnote').val(),
+    descCreditnote: $('#s-desc-creditnote').val(),
+    acDebitnote: $('#s-ac-debitnote').val(),
+    descDebitnote: $('#s-desc-debitnote').val(),
+    pmByBranch: $('#s-pm-bybranch').is(':checked'),
+    tCustomer: $('#s-t-customer').is(':checked'),
+    tVendor: $('#s-t-vendor').is(':checked'),
+    tCashsales: $('#s-t-cashsales').is(':checked'),
+    tCashpayment: $('#s-t-cashpayment').is(':checked'),
+    tInvoice: $('#s-t-invoice').is(':checked'),
+    tCn: $('#s-t-cn').is(':checked'),
+    tCashpurch: $('#s-t-cashpurch').is(':checked'),
+    tCashpurchpay: $('#s-t-cashpurchpay').is(':checked'),
+    tVendorinv: $('#s-t-vendorinv').is(':checked'),
+    paymodes: maps.paymodes,
+    branches: maps.branches,
+    divisions: maps.divisions,
+    advType: $('input[name="adv-type"]:checked').val() || 'customer',
+    advPreviewDoc: $('#adv-preview-doctype').val() || 'CASH SALES',
+    sqlCompanyCode: $('#sql-company, #s-sql-company').filter(':first').val() || settings.sqlCompanyCode || '',
+    dcfPath: $('#s-dcf-path').val() || defaultSettings.dcfPath,
+    fbHost: $('#s-fb-host').val() || defaultSettings.fbHost,
+    fbPort: $('#s-fb-port').val() || defaultSettings.fbPort,
+    fbUser: $('#s-fb-user').val() || defaultSettings.fbUser,
+    fbPassword: $('#s-fb-password').val(),
+    estreamUser: $('#s-estream-user').val() || defaultSettings.estreamUser,
+    estreamPassword: $('#s-estream-password').val()
+  };
+  BACKEND_URL = settings.backendUrl;
+  pushConnectionSettingsToBackend(settings);
+
+  // Always keep a local backup
+  try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
+
+  var now = new Date();
+  function p2(n) { return (n < 10 ? '0' : '') + n; }
+  var dateStr = now.getFullYear() + '-' + p2(now.getMonth()+1) + '-' + p2(now.getDate()) + ' ' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + ':' + p2(now.getSeconds());
+  var saveCid = (typeof mappingCid === 'number') ? mappingCid : (settings.alayaCompanyId || 0);
+  var rows = packRows(settings, saveCid);
+  // Over-long rows are dropped BEFORE the DELETE is built (the previous
+  // revision deleted first and then skipped the insert, permanently losing
+  // that row's stored value). The old DB value is kept and the skip is loud.
+  var okRows = [];
+  rows.forEach(function(r) {
+    if (String(r[1]).length > 390) {
+      addLog('Row ' + r[0] + ' too long (' + String(r[1]).length + ' chars) - kept previous DB value, shorten it and save again', 'log-err');
+      return;
+    }
+    okRows.push(r);
+  });
+  // Keep the raw-row cache in sync so company switches can swap mappings
+  // without a reload: drop globals + this company's rows (scoped, plus
+  // legacy rows when this company owns them), then add the fresh rows.
+  var GLOBAL_CODES = { GENERAL: 1, CUSTOMER: 1, VENDOR: 1, OPTS: 1, CONN: 1 };
+  // extraDel: keys that must be DELETEd even though they are not re-inserted -
+  // legacy unscoped rows superseded by this save's scoped rows (otherwise
+  // they resurface as duplicates on next load), and this company's cached
+  // scoped keys for mappings deleted from the UI (otherwise the deleted
+  // mapping resurrects on next load).
+  var extraDel = [];
+  var cache = [];
+  (window._allSettingRows || []).forEach(function(r) {
+    if (GLOBAL_CODES[r[0]]) return;
+    var p = parseScopedKey(r[0]);
+    if (p) {
+      if (p.cid === saveCid) { extraDel.push(r[0]); return; }
+      cache.push(r);
+      return;
+    }
+    if ((window._legacyMapOwnerCid || 0) === saveCid) { extraDel.push(r[0]); return; }
+    cache.push(r);
+  });
+  okRows.forEach(function(r) { if (!GLOBAL_CODES[r[0]]) cache.push(r); });
+  window._allSettingRows = cache;
+  // Targeted DELETE: globals + this company's fresh scoped keys + superseded
+  // keys. Other companies' mapping rows are left untouched (previously
+  // DELETE-all wiped them - every company silently shared/overwrote one
+  // mapping set).
+  var delSet = {};
+  okRows.forEach(function(r) { delSet[r[0]] = 1; });
+  extraDel.forEach(function(k) { delSet[k] = 1; });
+  var delList = Object.keys(delSet).map(function(k) { return "'" + String(k).replace(/'/g, "''") + "'"; });
+  var stmts = ['DELETE FROM ' + SETTINGS_TABLE + ' WHERE ZZC_Code IN (' + delList.join(',') + ');'];
+  okRows.forEach(function(r) {
+    var codeSafe = String(r[0]).replace(/'/g, "''");
+    var valSafe = String(r[1]).replace(/'/g, "''");
+    stmts.push("INSERT INTO " + SETTINGS_TABLE + " (ZZC_Code, ZZC_Description, ZZC_DateCreated, ZZC_DateModified) VALUES ('" + codeSafe + "', '" + valSafe + "', '" + dateStr + "', '" + dateStr + "');");
+  });
+
+  // Fire each statement as its own RunQuery call instead of one big joined
+  // string - the host's memoQuery test-query control appears to only support
+  // a single statement per call; a multi-statement batch never calls back at
+  // all (times out no matter how long we wait), while single statements work.
+  var chain = Promise.resolve();
+  stmts.forEach(function(stmt) {
+    chain = chain.then(function() { return executeSqlViaHost(stmt, 10000); }).then(function(msg) {
+      if (msg.error) throw new Error(msg.error);
+    });
+  });
+  chain.then(function() {
+    showToast('Settings saved (' + okRows.length + ' rows to Alaya DB)');
+    addLog('Settings saved to UDF table (' + okRows.length + ' rows) + local backup', 'log-ok');
+    testBackendConnection();
+  }).catch(function(err) {
+    showToast('UDF save failed, kept local backup: ' + err.message, true);
+    addLog('Save to UDF failed (' + err.message + '). Local backup kept. To enable server storage, create a UDF module with code LINKSQLHYB in Module Editor.', 'log-err');
+  });
+}
+
+// ΓöÇΓöÇ Logging ΓöÇΓöÇ
+function addLog(msg, cls) {
+  var now = new Date();
+  var ts = [now.getHours(), now.getMinutes(), now.getSeconds()].map(function(n){ return n<10?'0'+n:n; }).join(':');
+  var c = cls || '';
+  $('#log-panel').append('<div class="log-entry"><span class="log-time">[' + ts + ']</span> <span class="' + c + '">' + escHtml(msg) + '</span></div>');
+  var el = document.getElementById('log-panel');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ΓöÇΓöÇ Toast ΓöÇΓöÇ
+function showToast(msg, isError) {
+  $('#toast-msg').remove();
+  var bg = isError ? '#fee2e2' : '#dcfce7';
+  var fg = isError ? '#991b1b' : '#166534';
+  var html = '<div id="toast-msg" style="position:fixed;bottom:24px;right:24px;background:'+bg+';color:'+fg+';padding:12px 20px;border-radius:10px;font-size:0.82rem;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);">'+escHtml(msg)+'</div>';
+  var $t = $(html).appendTo('body');
+  setTimeout(function(){ $t.remove(); }, 4000);
+}
+
+// ΓöÇΓöÇ postMessage helpers ΓöÇΓöÇ
+function postToParent(type, data) {
+  window.parent.postMessage(Object.assign({ type: type, source: 'alaya-to-sql' }, data || {}), '*');
+}
+
+// ΓöÇΓöÇ ALAYA_INIT handshake ΓöÇΓöÇ
+$(window).on('message', function(e) {
+  var msg = e.originalEvent.data;
+  if (!msg) return;
+
+  if (msg.type === 'ALAYA_INIT') {
+    hostOrigin = e.originalEvent.origin || '';
+    var payload = msg.data !== undefined ? msg.data : msg;
+    addLog('Received <- ALAYA_INIT');
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    
+    if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
+    if (payload && payload.nonce) nonce = payload.nonce;
+    if (payload && payload.client) clientId = payload.client;
+    if (payload && payload.username) username = payload.username;
+    
+    addLog('api=' + apiUrl + ' client=' + clientId + ' user=' + username);
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+    
+    if (apiUrl && nonce && clientId && username) requestToken();
+    
+    // Pre-load hidden memoQuery iframe
+    if (hostOrigin) {
+      window.top.postMessage({ target: hostOrigin, eval:
+        '(function(){' +
+        'if(document.getElementById("hidden-memo-frame"))return;' +
+        'var f=document.createElement("iframe");' +
+        'f.id="hidden-memo-frame";' +
+        'f.style.display="none";' +
+        'f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+        'document.body.appendChild(f);' +
+        '})();'
+      }, '*');
+      addLog('Pre-loading hidden memoQuery iframe');
+    }
+    
+    // Test backend connection
+    testBackendConnection();
+    
+    // Load settings from UDF table (needs host bridge)
+    setTimeout(function() { loadSettings(); }, 500);
+  }
+
+  if ((msg.type === 'alaya-dcb-result' || msg.source === 'alaya-dcb-result') && msg.requestId) {
+    var cb = pendingDcbCallbacks[msg.requestId];
+    if (cb) {
+      delete pendingDcbCallbacks[msg.requestId];
+      clearTimeout(cb.timer);
+      cb.resolve(msg);
+    }
+  }
+
+  if ((msg.type === 'alaya-fetch-result' || msg.source === 'alaya-fetch-result') && msg.requestId) {
+    var fcb = pendingFetchCallbacks[msg.requestId];
+    if (fcb) {
+      delete pendingFetchCallbacks[msg.requestId];
+      clearTimeout(fcb.timer);
+      fcb.resolve(msg);
+    }
+  }
+});
+
+// ΓöÇΓöÇ Authentication ΓöÇΓöÇ
+function requestToken() {
+  addLog('POST ' + apiUrl + 'token');
+  $.ajax({
+    url: apiUrl + 'token', type: 'POST', cache: false,
+    data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+    success: function (r) {
+      authToken = r.token_type + ' ' + r.access_token;
+      addLog('Token obtained', 'log-ok');
+      extractJwtHints(authToken);
+      loadCompaniesFromApi();
+    },
+    error: function (r) {
+      var msg = '';
+      try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch (e) { msg = r.responseText || 'Unknown'; }
+      addLog('Token failed: ' + msg, 'log-err');
+    }
+  });
+}
+
+// ΓöÇΓöÇ Load companies from Alaya API ΓöÇΓöÇ
+function loadCompaniesFromApi() {
+  if (!apiUrl || !authToken) return;
+  var endpoint = apiUrl + 'api/Company/GetAllCompany';
+  addLog('GET ' + endpoint);
+  $.ajax({
+    url: endpoint, type: 'GET', cache: false,
+    headers: { 'Authorization': authToken },
+    success: function (resp) {
+      var data = (resp && resp.data) || [];
+      if (!data.length) {
+        addLog('GetAllCompany returned no rows - rate limit possible, click Retry', 'log-err');
+        showCompanyRetry('empty response');
+        loadSqlCompanies();
+        return;
+      }
+      companies = data;
+      hideCompanyRetry();
+      addLog('Loaded ' + data.length + ' companies from Alaya', 'log-ok');
+      try { addLog('Company raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
+      var sel = $('#alaya-company-select');
+      sel.empty();
+      if (!data.length) sel.append('<option value="">No companies found</option>');
+      data.forEach(function(c) {
+        var id = c.CO_ID, code = String(c.CO_Code || '').trim();
+        sel.append('<option value="' + id + '">' + escHtml(code) + ' - ' + escHtml(c.CO_Name || '') + '</option>');
+      });
+      var hadSaved = !!((settings && settings.alayaCompanyId));
+      var picked = pickDefaultCompany(data);
+      if (picked) {
+        clearCompanyFilter();
+        sel.val(String(picked));
+        settings.alayaCompanyId = picked;
+        $('input[name="adv-type"]:checked').length; // noop guard
+        addLog('Default company auto-selected: ' + sel.find('option:selected').text(), 'log-ok');
+        if (!hadSaved && data.length && String(picked) === String(data[0].CO_ID)) {
+          probeDefaultCompanyByStaff(picked);
+        }
+      } else {
+        // Saved company no longer in list (e.g. filtered out) - keep dropdown empty but log
+        addLog('No default company resolvable; dropdown left unselected', 'log-warn');
+      }
+      applyUserCompanyFilter();
+      window._companyScopeMode = 'full list';
+      setScopeNote();
+      loadSqlCompanies();
+    },
+    error: function (r) {
+      addLog('Load companies failed: ' + r.status + ' - click Retry', 'log-err');
+      showCompanyRetry('HTTP ' + r.status);
+    }
+  });
+}
+
+// Default-company oracle probe: find this login's default company via Staff table.
+// Bridge returns rows without column names, so single-column SELECTs give clean values.
+// Runs in background only when no saved/API/JWT default resolved. All steps logged.
+function probeDefaultCompanyByStaff(pickedId) {
+  if (!hostOrigin || !username) { addLog('Staff probe skipped (no host/username)', 'log-info'); return; }
+  var user = String(username).replace(/'/g, "''");
+  var linkCols = ['ST_Code', 'ST_UserID', 'ST_LoginID', 'ST_Username'];
+  var compCols = ['ST_DefaultCompanyID', 'ST_DefaultCompany', 'ST_CompanyID'];
+  addLog('Probing Staff table for ' + username + ' default company...', 'log-info');
+  function tryLink(i) {
+    if (i >= linkCols.length) { addLog('Staff probe: no login-link column matched', 'log-warn'); return; }
+    var col = linkCols[i];
+    executeSqlViaHost("SELECT COUNT(*) AS C FROM Staff WHERE " + col + " = '" + user + "'").then(function(msg) {
+      if (msg.error) throw new Error(msg.error);
+      var n = 0;
+      try {
+        var r = JSON.parse(msg.result);
+        n = (r.results && r.results[0] && r.results[0].rows && r.results[0].rows[0]) ? r.results[0].rows[0][0] : 0;
+      } catch(e) { throw e; }
+      if (!n) { tryLink(i + 1); return; }
+      addLog('Staff probe: linked via ' + col, 'log-ok');
+      tryComp(col, 0);
+    }).catch(function(err) {
+      addLog('Staff probe ' + col + ': ' + String(err.message || err).slice(0, 120), 'log-info');
+      tryLink(i + 1);
+    });
+  }
+  function tryComp(linkCol, j) {
+    if (j >= compCols.length) { addLog('Staff probe: no company column yielded an ID', 'log-warn'); return; }
+    var cc = compCols[j];
+    executeSqlViaHost("SELECT " + cc + " FROM Staff WHERE " + linkCol + " = '" + user + "'").then(function(msg) {
+      if (msg.error) throw new Error(msg.error);
+      var id = 0;
+      try {
+        var r = JSON.parse(msg.result);
+        id = (r.results && r.results[0] && r.results[0].rows && r.results[0].rows[0]) ? parseInt(r.results[0].rows[0][0], 10) : 0;
+      } catch(e) { throw e; }
+      if (!id || !$('#alaya-company-select option[value="' + id + '"]').length) { tryComp(linkCol, j + 1); return; }
+      clearCompanyFilter();
+      $('#alaya-company-select').val(String(id));
+      settings.alayaCompanyId = id;
+      settings.alayaCompany = currentAlayaCompanyCode();
+      addLog('Default company auto-selected from Staff: ' + $('#alaya-company-select option:selected').text(), 'log-ok');
+      showToast('Company set to your default');
+      try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
+    }).catch(function(err) {
+      addLog('Staff probe ' + cc + ': ' + String(err.message || err).slice(0, 120), 'log-info');
+      tryComp(linkCol, j + 1);
+    });
+  }
+  tryLink(0);
+}
+
+// Company access filter: restrict dropdown to companies mapped to this user.
+// Mapping source: User Group Mapping (Users screen). Runs after the full list loads;
+// on any failure (denied table, timeout) the full API list is kept. Never blocks UI.
+function applyUserCompanyFilter() {
+  if (!hostOrigin || !username) return;
+  var user = String(username).replace(/'/g, "''");
+  var sel = $('#alaya-company-select');
+  var total = sel.find('option').length;
+  if (total <= 1) return;
+  var fullHtml = sel.html(); // restore point (never reload - avoids loops)
+  var sql = "SELECT CompanyName FROM UserGroupMapping WHERE UserID = '" + user + "'";
+  executeSqlViaHost(sql).then(function(msg) {
+    if (msg.error) throw new Error(msg.error);
+    var rows = [];
+    try {
+      var r = JSON.parse(msg.result);
+      rows = (r.results && r.results[0] && r.results[0].rows) ? r.results[0].rows : [];
+    } catch(e) { throw e; }
+    if (!rows.length) { addLog('No company mapping rows for ' + username + ' - keeping full list', 'log-info'); window._companyScopeMode = 'full list - no mapping rows'; setScopeNote(); return; }
+    var allowed = {};
+    rows.forEach(function(row) {
+      var nm = String(row[0] || '').trim().toUpperCase();
+      if (nm) allowed[nm] = true;
+    });
+    var names = Object.keys(allowed);
+    // Safety: only filter when mapping is a strict subset (0 < mapped < total).
+    // Match mapping names against option code AND name.
+    var kept = 0;
+    sel.find('option').each(function() {
+      var parts = $(this).text().split('-');
+      var code = $.trim(parts[0] || '').toUpperCase();
+      var nm = $.trim(parts.slice(1).join('-') || '').toUpperCase();
+      if (allowed[code] || allowed[nm]) { kept++; }
+      else { $(this).remove(); }
+    });
+    if (kept === 0 || kept >= total) {
+      addLog('Mapping inconclusive (' + names.length + ' rows) - keeping full list', 'log-info');
+      sel.html(fullHtml);
+      window._companyScopeMode = 'full list - mapping inconclusive';
+      setScopeNote();
+      return;
+    }
+    addLog('Company list filtered to ' + kept + ' companies for ' + username, 'log-ok');
+    window._companyScopeMode = 'filtered for ' + username;
+    clearCompanyFilter();
+    setScopeNote();
+    var picked = pickDefaultCompany(companies.filter(function(c) {
+      return sel.find('option[value="' + c.CO_ID + '"]').length > 0;
+    }));
+    if (picked) {
+      sel.val(String(picked));
+      settings.alayaCompanyId = picked;
+    }
+  }).catch(function(err) {
+    var short = String(err.message || err).slice(0, 100);
+    addLog('Company access filter unavailable (' + short + ') - keeping full list', 'log-info');
+    window._companyScopeMode = 'full list - filter unavailable';
+    setScopeNote();
+  });
+}
+
+// Company dropdown text filter (682-row SIT list is unusable without it)
+$('#alaya-company-filter').on('input', function() {
+  var q = $.trim($(this).val()).toUpperCase();
+  var shown = 0, total = 0, matchedVal = null;
+  $('#alaya-company-select option').each(function() {
+    total++;
+    var hit = !q || $(this).text().toUpperCase().indexOf(q) >= 0 || String($(this).val()).toUpperCase().indexOf(q) >= 0;
+    $(this).toggle(hit);
+    if (hit) { shown++; matchedVal = $(this).val(); }
+  });
+  if (q) setScopeNote(shown + ' match');
+  // Single unambiguous match - select it automatically instead of making the user
+  // also click the dropdown to pick the one option left.
+  if (q && shown === 1 && matchedVal) {
+    $('#alaya-company-select').val(matchedVal).trigger('change');
+  }
+});
+function clearCompanyFilter() {
+  $('#alaya-company-filter').val('');
+  $('#alaya-company-select option').show();
+}
+
+function setScopeNote(extra) {
+  var n = $('#alaya-company-select').find('option').length;
+  var mode = window._companyScopeMode || 'full list';
+  $('#company-scope-note').text(n + ' companies (' + mode + ')' + (extra ? ' - ' + extra : ''));
+}
+
+function showCompanyRetry(msg) {
+  var sel = $('#alaya-company-select');
+  sel.empty().append('<option value="">Company list failed (' + msg + ') - retry below</option>');
+  if (!$('#btn-retry-company').length) {
+    $('<button id="btn-retry-company" class="btn-secondary" style="margin-top:8px;">Retry Load Companies</button>')
+      .on('click', function(e) { e.preventDefault(); loadCompaniesFromApi(); })
+      .insertAfter(sel);
+  }
+}
+function hideCompanyRetry() { $('#btn-retry-company').remove(); }
+
+// Default-company resolution order:
+// 1. saved setting (user picked before)  2. API default flag
+// 3. JWT access-token company claims      4. code match  5. first
+var jwtCompanyHints = { ids: [], codes: [] };
+function pickDefaultCompany(list) {
+  function hasId(id) { return list.some(function(c) { return String(c.CO_ID) === String(id); }); }
+  var savedId = (settings && settings.alayaCompanyId) || defaultSettings.alayaCompanyId;
+  if (savedId && hasId(savedId)) return savedId;
+  var flagKeys = ['IsDefault', 'isDefault', 'Default', 'CO_Default', 'CO_IsDefault',
+                  'CO_Default_YN', 'DefaultCompany', 'CO_DefaultCompany'];
+  for (var i = 0; i < list.length; i++) {
+    for (var j = 0; j < flagKeys.length; j++) {
+      var v = list[i][flagKeys[j]];
+      if (v === true || v === 1 || v === '1' || v === 'Y' || v === 'y') return list[i].CO_ID;
+    }
+  }
+  for (var k = 0; k < jwtCompanyHints.ids.length; k++) {
+    if (hasId(jwtCompanyHints.ids[k])) return jwtCompanyHints.ids[k];
+  }
+  for (var m = 0; m < jwtCompanyHints.codes.length; m++) {
+    var hit = null;
+    list.forEach(function(c) {
+      if (String(c.CO_Code || '').trim().toUpperCase() === String(jwtCompanyHints.codes[m]).toUpperCase()) hit = c.CO_ID;
+    });
+    if (hit) return hit;
+  }
+  var wantCode = String((settings && settings.alayaCompany) || defaultSettings.alayaCompany || '').trim().toUpperCase();
+  if (wantCode) {
+    var hit2 = null;
+    list.forEach(function(c) {
+      if (String(c.CO_Code || '').trim().toUpperCase() === wantCode) hit2 = c.CO_ID;
+    });
+    if (hit2) return hit2;
+  }
+  return list.length ? list[0].CO_ID : 0;
+}
+
+function extractJwtHints(token) {
+  jwtCompanyHints = { ids: [], codes: [] };
+  try {
+    var parts = String(token || '').split(' ');
+    var jwt = parts.length > 1 ? parts[1] : parts[0];
+    var payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    addLog('Token claims: ' + Object.keys(payload).join(', '), 'log-info');
+    Object.keys(payload).forEach(function(k) {
+      var v = payload[k];
+      if (/compan/i.test(k)) {
+        if (typeof v === 'number') jwtCompanyHints.ids.push(v);
+        else if (typeof v === 'string' && v) {
+          if (/^\d+$/.test(v)) jwtCompanyHints.ids.push(parseInt(v, 10));
+          else jwtCompanyHints.codes.push(v);
+        } else if (Array.isArray(v)) {
+          v.forEach(function(x) {
+            if (typeof x === 'number') jwtCompanyHints.ids.push(x);
+            else if (typeof x === 'string' && x) jwtCompanyHints.codes.push(x);
+          });
+        }
+      }
+    });
+    if (jwtCompanyHints.ids.length || jwtCompanyHints.codes.length) {
+      addLog('Token company hints: ' + JSON.stringify(jwtCompanyHints), 'log-ok');
+    }
+  } catch(e) { /* opaque token - skip */ }
+}
+
+// ΓöÇΓöÇ Load SQL Account companies from backend ΓöÇΓöÇ
+function loadSqlCompanies() {
+  addLog('Loading SQL Account companies from backend...', 'log-info');
+  backendAjax({
+    url: BACKEND_URL + '/api/companies',
+    type: 'GET',
+    success: function(r) {
+      if (r.success && r.data) {
+        [$('#sql-company'), $('#s-sql-company')].forEach(function(sel) {
+          var current = sel.val();
+          sel.empty();
+          sel.append('<option value="">Select company...</option>');
+          r.data.forEach(function(c) {
+            sel.append('<option value="' + escHtml(c.CODE) + '">' + escHtml(c.CODE) + ' - ' + escHtml(c.NAME) + '</option>');
+          });
+          if (current) sel.val(current);
+        });
+        addLog('Loaded ' + r.data.length + ' SQL companies', 'log-ok');
+        // Restore the backend's active company (persisted in config.json on last switch)
+        backendAjax({
+          url: BACKEND_URL + '/api/settings/connection',
+          type: 'GET',
+          success: function(rc) {
+            try {
+              var db = (rc && rc.data && rc.data.database) || '';
+              var base = String(db).split(/[/\\]/).pop() || '';
+              var code = base.replace(/\.[^.]*$/, '');
+              if (code && $('#sql-company option[value="' + code + '"]').length) {
+                $('#sql-company, #s-sql-company').val(code);
+                addLog('SQL Account company restored: ' + code, 'log-ok');
+              }
+            } catch(e) {}
+          }
+        });
+      }
+    },
+    error: function(xhr) {
+      addLog('Backend unreachable: ' + BACKEND_URL, 'log-err');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+    }
+  });
+}
+
+// ΓöÇΓöÇ Test backend connection ΓöÇΓöÇ
+function testBackendConnection() {
+  backendAjax({
+    url: BACKEND_URL + '/api/health',
+    type: 'GET',
+    success: function(r) {
+      addLog('Backend healthy', 'log-ok');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-received').text('Backend: online');
+    },
+    error: function(xhr) {
+      addLog('Backend unreachable', 'log-err');
+      $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+    }
+  });
+}
+
+function selectActiveCompany(code) {
+  if (!code) return;
+  backendAjax({
+    url: BACKEND_URL + '/api/settings/company',
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ code: code }),
+    success: function(r) {
+      if (r.success) {
+        addLog('Backend now writing to company ' + code + ' (' + r.data.database + ')', 'log-ok');
+        $('#sql-company, #s-sql-company').val(code);
+      } else {
+        addLog('Could not switch company: ' + r.error, 'log-err');
+      }
+    },
+    error: function() { addLog('Failed to switch active company (backend unreachable)', 'log-err'); }
+  });
+}
+
+// ΓöÇΓöÇ Company selector ΓöÇΓöÇ
+function currentAlayaCompanyID() {
+  return parseInt($('#alaya-company-select').val(), 10) || settings.alayaCompanyId || defaultSettings.alayaCompanyId || 0;
+}
+function currentAlayaCompanyCode() {
+  var txt = $('#alaya-company-select').find('option:selected').text() || '';
+  return $.trim(txt.split('-')[0]);
+}
+// Per-company mapping swap (scoped PM_/BR_/DV_ rows). Must run AFTER
+// saveSettings(prevId) so the previous company's UI edits are stored first.
+// Same scoped-wins dedupe as unpackRows: a legacy row and a scoped row for
+// the same code show the scoped value once, never as duplicates.
+function applyCompanyMappings(cid) {
+  if (!window._allSettingRows) return; // UDF never loaded: keep current UI
+  var pm = [], br = [], dv = [];
+  var seen = {};
+  window._allSettingRows.forEach(function(r) {
+    var key = r[0] || '', val = r[1] || '', code = null, prefix = null, scoped = false;
+    var p = parseScopedKey(key);
+    if (p) {
+      if (p.cid !== cid) return;
+      prefix = p.prefix; code = p.code; scoped = true;
+    } else {
+      if ((window._legacyMapOwnerCid || 0) !== cid) return;
+      if (key.indexOf('PM_') === 0) { prefix = 'PM_'; code = key.slice(3); }
+      else if (key.indexOf('BR_') === 0) { prefix = 'BR_'; code = key.slice(3); }
+      else if (key.indexOf('DV_') === 0) { prefix = 'DV_'; code = key.slice(3); }
+      else return;
+    }
+    try {
+      if (prefix === 'PM_') {
+        if (scoped) { pm = pm.filter(function(e) { return e.code !== code; }); seen['PM:' + code] = true; }
+        else if (seen['PM:' + code]) return;
+        pm.push({ code: code, acct: val });
+      }
+      else if (prefix === 'BR_') {
+        var b = JSON.parse(val);
+        if (scoped) { br = br.filter(function(e) { return e.code !== code; }); seen['BR:' + code] = true; }
+        else if (seen['BR:' + code]) return;
+        br.push({ code: code, cashAcct: b.c, acct: b.a,
+                  itemGroup: (b.ig === 1 || b.ig === '1' || b.ig === true) });
+      }
+      else if (prefix === 'DV_') {
+        if (scoped) { dv = dv.filter(function(e) { return e.code !== code; }); seen['DV:' + code] = true; }
+        else if (seen['DV:' + code]) return;
+        dv.push({ code: code, itemGroup: (val === '1') });
+      }
+    } catch(e) { /* skip bad row */ }
+  });
+  settings.paymodes = pm; settings.branches = br; settings.divisions = dv;
+  renderPaymodeTable(pm); renderBranchTable(br); renderDivisionTable(dv);
+  addLog('Mappings swapped to company ID ' + cid + ' (' + pm.length + ' paymodes, ' + br.length + ' branches, ' + dv.length + ' divisions)', 'log-info');
+}
+$('#alaya-company-select').on('change', function() {
+  var id = parseInt($(this).val(), 10) || 0;
+  var txt = $(this).find('option:selected').text();
+  // The company whose mappings are currently on screen (set on load, tracked
+  // on every swap). Its edits must be filed under ITS id - the previous
+  // revision overwrote settings.alayaCompanyId first, so saveSettings filed
+  // the outgoing company's edits under the INCOMING id (new company inherited
+  // old values; switching back overwrote the originals).
+  var prevId = (typeof window._currentCompanyId === 'number') ? window._currentCompanyId : (settings.alayaCompanyId || 0);
+  settings.alayaCompany = currentAlayaCompanyCode();
+  $('#s-alaya-company').val(settings.alayaCompany);
+  if (prevId && prevId !== id) {
+    saveSettings(prevId);
+  } else {
+    saveSettings(id);
+  }
+  applyCompanyMappings(id);
+  window._currentCompanyId = id;
+  addLog('Alaya company selected: ' + txt + ' (ID ' + id + ') - saved as default', 'log-ok');
+  // Functional: auto-reload this company's mappings + preview data
+  if (id && apiUrl && authToken) {
+    refreshPaymodesForCompany(id);
+    refreshBranchesForCompany(id);
+  }
+  if (id && hostOrigin) {
+    loadMasterData();
+  }
+});
+
+// ΓöÇΓöÇ Mapping tables render ΓöÇΓöÇ
+function renderPaymodeTable(list) {
+  var tb = $('#paymode-tbody').empty();
+  if (!list.length) { tb.append('<tr><td colspan="2" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Payment Mode" to load.</td></tr>'); return; }
+  list.forEach(function(pm) {
+    var tr = $('<tr>').attr('data-pm-code', pm.code);
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').text(pm.code));
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
+      $('<input type="text" class="pm-acct" placeholder="e.g. 310-000">').val(pm.acct || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+    ));
+    tb.append(tr);
+  });
+}
+
+function renderBranchTable(list) {
+  var tb = $('#branch-tbody').empty();
+  if (!list.length) { tb.append('<tr><td colspan="4" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Sales Branch Code" to load.</td></tr>'); return; }
+  list.forEach(function(b) {
+    var tr = $('<tr>').attr('data-br-code', b.code);
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').text(b.code));
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
+      $('<input type="text" class="br-cash" placeholder="Cash Sales A/C">').val(b.cashAcct || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+    ));
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
+      $('<input type="text" class="br-acct" placeholder="Acct Code">').val(b.acct || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+    ));
+    var cb = $('<input type="checkbox" class="br-ig">').prop('checked', !!b.itemGroup);
+    tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(cb));
+    tb.append(tr);
+  });
+}
+
+function renderDivisionTable(list) {
+  var tb = $('#division-tbody').empty();
+  if (!list.length) { tb.append('<tr class="dv-empty"><td colspan="3" style="padding:10px;color:#6b7280;">No divisions yet. Refresh or add manually.</td></tr>'); }
+  list.forEach(function(d) { appendDivisionRow(d.code, d.itemGroup); });
+}
+
+function appendDivisionRow(code, itemGroup) {
+  $('#division-tbody .dv-empty').remove();
+  var tr = $('<tr>');
+  tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
+    $('<input type="text" class="dv-code" placeholder="Division code">').val(code || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+  ));
+  tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(
+    $('<input type="checkbox" class="dv-ig">').prop('checked', !!itemGroup)
+  ));
+  var del = $('<button class="btn-secondary" style="padding:4px 10px;">Del</button>').on('click', function() { tr.remove(); });
+  tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(del));
+  $('#division-tbody').append(tr);
+}
+
+// ΓöÇΓöÇ Refresh mappings from Alaya API (callable: button or company-change) ΓöÇΓöÇ
+function refreshPaymodesForCompany(cid, btn) {
+  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  if (btn) btn.prop('disabled', true).text('Loading...');
+  addLog('POST api/PaymentMode/GetAllPaymentMode (company ' + cid + ')');
+  $.ajax({
+    url: apiUrl + 'api/PaymentMode/GetAllPaymentMode', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ CompanyID: cid, MaxID: 0 }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      try { addLog('PayMode raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
+      var saved = {};
+      (settings.paymodes || []).forEach(function(p) { saved[p.code] = p.acct; });
+      renderPaymodeTable(data.map(function(p) {
+        if (typeof p === 'string') return { code: p, acct: saved[p] || '' };
+        var code = String(pick(p, ['PM_Code', 'Code', 'PaymentModeCode', 'Description']) || '').trim();
+        return { code: code, acct: saved[code] || '' };
+      }).filter(function(r) { return r.code; }));
+      addLog('Loading Done. ' + data.length + ' payment modes (remember to Save)', 'log-ok');
+      showToast('Loading Done. ' + data.length + ' payment modes');
+    },
+    error: function(xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ')', 'log-err'); showToast('Refresh failed', true); },
+    complete: function() { if (btn) btn.prop('disabled', false).text('Refresh Alaya Payment Mode'); }
+  });
+}
+
+$('#btn-refresh-paymodes').on('click', function() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  refreshPaymodesForCompany(cid, $(this));
+});
+
+function refreshBranchesForCompany(cid, btn) {
+  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  if (btn) btn.prop('disabled', true).text('Loading...');
+  addLog('POST api/SalesBranch/GetAllSalesBranch (company ' + cid + ')');
+  $.ajax({
+    url: apiUrl + 'api/SalesBranch/GetAllSalesBranch', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      try { addLog('Branch raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
+      var saved = {};
+      (settings.branches || []).forEach(function(b) { saved[b.code] = b; });
+      renderBranchTable(data.map(function(b) {
+        if (typeof b === 'string') {
+          var prev0 = saved[b] || {};
+          return { code: b, cashAcct: prev0.cashAcct || '', acct: prev0.acct || '', itemGroup: !!prev0.itemGroup };
+        }
+        var code = String(pick(b, ['SB_Code', 'Code', 'BranchCode']) || '').trim();
+        var prev = saved[code] || {};
+        return { code: code, cashAcct: prev.cashAcct || '', acct: prev.acct || '', itemGroup: !!prev.itemGroup };
+      }).filter(function(r) { return r.code; }));
+      addLog('Refresh Done. ' + data.length + ' sales branches (remember to Save)', 'log-ok');
+      showToast('Refresh Done. ' + data.length + ' sales branches');
+    },
+    error: function(xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ')', 'log-err'); showToast('Refresh failed', true); },
+    complete: function() { if (btn) btn.prop('disabled', false).text('Refresh Alaya Sales Branch Code'); }
+  });
+}
+
+$('#btn-refresh-branches').on('click', function() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  refreshBranchesForCompany(cid, $(this));
+});
+
+$('#btn-refresh-divisions').on('click', function() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  var btn = $(this).prop('disabled', true).text('Loading...');
+  // Ground truth (decompiled Link_Alaya_To_SQL/c_Account.cs GetAllPurchaseDivision):
+  // POST api/SyncData/SyncByTable with Table:'PurchaseGroup' (NOT 'PurchaseDivision')
+  // plus ClientID/CompName/BranchID/UserID/Password. The plugin never holds the user's
+  // plaintext password (see HANDOFF-NEW-PLUGIN-PROMPT.md security rule) - Password is
+  // sent empty and we rely on the Authorization bearer token for real auth. If this
+  // endpoint turns out to hard-require Password server-side, it'll 401 and fall through
+  // to the "add manually" message below same as before.
+  var co = companies.filter(function(c) { return String(c.CO_ID) === String(cid); })[0];
+  var body = {
+    ClientID: clientId, CompName: (co && co.CO_Name) || '', BranchID: 'NA',
+    UserID: username, Password: '', Table: 'PurchaseGroup', MaxID: '0', PageSize: '100'
+  };
+  addLog('POST api/SyncData/SyncByTable ' + JSON.stringify(body));
+  $.ajax({
+    url: apiUrl + 'api/SyncData/SyncByTable', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify(body),
+    success: function(resp) {
+      var data = (resp && (resp.data || resp.Obj || resp.Result)) || [];
+      if (!Array.isArray(data)) data = data ? [data] : [];
+      try { addLog('Division raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
+      if (!data.length) {
+        addLog('SyncByTable/PurchaseGroup returned no rows - add divisions manually', 'log-warn');
+        showToast('No divisions returned, add manually', true);
+        btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+        return;
+      }
+      var saved = {};
+      (settings.divisions || []).forEach(function(d) { saved[d.code] = d.itemGroup; });
+      renderDivisionTable(data.map(function(d) {
+        var code = (typeof d === 'string') ? d : String(pick(d, ['Code', 'PG_Code', 'DivisionCode', 'PD_Code', 'Name']) || '').trim();
+        return { code: code, itemGroup: !!saved[code] };
+      }).filter(function(r) { return r.code; }));
+      addLog('Refresh Done. ' + data.length + ' purchase divisions (remember to Save)', 'log-ok');
+      showToast('Refresh Done.');
+      btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+    },
+    error: function(xhr) {
+      addLog('SyncByTable/PurchaseGroup failed (' + xhr.status + ') - add divisions manually', 'log-warn');
+      showToast('API not available, add manually', true);
+      btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+    }
+  });
+});
+
+$('#btn-add-division').on('click', function() { appendDivisionRow('', false); });
+
+// ΓöÇΓöÇ Execute SQL via host eval bridge ΓöÇΓöÇ
+// The host's memoQuery callback control can only have ONE WebForm_DoCallback in
+// flight at a time - firing a second one before the first resolves silently
+// cancels/clobbers the first (its promise never settles until it times out).
+// Queue every call through here so they run strictly one-at-a-time. Keep the
+// per-call timeout short (see executeSqlViaHostImpl) - under strict queueing, one
+// slow/stuck call blocks every call queued behind it, so a long timeout here
+// would make unrelated features (e.g. Settings load) feel hung for no reason.
+var _dcbQueue = Promise.resolve();
+function executeSqlViaHost(sql, timeoutMs, maxRows) {
+  var result = _dcbQueue.then(function () { return executeSqlViaHostImpl(sql, timeoutMs, maxRows); });
+  _dcbQueue = result.catch(function () {}); // keep the queue moving even if this call failed
+  return result;
+}
+function executeSqlViaHostImpl(sql, timeoutMs, maxRows) {
+  timeoutMs = timeoutMs || 10000;
+  maxRows = maxRows || 100;
+  return new Promise(function (resolve, reject) {
+    if (!hostOrigin) { reject(new Error('Host origin unknown - ALAYA_INIT not received yet')); return; }
+    var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    var timer = setTimeout(function () {
+      delete pendingDcbCallbacks[requestId];
+      reject(new Error('Database callback timed out after ' + Math.round(timeoutMs / 1000) + 's'));
+    }, timeoutMs);
+    pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+    var evalScript =
+      '(function(){' +
+      'try{' +
+        'var sql=result.sql, reqId=result.requestId;' +
+        'function findMemoFrame(win){' +
+          'try{ if(typeof win.memoQuery==="object" && typeof win.WebForm_DoCallback==="function") return win; }catch(e){}' +
+          'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){}' +
+          'return null;' +
+        '}' +
+        'function bcast(m){' +
+          'function postAll(win){' +
+            'try{ win.postMessage(m,"*"); }catch(e){}' +
+            'try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}' +
+          '}' +
+          'postAll(window);' +
+        '}' +
+        'function runOnMemo(mf){' +
+          'var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+          'var hdr={Rowcount:' + maxRows + ',Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+          'var arg="RunQuery|"+JSON.stringify(hdr);' +
+          'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+          'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+          'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);' +
+        '}' +
+        'var mf=findMemoFrame(window);' +
+        'if(mf){ runOnMemo(mf); return; }' +
+        'var hidden=document.getElementById("hidden-memo-frame");' +
+        'if(hidden && hidden.contentWindow){' +
+          'try{ if(typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+        '}' +
+        'if(!hidden){' +
+          'hidden=document.createElement("iframe");' +
+          'hidden.id="hidden-memo-frame";' +
+          'hidden.style.display="none";' +
+          'hidden.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";' +
+          'document.body.appendChild(hidden);' +
+        '}' +
+        'var attempts=0;' +
+        'function poll(){' +
+          'attempts++;' +
+          'try{ if(hidden.contentWindow && typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+          'if(attempts<40){ setTimeout(poll,500); }' +
+          'else { bcast({source:"alaya-dcb-result",requestId:reqId,error:"memoQuery not available after 20s"}); }' +
+        '}' +
+        'poll();' +
+      '}catch(e){ bcast({source:"alaya-dcb-result",requestId:result.requestId,error:e.message}); }' +
+      '})();';
+    window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
+    addLog('POST eval-bridge RunQuery (sql ' + sql.length + ' chars)', 'log-info');
+  });
+}
+
+// ΓöÇΓöÇ Backend HTTP via host fetch bridge ΓöÇΓöÇ
+// Direct XHR from this iframe (public GitHub Pages origin) to loopback is
+// blocked by Chrome's local-network-access permission (denied for this origin
+// and not grantable from our side). The eval script below runs in the TOP
+// window (sit.irsbizsuite.com.my), whose permission IS granted, so we proxy
+// every backend call through it: eval does fetch() up there and broadcasts
+// the result back, same pattern as the RunQuery bridge above.
+function fetchViaHost(url, opts) {
+  opts = opts || {};
+  var method = (opts.type || 'GET').toUpperCase();
+  var timeoutMs = opts.timeoutMs || 30000;
+  return new Promise(function (resolve, reject) {
+    if (!hostOrigin) { reject({ status: 0, error: 'Host origin unknown - ALAYA_INIT not received yet' }); return; }
+    var requestId = 'fx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    var timer = setTimeout(function () {
+      delete pendingFetchCallbacks[requestId];
+      reject({ status: 0, error: 'Backend fetch timed out after ' + Math.round(timeoutMs / 1000) + 's' });
+    }, timeoutMs);
+    pendingFetchCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+    var evalScript =
+      '(function(){' +
+      'try{' +
+      'var req=result.fetchReq, reqId=result.requestId;' +
+      'function bcast(m){' +
+      'function postAll(win){' +
+      'try{ win.postMessage(m,"*"); }catch(e){}' +
+      'try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}' +
+      '}' +
+      'postAll(window);' +
+      '}' +
+      'fetch(req.url, {method:req.method, headers:req.headers, body:req.body}).then(function(r){' +
+      'return r.text().then(function(t){ bcast({source:"alaya-fetch-result",requestId:reqId,status:r.status,body:t}); });' +
+      '}).catch(function(e){ bcast({source:"alaya-fetch-result",requestId:reqId,error:String((e&&e.message)||e)}); });' +
+      '}catch(e){ bcast({source:"alaya-fetch-result",requestId:result.requestId,error:e.message}); }' +
+      '})();';
+    var fetchReq = { url: url, method: method, headers: {}, body: null };
+    if (opts.contentType) fetchReq.headers['Content-Type'] = opts.contentType;
+    if (method === 'GET' || method === 'HEAD') {
+      if (opts.data && typeof opts.data === 'object') {
+        var qs = Object.keys(opts.data).map(function(k) { return encodeURIComponent(k) + '=' + encodeURIComponent(opts.data[k]); }).join('&');
+        if (qs) fetchReq.url += (fetchReq.url.indexOf('?') >= 0 ? '&' : '?') + qs;
+      }
+    } else if (typeof opts.data === 'string') {
+      fetchReq.body = opts.data;
+    }
+    window.top.postMessage({ target: hostOrigin, eval: evalScript, fetchReq: fetchReq, requestId: requestId }, '*');
+    addLog('POST eval-bridge fetch ' + method + ' ' + url, 'log-info');
+  });
+}
+
+// Drop-in for the $.ajax subset used for backend calls: {url, type,
+// contentType, data, timeoutMs, success(r), error({status})}. Responses with
+// HTTP status >= 400 go to error, same as jQuery.
+function backendAjax(opts) {
+  var method = (opts.type || 'GET').toUpperCase();
+  var fetchOpts = { method: method, headers: {} };
+  if (opts.contentType) fetchOpts.headers['Content-Type'] = opts.contentType;
+  if (opts.data && typeof opts.data === 'string') fetchOpts.body = opts.data;
+  fetch(opts.url, fetchOpts).then(function(resp) {
+    return resp.text().then(function(t) {
+      if (resp.status >= 400) { (opts.error || function() {})({ status: resp.status }); return; }
+      var r = null;
+      try { r = JSON.parse(t); } catch(e) { (opts.error || function() {})({ status: resp.status }); return; }
+      (opts.success || function() {})(r);
+    });
+  }).catch(function(e) {
+    addLog('Backend fetch error: ' + e, 'log-err');
+    (opts.error || function() {})({ status: 0 });
+  });
+}
+
+// ΓöÇΓöÇ Load Alaya data (company-scoped via REST when possible) ΓöÇΓöÇ
+function loadScopedViaRest(cid, done) {
+  var pending = 3, finished = false;
+  function oneDone() { if (--pending === 0 && !finished) { finished = true; done(); } }
+  function setVendors(data, scoped, sourceLabel) {
+    alayaData.vendorRaw = data;
+    alayaData.vendors = data.map(function(v) {
+      return [v.VE_AccountCode || v.VE_Code || '', v.VE_Name || '', '', 0];
+    }).filter(function(r) { return r[0] && r[0] !== '[IGNORE]'; });
+    if (sourceLabel) return; // caller already logged its own descriptive line
+    addLog('Loaded ' + alayaData.vendors.length + ' vendors' + (scoped ? ' for company ' + cid + ' (REST, scoped)' : ' (REST, unscoped fallback)'), 'log-ok');
+  }
+  // Customer master source: authoritative list = CompanyCustomer JOIN Customer for
+  // this company (exactly mirrors the desktop Link tool + the user's SQL). Includes
+  // CC_ReferenceNo / CC_ReferenceControlAcct directly, already filtered like the
+  // user's query, so no separate (racy) merge step is needed.
+  (function() {
+    var ccSql = "SELECT c.Cust_ID, c.Cust_AccountCode, c.Cust_NAME, c.Cust_RegNo, " +
+                "c.Cust_RegNo2, c.Cust_GSTNo, c.Cust_BusinessNature, c.Cust_Remarks, " +
+                "c.Cust_MainAddress1, c.Cust_MainAddress2, c.Cust_MainAddress3, " +
+                "c.Cust_MainAddress4, c.Cust_Email, c.Cust_Fax1, c.Cust_Phone1, " +
+                "c.Cust_Mobile, cc.CC_ReferenceNo, " +
+                "cc.CC_ReferenceControlAcct, cc.CC_ControlAccount " +
+                "FROM CompanyCustomer cc LEFT JOIN Customer c ON cc.CC_CustomerID = c.Cust_ID " +
+                "WHERE cc.CC_CompanyID = " + (parseInt(cid, 10) || 1) +
+                " AND cc.CC_ReferenceNo NOT IN ('', '[IGNORE]') " +
+                " AND cc.CC_ReferenceControlAcct NOT IN ('', '[IGNORE]')";
+    executeSqlViaHost(ccSql, 10000, 5000).then(function(msg) {
+      if (msg && !msg.error) {
+        try {
+          var res = JSON.parse(msg.result);
+          if (res.success && res.results && res.results[0]) {
+            var rs = res.results[0];
+            var cols = (rs.columns || []).map(function(c) {
+              var m = /^\[([^\]]+)\]/.exec(c);
+              return m ? m[1] : c;
+            });
+            function idx(n) { return cols.indexOf(n); }
+            var ciID = idx('Cust_ID'), ciCode = idx('Cust_AccountCode'), ciName = idx('Cust_NAME');
+            var ciRef = idx('CC_ReferenceNo'), ciRefAcct = idx('CC_ReferenceControlAcct'),
+                ciAcct = idx('CC_ControlAccount');
+            // P0-7: GT TransferCustomer sources (c_Account.cs:1048-1080).
+            // Missing columns on old Alaya schemas idx() to -1 and stay
+            // undefined - write_master's R() tolerates missing keys.
+            var ciExtra = ['Cust_RegNo', 'Cust_RegNo2', 'Cust_GSTNo', 'Cust_BusinessNature',
+                           'Cust_Remarks', 'Cust_MainAddress1', 'Cust_MainAddress2',
+                           'Cust_MainAddress3', 'Cust_MainAddress4', 'Cust_Email',
+                           'Cust_Fax1', 'Cust_Phone1', 'Cust_Mobile'].map(idx);
+            var raw = [];
+            (rs.rows || []).forEach(function(row) {
+              var code = (row[ciCode] === null || row[ciCode] === undefined) ? '' : String(row[ciCode]);
+              var nm = (row[ciName] === null || row[ciName] === undefined) ? '' : String(row[ciName]);
+              if (!code) return;
+              var c = { Cust_ID: row[ciID], Cust_AccountCode: code, Cust_NAME: nm };
+              ciExtra.forEach(function(colIdx, k) {
+                var names = ['Cust_RegNo', 'Cust_RegNo2', 'Cust_GSTNo', 'Cust_BusinessNature',
+                             'Cust_Remarks', 'Cust_MainAddress1', 'Cust_MainAddress2',
+                             'Cust_MainAddress3', 'Cust_MainAddress4', 'Cust_Email',
+                             'Cust_Fax1', 'Cust_Phone1', 'Cust_Mobile'];
+                if (colIdx >= 0 && row[colIdx] !== null && row[colIdx] !== undefined) c[names[k]] = String(row[colIdx]);
+              });
+              if (ciRef >= 0) c.CC_ReferenceNo = (row[ciRef] !== null && row[ciRef] !== undefined) ? String(row[ciRef]) : undefined;
+              if (ciRefAcct >= 0) c.CC_ReferenceControlAcct = (row[ciRefAcct] !== null && row[ciRefAcct] !== undefined) ? String(row[ciRefAcct]) : undefined;
+              if (ciAcct >= 0) c.CC_ControlAccount = (row[ciAcct] !== null && row[ciAcct] !== undefined) ? String(row[ciAcct]) : undefined;
+              raw.push(c);
+            });
+            alayaData.customerRaw = raw;
+            alayaData.customers = raw.map(function(c) {
+              return [c.Cust_AccountCode || '', c.Cust_NAME || '', '', 0];
+            }).filter(function(r) { return r[0]; });
+            addLog('CompanyCustomer JOIN: ' + raw.length + ' customers for company ' + cid +
+                   ' (CC refs attached, [IGNORE]/blank filtered)', 'log-ok');
+          } else {
+            addLog('CompanyCustomer JOIN empty result for company ' + cid, 'log-warn');
+          }
+        } catch (e) {
+          addLog('CompanyCustomer JOIN error: ' + e.message, 'log-warn');
+          restFallback(e.message);
+          return;
+        }
+      } else {
+        addLog('CompanyCustomer JOIN failed, customers unavailable: ' +
+               (msg && msg.error ? msg.error : 'no bridge'), 'log-warn');
+        restFallback(msg && msg.error ? msg.error : 'no bridge');
+        return;
+      }
+      oneDone();
+    }).catch(function(err) {
+      addLog('CompanyCustomer JOIN load error: ' + err.message, 'log-warn');
+      restFallback(err.message);
+    });
+    function restFallback(reason) {
+      addLog('Customer source falling back to GetAllCustomer REST (' + reason + ')', 'log-warn');
+      $.ajax({
+        url: apiUrl + 'api/Customer/GetAllCustomer', type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+        success: function(resp) {
+          var data = (resp && resp.data) || [];
+          // P0-6: no CompanyCustomer row here => no CC_ReferenceNo/ControlAcct
+          // => write_master loud-skips every such row (GT: blank ref = skip).
+          // Pre-filter only obvious placeholders; the server guard stays
+          // authoritative. Kept as last resort (not removed): when the SQL
+          // bridge is down the JOIN yields zero rows and removal would leave
+          // no customer path at all.
+          data = data.filter(function(c) {
+            var code = c.Cust_AccountCode || '';
+            return code && code !== '[IGNORE]';
+          });
+          alayaData.customerRaw = data;
+          alayaData.customers = data.map(function(c) {
+            return [c.Cust_AccountCode || '', c.Cust_NAME || '', '', 0];
+          }).filter(function(r) { return r[0]; });
+          addLog('Loaded ' + alayaData.customers.length + ' customers for company ' + cid + ' (REST fallback)', 'log-ok');
+        },
+        error: function(xhr) { addLog('GetAllCustomer fallback failed (' + xhr.status + ')', 'log-err'); },
+        complete: oneDone
+      });
+    }
+  })();
+  // Vendor master source: authoritative list = CompanyVendor JOIN Vendor for this
+  // company, mirroring the CompanyCustomer fix above. GetAllVendor's VE_AccountCode
+  // is the vendor's raw/global code - Cash Purchase/Vendor Invoice documents
+  // reference the company-scoped CV_ReferenceNo instead (confirmed live: a real
+  // vendor's VE_AccountCode='000001' but the company-548 CompanyVendor row's
+  // CV_ReferenceNo='V000001' - posting master data under VE_AccountCode alone
+  // creates a SQL Account vendor under the wrong code, so purchase docs referencing
+  // CV_ReferenceNo fail with "Invalid Company Code"). Use CV_ReferenceNo as the code.
+  (function() {
+    var cvSql = "SELECT v.VE_ID, v.VE_AccountCode, v.VE_Name, v.VE_RegNo, " +
+                "v.VE_GSTNo, v.VE_BusinessNature, v.VE_Remarks, " +
+                "v.VE_MainAddress1, v.VE_MainAddress2, v.VE_MainAddress3, " +
+                "v.VE_MainAddress4, v.VE_Email, v.VE_Fax1, v.VE_Phone1, " +
+                "v.VE_Phone2, cv.CV_ReferenceNo, " +
+                "cv.CV_ReferenceControlAcct, cv.CV_ControlAccount " +
+                "FROM CompanyVendor cv LEFT JOIN Vendor v ON cv.CV_VendorID = v.VE_ID " +
+                "WHERE cv.CV_CompanyID = " + (parseInt(cid, 10) || 1) +
+                " AND cv.CV_ReferenceNo NOT IN ('', '[IGNORE]') " +
+                " AND cv.CV_ReferenceControlAcct NOT IN ('', '[IGNORE]')";
+    executeSqlViaHost(cvSql, 10000, 5000).then(function(msg) {
+      if (msg && !msg.error) {
+        try {
+          var res = JSON.parse(msg.result);
+          if (res.success && res.results && res.results[0]) {
+            var rs = res.results[0];
+            var cols = (rs.columns || []).map(function(c) {
+              var m = /^\[([^\]]+)\]/.exec(c);
+              return m ? m[1] : c;
+            });
+            function idx(n) { return cols.indexOf(n); }
+            var viID = idx('VE_ID'), viCode = idx('VE_AccountCode'), viName = idx('VE_Name');
+            var viRef = idx('CV_ReferenceNo'), viRefAcct = idx('CV_ReferenceControlAcct'),
+                viAcct = idx('CV_ControlAccount');
+            // P0-7: GT TransferVendor sources (c_Account.cs:5304-5336). No
+            // RegNo2 column exists on vendors (structure_Vendor.cs) and GT
+            // vendor BRN2 is unconditionally '', so none is selected.
+            var viExtraNames = ['VE_RegNo', 'VE_GSTNo', 'VE_BusinessNature', 'VE_Remarks',
+                                'VE_MainAddress1', 'VE_MainAddress2', 'VE_MainAddress3',
+                                'VE_MainAddress4', 'VE_Email', 'VE_Fax1', 'VE_Phone1', 'VE_Phone2'];
+            var viExtra = viExtraNames.map(idx);
+            var raw = [];
+            (rs.rows || []).forEach(function(row) {
+              var ref = (row[viRef] === null || row[viRef] === undefined) ? '' : String(row[viRef]);
+              var nm = (row[viName] === null || row[viName] === undefined) ? '' : String(row[viName]);
+              if (!ref) return;
+              var v = { VE_ID: row[viID], VE_AccountCode: ref, VE_Name: nm };
+              if (viRef >= 0) v.CV_ReferenceNo = (row[viRef] !== null && row[viRef] !== undefined) ? String(row[viRef]) : undefined;
+              viExtra.forEach(function(colIdx, k) {
+                if (colIdx >= 0 && row[colIdx] !== null && row[colIdx] !== undefined) v[viExtraNames[k]] = String(row[colIdx]);
+              });
+              if (viRefAcct >= 0) v.CV_ReferenceControlAcct = (row[viRefAcct] !== null && row[viRefAcct] !== undefined) ? String(row[viRefAcct]) : undefined;
+              if (viAcct >= 0) v.CV_ControlAccount = (row[viAcct] !== null && row[viAcct] !== undefined) ? String(row[viAcct]) : undefined;
+              if (viCode >= 0) v.VE_RawAccountCode = (row[viCode] !== null && row[viCode] !== undefined) ? String(row[viCode]) : undefined;
+              raw.push(v);
+            });
+            setVendors(raw, true, 'CompanyVendor JOIN');
+            addLog('CompanyVendor JOIN: ' + raw.length + ' vendors for company ' + cid +
+                   ' (CV_ReferenceNo used as code, [IGNORE]/blank filtered)', 'log-ok');
+          } else {
+            addLog('CompanyVendor JOIN empty result for company ' + cid, 'log-warn');
+            restFallbackVendor('empty result');
+            return;
+          }
+        } catch (e) {
+          addLog('CompanyVendor JOIN error: ' + e.message, 'log-warn');
+          restFallbackVendor(e.message);
+          return;
+        }
+      } else {
+        addLog('CompanyVendor JOIN failed, vendors unavailable: ' +
+               (msg && msg.error ? msg.error : 'no bridge'), 'log-warn');
+        restFallbackVendor(msg && msg.error ? msg.error : 'no bridge');
+        return;
+      }
+      oneDone();
+    }).catch(function(err) {
+      addLog('CompanyVendor JOIN load error: ' + err.message, 'log-warn');
+      restFallbackVendor(err.message);
+    });
+    function restFallbackVendor(reason) {
+      addLog('Vendor source falling back to GetAllVendor REST (' + reason + ') - note: uses ' +
+             'VE_AccountCode, not CV_ReferenceNo, so Cash Purchase/Vendor Invoice may fail ' +
+             'to match if they differ', 'log-warn');
+      $.ajax({
+        url: apiUrl + 'api/Vendor/GetAllVendor', type: 'POST', cache: false, contentType: 'application/json',
+        headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+        success: function(resp) {
+          var data = (resp && resp.data) || [];
+          // P0-6: same treatment as the customer fallback - drop obvious
+          // placeholders up front; every remaining row without a
+          // CV_ReferenceNo/ControlAcct then loud-skips in write_master
+          // (GT: blank ref = skip) instead of posting under a global code.
+          data = data.filter(function(v) {
+            var code = v.VE_AccountCode || v.VE_Code || '';
+            return code && code !== '[IGNORE]';
+          });
+          if (!data.length) {
+            $.ajax({
+              url: apiUrl + 'api/Vendor/GetAllVendor', type: 'POST', cache: false, contentType: 'application/json',
+              headers: { 'Authorization': authToken }, data: '{}',
+              success: function(resp2) { setVendors((resp2 && resp2.data) || [], false); oneDone(); },
+              error: function() { addLog('GetAllVendor failed, vendors unavailable', 'log-err'); oneDone(); }
+            });
+            return;
+          }
+          setVendors(data, true);
+          oneDone();
+        },
+        error: function(xhr) { addLog('GetAllVendor failed (' + xhr.status + ')', 'log-err'); oneDone(); }
+      });
+    }
+  })();
+  $.ajax({
+    url: apiUrl + 'api/Item/GetAllItemMasterByCompanyID', type: 'POST', cache: false, contentType: 'application/json',
+    headers: { 'Authorization': authToken }, data: JSON.stringify({ companyID: cid }),
+    success: function(resp) {
+      var data = (resp && resp.data) || [];
+      alayaData.items = data.map(function(im) {
+        return [$.trim(im.IM_Code || ''), im.IM_Description || '', im.IM_BaseUOMCode || '', 0];
+      }).filter(function(r) { return r[0]; });
+      addLog('Loaded ' + alayaData.items.length + ' items for company ' + cid + ' (REST, scoped; price via full load)', 'log-ok');
+    },
+    error: function(xhr) { addLog('GetAllItemMasterByCompanyID failed (' + xhr.status + ')', 'log-err'); },
+    complete: oneDone
+  });
+}
+
+function finishScopedLoad(done) {
+  var advType = $('input[name="adv-type"]:checked').val() || 'customer';
+  var after = function() {
+    showToast('Alaya data loaded successfully');
+    renderPreview();
+    if (done) done();
+  };
+  if (advType === 'vendor') {
+    var vendorSql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AP_SUPPLIER WHERE STATUS = 'Active' ORDER BY CODE";
+    executeSqlViaHost(vendorSql).then(function(vmsg) {
+      try {
+        var vresult = JSON.parse(vmsg.result);
+        if (vresult.success && vresult.results && vresult.results[0]) {
+          alayaData.vendors = vresult.results[0].rows || [];
+          addLog('Loaded ' + alayaData.vendors.length + ' vendors from Alaya', 'log-ok');
+        }
+      } catch(e) { addLog('Parse vendors error: ' + e.message, 'log-err'); }
+      after();
+    }).catch(function(err) { addLog('Load vendors error: ' + err.message, 'log-err'); after(); });
+  } else {
+    after();
+  }
+}
+
+function loadMasterData(done) {
+  if (!hostOrigin) {
+    showToast('Not connected to Alaya (ALAYA_INIT pending)', true);
+    if (done) done();
+    return;
+  }
+  var cid = currentAlayaCompanyID();
+  if (cid && apiUrl && authToken) {
+    addLog('Loading Alaya data for company ' + cid + ' (' + currentAlayaCompanyCode() + ')...', 'log-info');
+    loadScopedViaRest(cid, function() { finishScopedLoad(done); });
+    return;
+  }
+  addLog('Loading Alaya data (unscoped fallback - select a company for scoped load)...', 'log-info');
+
+  // Load customers
+  var sql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AR_CUSTOMER WHERE STATUS = 'Active' ORDER BY CODE";
+  executeSqlViaHost(sql).then(function(msg) {
+    if (msg.error) {
+      addLog('Load customers failed: ' + msg.error, 'log-err');
+      if (done) done();
+      return;
+    }
+    try {
+      var result = JSON.parse(msg.result);
+      if (result.success && result.results && result.results[0]) {
+        alayaData.customers = result.results[0].rows || [];
+        addLog('Loaded ' + alayaData.customers.length + ' customers from Alaya', 'log-ok');
+      }
+    } catch(e) {
+      addLog('Parse customers error: ' + e.message, 'log-err');
+    }
+    
+    // Load items
+    var itemSql = "SELECT CODE, DESCRIPTION, UOM, SELLPRICE FROM ITEMMASTER WHERE STATUS = 'Active' ORDER BY CODE";
+    return executeSqlViaHost(itemSql);
+  }).then(function(msg) {
+    if (msg.error) {
+      addLog('Load items failed: ' + msg.error, 'log-err');
+      if (done) done();
+      return;
+    }
+    try {
+      var result = JSON.parse(msg.result);
+      if (result.success && result.results && result.results[0]) {
+        alayaData.items = result.results[0].rows || [];
+        addLog('Loaded ' + alayaData.items.length + ' items from Alaya', 'log-ok');
+      }
+    } catch(e) {
+      addLog('Parse items error: ' + e.message, 'log-err');
+    }
+    
+    var advType = $('input[name="adv-type"]:checked').val() || 'customer';
+    if (advType === 'vendor') {
+      var vendorSql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AP_SUPPLIER WHERE STATUS = 'Active' ORDER BY CODE";
+      executeSqlViaHost(vendorSql).then(function(vmsg) {
+        try {
+          var vresult = JSON.parse(vmsg.result);
+          if (vresult.success && vresult.results && vresult.results[0]) {
+            alayaData.vendors = vresult.results[0].rows || [];
+            addLog('Loaded ' + alayaData.vendors.length + ' vendors from Alaya', 'log-ok');
+          }
+        } catch(e) { addLog('Parse vendors error: ' + e.message, 'log-err'); }
+        showToast('Alaya data loaded successfully');
+        renderPreview();
+        if (done) done();
+      }).catch(function(err) {
+        addLog('Load vendors error: ' + err.message, 'log-err');
+        renderPreview();
+        if (done) done();
+      });
+    } else {
+      showToast('Alaya data loaded successfully');
+      renderPreview();
+      if (done) done();
+    }
+  }).catch(function(err) {
+    addLog('Load data error: ' + err.message, 'log-err');
+    if (done) done();
+  });
+}
+
+// ΓöÇΓöÇ Advanced doc grid (desktop Advanced dialog port) ΓöÇΓöÇ
+function advDocTypeToTransfer() {
+  var d = $('#adv-preview-doctype').val() || 'CASH SALES';
+  var map = { 'CASH SALES': 'cashsales', 'INVOICE': 'invoice', 'CREDIT NOTE': 'creditnote',
+              'PAYMENT': 'payment', 'CASH PURCHASES': 'cashpurchases', 'VENDOR INVOICE': 'vendorinvoice' };
+  return map[d] || 'cashsales';
+}
+function advGridKey(cid, from, to, type) { return cid + '|' + from + '|' + to + '|' + type; }
+
+function renderAdvGrid(docs, type, key) {
+  window._advGrid = { key: key, type: type, docs: docs || [] };
+  var box = $('#adv-doc-grid').empty();
+  if (!docs || !docs.length) {
+    var parts = String(key || '').split('|');
+    var ctx = parts.length === 4 ? ' (company ' + parts[0] + ', ' + parts[1] + ' ~ ' + parts[2] + ')' : '';
+    box.html('<p style="color:#6b7280;font-size:0.85rem;">No ' + escHtml(type) + ' documents found for the selected dates' + escHtml(ctx) +
+             '.<br>Try a wider date range or another doc type, and check the Log tab for API errors.</p>');
+    return;
+  }
+  // Fresh rows default to ticked (matches transfer logic: _ticked !== false counts as selected)
+  (docs || []).forEach(function(d) { if (d._ticked === undefined) d._ticked = true; });
+  var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice');
+  var html = '<div style="font-size:0.82rem;color:#374151;margin-bottom:8px;"><b>' + docs.length +
+             '</b> ' + escHtml(type) + ' docs (ticked = transfer) | <a href="#" id="adv-tick-all">tick all</a> / <a href="#" id="adv-untick-all">untick all</a></div>';
+  html += '<div style="max-height:300px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px;">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;white-space:nowrap;">';
+  html += '<thead><tr style="background:#f9fafb;position:sticky;top:0;">';
+  html += '<th style="padding:6px 8px;border-bottom:2px solid #e5e7eb;">Select</th>';
+  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">Doc No</th>';
+  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">Date</th>';
+  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">' + (isPurch ? 'Supplier' : 'Customer') + '</th>';
+  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">' + (isPurch ? 'Division' : 'Branch') + '</th>';
+  html += '<th style="padding:6px 8px;text-align:right;border-bottom:2px solid #e5e7eb;">Total</th></tr></thead><tbody>';
+  docs.forEach(function(d, i) {
+    var code = isPurch ? (d.suppcode || '') : (d.custcode || '');
+    var sub = isPurch ? (d.division || '') : (d.branch || '');
+    html += '<tr><td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">' +
+            '<input type="checkbox" class="adv-tick" data-i="' + i + '"' + (d._ticked ? ' checked' : '') + '></td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(d.docno || '') + '</td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(d.docdate || '') + '</td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(code) + '</td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(sub) + '</td>' +
+            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + escHtml(d.total) + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  box.html(html);
+  box.find('.adv-tick').on('change', function() {
+    var i = parseInt($(this).data('i'), 10);
+    if (window._advGrid && window._advGrid.docs[i]) window._advGrid.docs[i]._ticked = $(this).is(':checked');
+  });
+  $('#adv-tick-all').on('click', function(e) { e.preventDefault(); setAllAdvTicks(true); });
+  $('#adv-untick-all').on('click', function(e) { e.preventDefault(); setAllAdvTicks(false); });
+}
+function setAllAdvTicks(v) {
+  if (!window._advGrid) return;
+  window._advGrid.docs.forEach(function(d) { d._ticked = v; });
+  $('#adv-doc-grid .adv-tick').prop('checked', v);
+}
+
+// Reload docs for the Preview/Advanced grid (desktop Reload Data)
+function loadAdvDocs() {
+  var cid = currentAlayaCompanyID();
+  if (!cid) { showToast('Select an Alaya company first', true); return; }
+  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  var type = advDocTypeToTransfer();
+  var from = $('#from-date').val(), to = $('#to-date').val();
+  if (!from || !to) { showToast('Please select date range on the Transfer tab', true); return; }
+  settings.advType = $('input[name="adv-type"]:checked').val() || 'customer';
+  settings.advPreviewDoc = $('#adv-preview-doctype').val() || 'CASH SALES';
+  if (settings.advType === 'customer' && settings.advPreviewDoc === 'CASH SALES' &&
+      (($('#transfer-method').val() || $('#s-cashsales-method').val() || 'summary') === 'summary')) {
+    showToast('Grid disabled for Cash Sales Summary mode (same as the desktop tool)', true);
+    return;
+  }
+  addLog('Advanced reload: ' + type + ' ' + from + ' ~ ' + to + ' company ' + cid, 'log-info');
+  $('#adv-doc-grid').html('<p style="color:#6b7280;font-size:0.85rem;">Loading...</p>');
+  fetchAllSourceDocs([type], from, to, cid, function(out) {
+    var docs = out[type] || [];
+    renderAdvGrid(docs, type, advGridKey(cid, from, to, type));
+    addLog('Advanced grid: ' + docs.length + ' ' + type + ' docs (all ticked)', 'log-ok');
+  });
+}
+
+// ΓöÇΓöÇ Advanced Reload (Preview tab) ΓöÇΓöÇ
+$('#btn-adv-reload').on('click', function() {
+  loadAdvDocs();
+});
+// Transfer the ticked Advanced grid rows (reuses the main Transfer flow;
+// fetchAllSourceDocs picks up ticked rows when company+dates+type match)
+$('#btn-adv-transfer').on('click', function() {
+  var g = window._advGrid;
+  if (!g || !g.docs || !g.docs.length) { showToast('Reload Data first - no documents loaded', true); return; }
+  var isCashSummary = (g.type === 'cashsales') &&
+    (($('#transfer-method').val() || $('#s-cashsales-method').val() || 'summary') === 'summary');
+  var ticked = g.docs.filter(function(d) { return d._ticked !== false; });
+  if (!ticked.length && !isCashSummary) { showToast('Tick at least one row to transfer', true); return; }
+  addLog('Advanced transfer: ' + (isCashSummary ? g.docs.length + '/' + g.docs.length + ' (Summary ignores ticks) ' : ticked.length + '/' + g.docs.length + ' ticked ') + g.type + ' docs', 'log-ok');
+  $('.tab-btn[data-tab="transfer"]').trigger('click');
+  $('#btn-transfer').trigger('click');
+});
+// Doc Type options must match Party Type - CASH SALES/INVOICE are
+// customer-only (AR), CASH PURCHASES/VENDOR INVOICE are vendor-only (AP);
+// CREDIT NOTE/PAYMENT apply to both. Without this filter the dropdown kept
+// showing all 6 regardless of Party Type, so picking Vendor + (leftover)
+// CASH SALES silently fetched Cash Sales docs while the grid was labelled
+// "Vendor" - the dropdown value, not the radio, is what actually drives
+// advDocTypeToTransfer().
+// Ground truth (frmAdvancedMode.cs:2626-2627): CustArray = {"CASH SALES",
+// "INVOICE","CREDIT NOTE"}, VenArray = {"CASH PURCHASE","VENDOR INVOICE",
+// "CREDIT NOTE"} - PAYMENT is NOT one of these options in the desktop tool;
+// payment transfer is a separate checkbox elsewhere (matches this plugin's
+// own "Transfer Cash Sales Payment" checkbox), not a Doc Type choice here.
+var ADV_DOCTYPES_BY_PARTY = {
+  customer: ['CASH SALES', 'INVOICE', 'CREDIT NOTE'],
+  vendor: ['CASH PURCHASES', 'VENDOR INVOICE', 'CREDIT NOTE']
+};
+function updateAdvDocTypeOptions() {
+  var party = $('input[name="adv-type"]:checked').val() || 'customer';
+  var opts = ADV_DOCTYPES_BY_PARTY[party];
+  var sel = $('#adv-preview-doctype');
+  var current = sel.val();
+  sel.empty();
+  opts.forEach(function(o) { sel.append($('<option>').val(o).text(o)); });
+  sel.val(opts.indexOf(current) >= 0 ? current : opts[0]);
+  updateAdvSummaryNote();
+}
+// Desktop parity (frmAdvancedMode.cs:671-683 cboTransfer_SelectedIndexChanged +
+// ClearScreen): for Customer + CASH SALES + Summary (daily total) the desktop
+// tool sets btnRefresh.Enabled=false, dgv1.Enabled=false and clears the grid,
+// so individual cash sales docs cannot be listed at all in this mode.
+function updateAdvSummaryNote() {
+  var party = $('input[name="adv-type"]:checked').val() || 'customer';
+  var doc = $('#adv-preview-doctype').val() || 'CASH SALES';
+  var method = $('#transfer-method').val() || $('#s-cashsales-method').val() || 'summary';
+  var show = (party === 'customer' && doc === 'CASH SALES' && method === 'summary');
+  $('#adv-summary-note').toggle(show);
+  $('#btn-adv-reload').prop('disabled', show);
+  $('#btn-adv-transfer').prop('disabled', show);
+  if (show) {
+    window._advGrid = { key: '', type: 'cashsales', docs: [] };
+    $('#adv-doc-grid').html('<p style="color:#6b7280;font-size:0.85rem;">Grid disabled for Cash Sales Summary mode (same as the desktop tool - the daily total needs no row selection).</p>');
+  }
+}
+$('input[name="adv-type"]').on('change', function() {
+  settings.advType = $(this).val();
+  updateAdvDocTypeOptions();
+});
+$('#adv-preview-doctype').on('change', updateAdvSummaryNote);
+$('#transfer-method, #s-cashsales-method').on('change', updateAdvSummaryNote);
+
+// ΓöÇΓöÇ Render preview ΓöÇΓöÇ
+function renderPreview() {
+  var advType = $('input[name="adv-type"]:checked').val() || 'customer';
+  var advDoc = $('#adv-preview-doctype').val() || 'CASH SALES';
+  var html = '<div style="font-size:0.8rem;color:#6b7280;margin-bottom:12px;">Type: <b>' + escHtml(advType) + '</b> | Doc: <b>' + escHtml(advDoc) + '</b></div>';
+  if (advType === 'vendor' && alayaData.vendors.length) {
+    html += '<h3 style="margin-bottom:10px;">Vendors (' + alayaData.vendors.length + ')</h3>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:20px;">';
+    html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Name</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Credit Term</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Credit Limit</th></tr></thead>';
+    html += '<tbody>';
+    alayaData.vendors.slice(0, 50).forEach(function(v) {
+      html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(v[0] || '') + '</td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(v[1] || '') + '</td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(v[2] || '') + '</td>';
+      html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (v[3] || 0) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  } else {
+    html += '<h3 style="margin-bottom:10px;">Customers (' + alayaData.customers.length + ')</h3>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:20px;">';
+  html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Name</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Credit Term</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Credit Limit</th></tr></thead>';
+  html += '<tbody>';
+  alayaData.customers.slice(0, 20).forEach(function(c) {
+    html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[0] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[1] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(c[2] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (c[3] || 0) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  
+  html += '<h3 style="margin-bottom:10px;">Items (' + alayaData.items.length + ')</h3>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+  html += '<thead><tr style="background:#f9fafb;"><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Code</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Description</th><th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">UOM</th><th style="padding:8px;text-align:right;border-bottom:2px solid #e5e7eb;">Sell Price</th></tr></thead>';
+  html += '<tbody>';
+  alayaData.items.slice(0, 20).forEach(function(item) {
+    html += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[0] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[1] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(item[2] || '') + '</td>';
+    html += '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + (item[3] || 0) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  }
+  
+  $('#preview-content').html(html);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Source docs from Alaya (proven endpoints, same as desktop app)
+// ══════════════════════════════════════════════════════════════
+var DOC_ENDPOINTS = {
+  cashsales: 'api/CashSales/GetCashSalesByDateRange',
+  invoice: 'api/SalesInvoice/GetSalesInvoiceByDateRange',
+  salesreturn: 'api/SalesReturn/GetSalesReturnByDateRange',
+  cashpurchases: 'api/CashPurchase/GetCashPurchasebyDateRange',
+  vendorinvoice: 'api/PurchaseInvoice/GetPurchaseInvoiceByDateRange',
+  purchasereturn: 'api/PurchaseReturn/GetPurchaseReturnByDateRange'
+};
+
+// Case-insensitive field picker - resilient to unknown response shapes
+function pick(obj, keys) {
+  if (!obj) return '';
+  var lower = {};
+  Object.keys(obj).forEach(function(k) { lower[k.toLowerCase()] = obj[k]; });
+  for (var i = 0; i < keys.length; i++) {
+    var v = lower[keys[i].toLowerCase()];
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return '';
+}
+
+function findFirstArray(obj) {
+  if (!obj || typeof obj !== 'object') return [];
+  var keys = Object.keys(obj);
+  for (var i = 0; i < keys.length; i++) {
+    if (Array.isArray(obj[keys[i]])) return obj[keys[i]];
+  }
+  return [];
+}
+
+// Split nested arrays into item-lines vs payment-lines by shape
+function splitNested(raw) {
+  var items = [], payments = [];
+  if (!raw || typeof raw !== 'object') return { items: items, payments: payments };
+  // Prefer GT-explicit keys when present (c_Account.cs:9447/9491 CPH_Details/
+  // CPH_PaymentDetails; PIH/PRH/CSH/SIH/SRH analogues), fall back to shape
+  // heuristics for unknown shapes.
+  var EXPLICIT = [['CPH_Details', 'CPH_PaymentDetails'], ['PIH_Details', 'PIH_PaymentDetails'],
+                  ['PRH_Details', 'PRH_PaymentDetails'], ['CSH_Details', 'CSH_PaymentDetails'],
+                  ['SIH_Details', 'SIH_PaymentDetails'], ['SRH_Details', 'SRH_PaymentDetails']];
+  for (var e = 0; e < EXPLICIT.length; e++) {
+    if (Array.isArray(raw[EXPLICIT[e][0]]) || Array.isArray(raw[EXPLICIT[e][1]])) {
+      return { items: raw[EXPLICIT[e][0]] || [], payments: raw[EXPLICIT[e][1]] || [] };
+    }
+  }
+  Object.keys(raw).forEach(function(k) {
+    var arr = raw[k];
+    if (!Array.isArray(arr) || !arr.length) return;
+    var first = arr[0] || {};
+    var kl = Object.keys(first).map(function(x) { return String(x).toLowerCase(); });
+    var hasQty = kl.some(function(x) { return x.indexOf('qty') >= 0 || x.indexOf('itemcode') >= 0 || x.indexOf('item_code') >= 0; });
+    var hasPay = kl.some(function(x) { return x.indexOf('paymode') >= 0 || x.indexOf('pay_mode') >= 0 || x.indexOf('paymentmode') >= 0; });
+    if (hasQty && !hasPay) items = arr;
+    else if (hasPay) payments = arr;
+    else if (!items.length) items = arr; // unknown shape defaults to items
+  });
+  return { items: items, payments: payments };
+}
+
+function normPay(raw) {
+  // pick() is an EXACT (case-insensitive) key match, not a substring search -
+  // confirmed live that ALAYA's CSH_PaymentDetails rows use CSP_-prefixed
+  // field names (CSP_PaymentModeCode/CSP_PaymentAmount), which weren't in
+  // this candidate list, so mode/amount always came back empty even though
+  // the API genuinely returned the payment data (server.py's own
+  // _cs_pay_controls already had to work around this same gap for the
+  // control-account field). Prefixed variants for the other doc types follow
+  // normItem's established CSD_/SID_/SRD_/PID_/CPD_/PRD_ convention.
+  return {
+    mode: pick(raw, ['PaymentMode', 'PayMode', 'Mode', 'PaymentModeCode', 'Code',
+                     'CSP_PaymentModeCode', 'SIP_PaymentModeCode', 'SRP_PaymentModeCode',
+                     'PIP_PaymentModeCode', 'CPP_PaymentModeCode', 'PRP_PaymentModeCode']),
+    amount: parseFloat(pick(raw, ['Amount', 'PaymentAmt', 'PaymentAmount', 'PaidAmount',
+                     'CSP_PaymentAmount', 'SIP_PaymentAmount', 'SRP_PaymentAmount',
+                     'PIP_PaymentAmount', 'CPP_PaymentAmount', 'PRP_PaymentAmount'])) || 0
+  };
+}
+
+function normItem(raw) {
+  var qty = parseFloat(pick(raw, ['QTY', 'Quantity', 'CSD_Qty', 'SID_Qty', 'SRD_Qty', 'PID_Qty', 'CPD_Qty', 'PRD_Qty'])) || 0;
+  var price = parseFloat(pick(raw, ['UNITPRICE', 'UnitPrice', 'Price', 'Rate', 'CSD_UnitPrice', 'SID_UnitPrice', 'SRD_UnitPrice', 'PID_UnitPrice', 'CPD_UnitPrice', 'PRD_UnitPrice'])) || 0;
+  var amt = parseFloat(pick(raw, ['AMOUNT', 'Amount', 'LineAmt', 'CSD_Total', 'SID_Total', 'SRD_Total', 'PID_Total', 'CPD_Total', 'PRD_Total', 'CSD_SubTotal', 'SID_SubTotal'])) || qty * price;
+  return {
+    itemcode: pick(raw, ['ITEMCODE', 'ItemCode', 'Item_Code', 'StockCode', 'CSD_ItemCode', 'SID_ItemCode', 'SRD_ItemCode', 'PID_ItemCode', 'CPD_ItemCode', 'PRD_ItemCode']),
+    qty: qty, uom: pick(raw, ['UOM', 'Uom', 'CSD_UOMCode', 'SID_UOMCode', 'PID_ItemUOMCode', 'CPD_ItemUOMCode']),
+    unitprice: price, amount: amt,
+    account: pick(raw, ['ACCOUNT', 'Account', 'SalesAccount']),
+    description: pick(raw, ['DESCRIPTION', 'Description', 'ItemDescription', 'DESC', 'CSD_ItemDescription', 'SID_ItemDescription', 'SRD_ItemDescription', 'PID_ItemDescription', 'CPD_ItemDescription', 'PRD_ItemDescription']),
+    _raw: raw
+  };
+}
+
+function normSalesDoc(raw) {
+  var split = splitNested(raw);
+  var doc = {
+    docno: pick(raw, ['DocNo', 'CSH_DocNo', 'SIH_DocNo', 'SRH_DocNo']),
+    docdate: (pick(raw, ['DocDate', 'CSH_DocDate', 'SIH_DocDate', 'SRH_DocDate', 'PostingDate', 'CSH_PostingDate', 'Date', 'TxDate']) || '').slice(0, 10),
+    custcode: pick(raw, ['CustCode', 'CustomerCode', 'CSH_CustomerCode', 'SIH_CustomerCode', 'SRH_CustomerCode', 'CSH_CustCode', 'Code', 'AccountCode', 'CustomerReferenceNo', 'CSH_CustomerReferenceNo']),
+    custname: pick(raw, ['CustName', 'CustomerName', 'CompanyName', 'Name']),
+    branch: pick(raw, ['Branch', 'CSH_SalesBranchCode', 'SIH_SalesBranchCode', 'SRH_SalesBranchCode', 'SalesBranchCode', 'BranchCode', 'SalesBranch']),
+    paymode: pick(raw, ['PayMode', 'PaymentMode', 'CSH_PaymentMode', 'SIH_PaymentMode', 'SRH_PaymentMode']),
+    description: pick(raw, ['Description', 'CSH_Description', 'SIH_Description', 'SRH_Description', 'Remark', 'Remarks']),
+    rounding: parseFloat(pick(raw, ['Rounding', 'RoundingAmt', 'CSH_RoundAmount', 'SIH_RoundAmount', 'SRH_RoundAmount', 'RoundAmount'])) || 0,
+    total: parseFloat(pick(raw, ['Total', 'DocAmt', 'CSH_Total', 'SIH_Total', 'SRH_Total', 'CSH_DocAmt', 'Amount'])) || 0,
+    items: split.items.map(normItem),
+    payments: split.payments.map(normPay),
+    _ticked: true,
+    _raw: raw
+  };
+  if (!doc.paymode && doc.payments.length) doc.paymode = doc.payments[0].mode || '';
+  return doc;
+}
+
+function normPurchaseDoc(raw) {
+  var split = splitNested(raw);
+  return {
+    docno: pick(raw, ['DocNo', 'CPH_DocNo', 'PIH_DocNo', 'PRH_DocNo',
+                      'CPH_SupplierInvoiceNo', 'PIH_SupplierInvoiceNo', 'PRH_SupplierInvoiceNo']),
+    docdate: (pick(raw, ['DocDate', 'CPH_DocDate', 'PIH_DocDate', 'PRH_DocDate', 'PostingDate', 'Date', 'InvoiceDate']) || '').slice(0, 10),
+    suppcode: pick(raw, ['SuppCode', 'SupplierCode', 'CPH_SupplierCode', 'PIH_SupplierCode', 'PRH_SupplierCode', 'VendorCode', 'Code', 'AccountCode', 'SupplierReferenceNo',
+                      'CPH_VendorReferenceNo', 'PIH_VendorReferenceNo', 'PRH_VendorReferenceNo']),
+    suppname: pick(raw, ['SuppName', 'SupplierName', 'CompanyName', 'Name']),
+    division: pick(raw, ['Division', 'PurchaseDivision', 'DivisionCode', 'CPH_DivisionCode', 'PIH_DivisionCode']),
+    description: pick(raw, ['Description', 'CPH_Description', 'PIH_Description', 'Remark', 'Remarks']),
+    rounding: parseFloat(pick(raw, ['Rounding', 'RoundingAmt', 'RoundAmount',
+                      'CPH_RoundAmount', 'PIH_RoundAmount', 'PRH_RoundAmount'])) || 0,
+    total: parseFloat(pick(raw, ['Total', 'DocAmt', 'CPH_Total', 'PIH_Total', 'PRH_Total', 'Amount'])) || 0,
+    items: split.items.map(normItem),
+    payments: split.payments.map(normPay),
+    _ticked: true,
+    _raw: raw
+  };
+}
+
+function fetchDocType(type, endpoint, cid, from, to, cb) {
+  // GT Form1.cs:1254/1300 (vendorinvoice), 1353/1391 (cashpurchase),
+  // 1443/1480 (purchasereturn) + cashsales equivalents: EVERY date-range
+  // fetch sends MaxID + DocumentStatus POSTED and loops on the returned
+  // MaxID until it comes back 0 (GT Deserialize* sets p_iMaxID from the
+  // response "MaxID" key, c_Account.cs:9420-9422; Form1.cs:1297/1388
+  // while-loops with Thread.Sleep(1000) between pages).
+  var POSTED_TYPES = ['cashsales', 'invoice', 'creditnote', 'cashpurchases',
+                      'vendorinvoice', 'purchasereturn'];
+  var usePosted = POSTED_TYPES.indexOf(type) >= 0;
+  var acc = [];
+  function bodyFor(maxID) {
+    var b = { CompanyID: cid, DateFrom: from, DateTo: to };
+    if (usePosted) { b.MaxID = String(maxID); b.DocumentStatus = 'POSTED'; }
+    return b;
+  }
+  function sqFor(maxID) {
+    // Single-quote fallback must carry the same fields (desktop builds all
+    // bodies single-quoted; the old fallback dropped MaxID/DocumentStatus).
+    var b = "{'CompanyID':'" + cid + "','DateFrom':'" + from + "','DateTo':'" + to + "'";
+    if (usePosted) b += ",'MaxID':'" + maxID + "','DocumentStatus':'POSTED'";
+    return b + "}";
+  }
+  addLog('POST ' + endpoint + ' ' + JSON.stringify(bodyFor(0)));
+  var _pageCount = 0, _prevMaxID = -1;
+  function errDetail(xhr) {
+    var t = '';
+    try { t = ' ' + String(xhr.responseText || '').slice(0, 200); } catch(e) {}
+    return xhr.status + t;
+  }
+  function handle(resp, rawMode) {
+    // ALAYA uses capitalised DATA key (GT Deserialize* matches key "DATA",
+    // c_Account.cs:9424); accept both cases.
+    var arr = (resp && (resp.data || resp.Data)) || resp.Obj || resp.Result || [];
+    if (!Array.isArray(arr)) arr = arr ? [arr] : [];
+    var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice' || type === 'purchasereturn');
+    acc = acc.concat(arr);
+    // Paginate on the returned MaxID until it comes back 0/missing.
+    // Guard: server echoing the same non-zero MaxID must not loop forever.
+    var next = (resp && (resp.MaxID !== undefined ? resp.MaxID : (resp.maxID !== undefined ? resp.maxID : resp.maxId))) || 0;
+    next = parseInt(next, 10) || 0;
+    if (next && next !== _prevMaxID) { setTimeout(function() { page(next); }, 1000); return; }
+    addLog(type + ': ' + acc.length + ' docs (paginated)' + (rawMode ? ' (single-quote fallback)' : ''));
+    if (acc.length) {
+      try { addLog(type + ' sample: ' + JSON.stringify(acc[0]).slice(0, 400), 'log-info'); } catch(e) {}
+    }
+    cb(acc.map(isPurch ? normPurchaseDoc : normSalesDoc));
+  }
+  function page(maxID) {
+    if (++_pageCount > 50) { addLog(type + ': page cap reached, stopping with ' + acc.length + ' docs', 'log-err'); handle({ data: [] }, false); return; }
+    _prevMaxID = maxID;
+    addLog('POST ' + endpoint + ' ' + JSON.stringify(bodyFor(maxID)));
+    $.ajax({
+      url: apiUrl + endpoint, type: 'POST', cache: false, contentType: 'application/json',
+      headers: { 'Authorization': authToken }, data: JSON.stringify(bodyFor(maxID)),
+      success: function(resp) { handle(resp, false); },
+      error: function(xhr) {
+        // Desktop builds bodies with single quotes - retry that way on 400
+        if (xhr.status === 400) {
+          var sq = sqFor(maxID);
+          addLog(type + ': standard JSON rejected, retry single-quote body', 'log-info');
+          $.ajax({
+            url: apiUrl + endpoint, type: 'POST', cache: false, contentType: 'application/json',
+            headers: { 'Authorization': authToken }, data: sq,
+            success: function(resp2) { handle(resp2, true); },
+            error: function(xhr2) {
+              // A later page failing must not discard earlier pages.
+              if (acc.length) { handle({ data: [] }, true); return; }
+              addLog(type + ' fetch failed (' + errDetail(xhr2) + ')', 'log-err'); cb([]);
+            }
+          });
+        } else {
+          if (acc.length) { handle({ data: [] }, false); return; }
+          addLog(type + ' fetch failed (' + errDetail(xhr) + ')', 'log-err');
+          cb([]);
+        }
+      }
+    });
+  }
+  page(0);
+}
+
+// Payments have no REST endpoint (desktop reads PaymentHDR/VendorPaymentHDR via SQL);
+// try the same tables through the host SQL bridge with explicit columns.
+//
+// Also pulls the invoice-level knockoff detail (PaymentDTL / VendorPaymentDTL+GoodReceiveHDR
+// - same tables + join the desktop tool's TransferCustomerPayment/TransferVendorPayment read
+// via oConnSQL_IRS) so the backend can actually apply each payment against the invoice(s) it
+// paid, instead of posting an unapplied lump sum. Attached per-doc as `_raw_bridge_rows`:
+// [{ invno, amt }, ...] - invno is the Sales/Purchase Invoice DocNo to knock off against.
+function fetchPaymentsViaBridge(isVendor, from, to, cb, cid) {
+  function fmt(d) { return d.slice(0,4) + '.' + d.slice(5,7) + '.' + d.slice(8,10); }
+  // P0-5: GT Form1.cs:3081 resolves Code via VendorPaymentHDR,Vendor WHERE
+  // VPH_AcctCode = Ven_AcctCode, giving Ven_Account (NOT raw VPH_AcctCode);
+  // live Alaya needs the company-scoped CompanyVendor.CV_ReferenceNo (same
+  // class of bug as the CompanyVendor JOIN fix for purchase docs). Prefer
+  // CV_ReferenceNo, fall back to Ven_Account, then raw VPH_AcctCode so this
+  // works on legacy and live schemas. Also select the real VPH_DocAmt /
+  // date / remark columns GT reads (c_Account.cs:3093-3099).
+  var coId = parseInt(cid || currentAlayaCompanyID() || '0', 10) || 0;
+  var vendorCodeExpr = coId
+    ? "COALESCE(NULLIF(cv.CV_ReferenceNo,''), Vend.Ven_Account, VPH.VPH_AcctCode)"
+    : "COALESCE(Vend.Ven_Account, VPH.VPH_AcctCode)";
+  var vendorJoin = "FROM VendorPaymentHDR VPH "
+    + "LEFT JOIN Vendor Vend ON VPH.VPH_AcctCode = Vend.Ven_AcctCode "
+    + (coId ? "LEFT JOIN Vendor v2 ON VPH.VPH_AcctCode = v2.VE_AccountCode "
+             + "LEFT JOIN CompanyVendor cv ON cv.CV_VendorID = v2.VE_ID AND cv.CV_CompanyID = " + coId + " " : "");
+  var sql = isVendor
+    ? 'SELECT ' + vendorCodeExpr + ', VPH.VPH_DocNo, VPH.VPH_DocAmt, VPH.VPH_Remark, VPH.VPH_Reference, VPH.VPH_Mode, VPH.VPH_Status, VPH.VPH_UpdDate, VPH.VPH_AcctCode ' + vendorJoin + 'Where Convert(nvarchar,VPH.VPH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND VPH.VPH_DocNo Like \'PP%\' Order By VPH.VPH_DocNo'
+    : 'SELECT PH_AcctCode, PH_DocNo, PH_DocAmt, PH_Remark, PH_Reference, PH_Mode, PH_UpdDate FROM PaymentHDR Where Convert(nvarchar,PH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND PH_DocNo Like \'OR%\'';
+  var detailSql = isVendor
+    ? 'SELECT VPD.VPD_DocNo, GRH.GRH_Reference, VPD.VPD_Payment FROM VendorPaymentDTL VPD ' +
+      'INNER JOIN GoodReceiveHDR GRH ON VPD.VPD_InvNo = GRH.GRH_DocNo ' +
+      'INNER JOIN VendorPaymentHDR VPH ON VPD.VPD_DocNo = VPH.VPH_DocNo ' +
+      'WHERE VPD.VPD_Payment > 0 AND Convert(nvarchar,VPH.VPH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND VPH.VPH_DocNo Like \'PP%\' ' +
+      'ORDER BY VPD.VPD_DocNo, VPD.Link_Key'
+    : 'SELECT PD.PD_DocNo, PD.PD_INVNO, PD.PD_Payment FROM PaymentDTL PD ' +
+      'INNER JOIN PaymentHDR PH ON PD.PD_DocNo = PH.PH_DocNo ' +
+      'WHERE Convert(nvarchar,PH.PH_UpdDate,102) Between \'' + fmt(from) + '\' And \'' + fmt(to) + '\' AND PH.PH_DocNo Like \'OR%\' ' +
+      'ORDER BY PD.PD_DocNo, PD.Link_Key';
+  executeSqlViaHost(sql).then(function(msg) {
+    if (msg.error) throw new Error(msg.error);
+    var result = JSON.parse(msg.result);
+    var rows = (result.success && result.results && result.results[0] && result.results[0].rows) ? result.results[0].rows : [];
+    var docs = rows.map(function(r) {
+      if (isVendor) {
+        // r[0]=resolved Code (CV_ReferenceNo > Ven_Account > raw),
+        // r[8]=raw VPH_AcctCode (kept for unresolved-JOIN diagnostics).
+        return { docno: r[1] || '', suppcode: r[0] || '',
+                 amount: parseFloat(r[2]) || 0,
+                 description: 'PAYMENT',
+                 docdate: String(r[7] || '').slice(0, 10),
+                 _raw: { VPH_AcctCode: r[0], VPH_DocNo: r[1], VPH_DocAmt: r[2],
+                         VPH_Remark: r[3], VPH_Reference: r[4], VPH_Mode: r[5],
+                         VPH_Status: r[6], VPH_UpdDate: r[7], VPH_AcctCodeRaw: r[8] } };
+      }
+      return { docno: r[1] || '', custcode: r[0] || '', amount: r[2] || 0,
+               description: r[4] || r[3] || '', chequeno: '',
+               docdate: String(r[6] || '').slice(0, 10),
+               _raw: { PH_AcctCode: r[0], PH_DocNo: r[1], PH_DocAmt: r[2],
+                       PH_Remark: r[3], PH_Reference: r[4], PH_Mode: r[5], PH_UpdDate: r[6] } };
+    }).filter(function(d) { return d.docno; });
+    addLog((isVendor ? 'vendor' : 'customer') + ' payments via bridge: ' + docs.length + ' docs', 'log-ok');
+    if (!docs.length) { cb(docs); return; }
+    executeSqlViaHost(detailSql).then(function(dmsg) {
+      if (dmsg.error) throw new Error(dmsg.error);
+      var dresult = JSON.parse(dmsg.result);
+      var drows = (dresult.success && dresult.results && dresult.results[0] && dresult.results[0].rows) ? dresult.results[0].rows : [];
+      var byDocNo = {};
+      drows.forEach(function(r) {
+        var docno = r[0] || '';
+        if (!docno) return;
+        (byDocNo[docno] = byDocNo[docno] || []).push({ invno: r[1] || '', amt: r[2] || 0 });
+      });
+      docs.forEach(function(d) { d._raw_bridge_rows = byDocNo[d.docno] || []; });
+      var withRows = docs.filter(function(d) { return d._raw_bridge_rows.length; }).length;
+      addLog((isVendor ? 'vendor' : 'customer') + ' payment knockoff detail: ' + withRows + '/' + docs.length + ' docs have invoice lines', 'log-ok');
+      cb(docs);
+    }).catch(function(err) {
+      addLog('Payment knockoff detail query failed (' + err.message + ') - posting payments unapplied', 'log-warn');
+      cb(docs);
+    });
+  }).catch(function(err) {
+    addLog('Payment bridge query failed (' + err.message + ') - payments skipped', 'log-warn');
+    cb([]);
+  });
+}
+
+// Sequential fetch (avoids API rate limit) for all selected doc types
+function fetchAllSourceDocs(transfers, from, to, cid, done) {
+  var out = {};
+  var steps = [];
+  if (transfers.indexOf('cashsales') >= 0) steps.push({ kind: 'rest', type: 'cashsales', ep: DOC_ENDPOINTS.cashsales });
+  if (transfers.indexOf('invoice') >= 0) steps.push({ kind: 'rest', type: 'invoice', ep: DOC_ENDPOINTS.invoice });
+  if (transfers.indexOf('creditnote') >= 0) {
+    var advVendor = ($('input[name="adv-type"]:checked').val() === 'vendor');
+    steps.push({ kind: 'rest', type: 'creditnote', ep: advVendor ? DOC_ENDPOINTS.purchasereturn : DOC_ENDPOINTS.salesreturn });
+  }
+  if (transfers.indexOf('cashpurchases') >= 0) steps.push({ kind: 'rest', type: 'cashpurchases', ep: DOC_ENDPOINTS.cashpurchases });
+  if (transfers.indexOf('vendorinvoice') >= 0) steps.push({ kind: 'rest', type: 'vendorinvoice', ep: DOC_ENDPOINTS.vendorinvoice });
+  if (transfers.indexOf('payment') >= 0) steps.push({ kind: 'pay', vendor: false });
+  if (settings.tCashpurchpay) steps.push({ kind: 'pay', vendor: true });
+  var i = 0;
+  function next() {
+    if (i >= steps.length) { done(out); return; }
+    var s = steps[i++];
+    if (s.kind === 'rest') {
+      var g = window._advGrid;
+      // Ground truth (desktop c_Account.cs:1109 TransferDailyTotalCashSales +
+      // frmAdvancedMode.cs:673-676): Summary mode aggregates the full date-range
+      // cache and the desktop grid itself is disabled (dgv1.Enabled=false), so
+      // per-row ticking has no effect there. Skip the ticked-subset shortcut
+      // for cashsales-summary only; every other rest type keeps ticked filtering.
+      var isCashSummary = (s.type === 'cashsales') &&
+        (($('#transfer-method').val() || $('#s-cashsales-method').val() || 'summary') === 'summary');
+      if (g && g.type === s.type && g.key === advGridKey(cid, from, to, s.type)) {
+        if (isCashSummary) {
+          out[s.type] = (g.docs || []).slice();
+          addLog('cashsales: Summary mode ignores row ticks - using all ' + (g.docs || []).length + ' grid rows (no API refetch)', 'log-ok');
+          setTimeout(next, 100);
+        } else {
+          var ticked = (g.docs || []).filter(function(d) { return d._ticked !== false; });
+          addLog(s.type + ': using ' + ticked.length + '/' + g.docs.length + ' ticked grid rows (no API refetch)', 'log-ok');
+          out[s.type] = ticked;
+          setTimeout(next, 100);
+        }
+      } else {
+        fetchDocType(s.type, s.ep, cid, from, to, function(docs) {
+          out[s.type] = docs;
+          setTimeout(next, 300);
+        });
+      }
+    } else {
+      fetchPaymentsViaBridge(s.vendor, from, to, function(rows) {
+        out[s.vendor ? 'vendorpayment' : 'payment'] = rows;
+        setTimeout(next, 300);
+      }, cid);
+    }
+  }
+  next();
+}
+
+// ΓöÇΓöÇ Transfer ΓöÇΓöÇ
+$('#btn-transfer').on('click', function() {
+  var from = $('#from-date').val();
+  var to = $('#to-date').val();
+  var company = $('#sql-company').val();
+
+  if (!from || !to) { showToast('Please select date range', true); return; }
+  if (!company) { showToast('Please select SQL Account company', true); return; }
+  var alayaCid = currentAlayaCompanyID();
+  if (!alayaCid) { showToast('Please select an Alaya company', true); return; }
+
+  // Auto-load master data (customers + CompanyCustomer CC merge) before
+  // transferring: one click = load + transfer. Manual Load button removed.
+  if (alayaData._masterCid === alayaCid && alayaData.customerRaw && alayaData.customerRaw.length) {
+    runTransferMaster(from, to, company, alayaCid);
+  } else {
+    addLog('Auto-loading Alaya data for company ' + alayaCid + ' (' + currentAlayaCompanyCode() + ')...', 'log-info');
+    loadMasterData(function() {
+      alayaData._masterCid = alayaCid;
+      runTransferMaster(from, to, company, alayaCid);
+    });
+  }
+});
+
+function runTransferMaster(from, to, company, alayaCid) {
+  addLog('Starting transfer: ' + from + ' ~ ' + to + ' to ' + company, 'log-info');
+  $('#transfer-progress').show();
+  $('#btn-transfer').prop('disabled', true);
+
+  // Fresh run: clear any leftover results from a previous transfer so the panel
+  // never shows stale "success" rows before the new transfer actually finishes.
+  _progSawRunning = false;
+  $('#results-list').empty();
+  $('#transfer-results').hide();
+  $('#summary-list').empty();
+  $('#transfer-summary').hide();
+  setResultsCollapsed(false);
+  setSummaryCollapsed(false);
+  applyResultsFilter();
+
+  var transfers = [];
+  if ($('#s-t-cashsales').is(':checked')) transfers.push('cashsales');
+  if ($('#s-t-invoice').is(':checked')) transfers.push('invoice');
+  if ($('#s-t-customer').is(':checked')) transfers.push('customer');
+  if ($('#s-t-vendor').is(':checked')) transfers.push('vendor');
+  if ($('#s-t-cn').is(':checked')) transfers.push('creditnote');
+  if ($('#s-t-cashpayment').is(':checked')) transfers.push('payment');
+  if ($('#s-t-cashpurch').is(':checked')) transfers.push('cashpurchases');
+  if ($('#s-t-vendorinv').is(':checked')) transfers.push('vendorinvoice');
+
+  if (transfers.length === 0) {
+    showToast('No transfer options selected', true);
+    $('#transfer-progress').hide();
+    $('#btn-transfer').prop('disabled', false);
+    return;
+  }
+
+  // Live progress: poll backend so the Transfer panel shows the customer
+  // currently being transferred (same behaviour as the desktop Link tool)
+  startProgressPoll();
+
+  // Call backend (mappings included; backend may ignore unknown fields for now)
+  var maps = collectMappingsFromUI();
+  // Master-data docs come from the Preview data; attach raw API rows (CC_/CV_ ref fields)
+  function rawByCode(rawArr, code, keys) {
+    if (!rawArr) return null;
+    for (var i = 0; i < rawArr.length; i++) {
+      var r = rawArr[i];
+      for (var k = 0; k < keys.length; k++) {
+        if (String(r[keys[k]] || '') === code) return r;
+      }
+    }
+    return null;
+  }
+  var custDocs = (alayaData.customers || []).map(function(c) {
+    var code = c[0] || '';
+    return { code: code, name: c[1] || '', creditterm: c[2] || '', creditlimit: c[3] || 0,
+             _raw: rawByCode(alayaData.customerRaw, code, ['Cust_AccountCode']) };
+  }).filter(function(d) { return d.code; });
+  var vendDocs = (alayaData.vendors || []).map(function(v) {
+    var code = v[0] || '';
+    return { code: code, name: v[1] || '', creditterm: v[2] || '', creditlimit: v[3] || 0,
+             _raw: rawByCode(alayaData.vendorRaw, code, ['VE_AccountCode', 'VE_Code']) };
+  }).filter(function(d) { return d.code; });
+  if (settings.tCashpurchpay && transfers.indexOf('vendorpayment') < 0) transfers.push('vendorpayment');
+  if ((transfers.indexOf('customer') >= 0 && !custDocs.length) ||
+      (transfers.indexOf('vendor') >= 0 && !vendDocs.length)) {
+    showToast('No master data from Alaya to transfer', true);
+    addLog('Transfer blocked: no master data loaded - load returned empty', 'log-err');
+    $('#transfer-progress').hide();
+    $('#btn-transfer').prop('disabled', false);
+    return;
+  }
+  addLog('Fetching source docs from Alaya for company ' + alayaCid + '...', 'log-info');
+  $('#progress-text').text('fetching docs...');
+  fetchAllSourceDocs(transfers, from, to, alayaCid, function(srcDocs) {
+  // Show fetched docs in the Advanced grid (unless grid already matches = user ticks preserved)
+  var restTypes = ['cashsales', 'invoice', 'creditnote', 'cashpurchases', 'vendorinvoice'];
+  for (var gi = 0; gi < restTypes.length; gi++) {
+    var gt = restTypes[gi];
+    if (srcDocs[gt] && srcDocs[gt].length && transfers.indexOf(gt) >= 0) {
+      // Keep the grid disabled/empty for Customer + CASH SALES + Summary even
+      // after a transfer populates srcDocs (desktop ClearScreen parity).
+      var advDis = (($('input[name="adv-type"]:checked').val() || 'customer') === 'customer' &&
+        ($('#adv-preview-doctype').val() || 'CASH SALES') === 'CASH SALES' &&
+        (($('#transfer-method').val() || $('#s-cashsales-method').val() || 'summary') === 'summary'));
+      if (gt === 'cashsales' && advDis) break;
+      var eg = window._advGrid;
+      if (!eg || eg.type !== gt || eg.key !== advGridKey(alayaCid, from, to, gt)) {
+        renderAdvGrid(srcDocs[gt], gt, advGridKey(alayaCid, from, to, gt));
+      }
+      break;
+    }
+  }
+  backendAjax({
+    url: BACKEND_URL + '/api/transfer',
+    type: 'POST',
+    contentType: 'application/json',
+    timeoutMs: 600000,
+    data: JSON.stringify({
+      fromdate: from,
+      todate: to,
+      companycode: company,
+      alayaCompanyId: currentAlayaCompanyID(),
+      transferMethod: $('#transfer-method').val(),
+      docType: $('#adv-preview-doctype').val(),
+      transfers: transfers,
+      dryRun: false,
+      options: {
+        cashsalesMethod: $('#s-cashsales-method').val(),
+        cashsalesPrefix: $('#s-cashsales-prefix').val(),
+        acCashsales: $('#s-ac-cashsales').val(),
+        acCashrounding: $('#s-ac-cashrounding').val(),
+        acCreditsales: $('#s-ac-creditsales').val(),
+        acCreditrounding: $('#s-ac-creditrounding').val(),
+        acServicecharge: $('#s-ac-servicecharge').val(),
+        descCashsales: $('#s-desc-cashsales').val(),
+        descCreditsales: $('#s-desc-creditsales').val(),
+        acPurchase: $('#s-ac-purchase').val(),
+        acPurchRounding: $('#s-ac-purchrounding').val(),
+        descPurchase: $('#s-desc-purchase').val(),
+        projPurchase: $('#s-proj-purchase').val(),
+        acCreditnote: $('#s-ac-creditnote').val(),
+        descCreditnote: $('#s-desc-creditnote').val(),
+        acDebitnote: $('#s-ac-debitnote').val(),
+        descDebitnote: $('#s-desc-debitnote').val(),
+        pmByBranch: $('#s-pm-bybranch').is(':checked'),
+        // Gates cash-sales receipt (OR) posting - backend mirror of the
+        // desktop's TRANSFER_CS_PAYMENT / p_bTransferCSPayment option.
+        tCashpayment: $('#s-t-cashpayment').is(':checked')
+      },
+      paymodes: maps.paymodes,
+      branches: maps.branches,
+      divisions: maps.divisions,
+      docs: $.extend({ customer: custDocs, vendor: vendDocs,
+        creditnoteSide: $('input[name="adv-type"]:checked').val() || 'customer' }, srcDocs)
+    }),
+    success: function(r) {
+      stopProgressPoll();
+      $('#progress-bar').css('width', '100%');
+      $('#progress-text').text('100%');
+      addLog('Transfer completed: ' + JSON.stringify(r), 'log-ok');
+      showToast('Transfer completed');
+      showTransferResults(r.data);
+      setTimeout(function() { $('#transfer-progress').hide(); }, 2000);
+      $('#btn-transfer').prop('disabled', false);
+    },
+    error: function(xhr) {
+      stopProgressPoll();
+      $('#progress-bar').css('width', '0%');
+      addLog('Transfer FAILED: ' + xhr.status, 'log-err');
+      showToast('Transfer failed', true);
+      $('#transfer-progress').hide();
+      $('#btn-transfer').prop('disabled', false);
+    }
+  });
+  }); // end fetchAllSourceDocs
+}
+
+// ΓöÇΓöÇ Show transfer results ΓöÇΓöÇ
+// ── Live transfer progress (polled; mirrors the desktop Link tool's
+//    per-customer status visible during a transfer) ──
+var _progPoll = null;
+// True once the poll has seen _prog.running=true (i.e. the POST actually
+// started its transfer). Before that, /api/transfer/progress returns the
+// PREVIOUS run's completed items because _prog_reset only runs inside the
+// POST handler - rendering them would fake "all transferred" instantly.
+var _progSawRunning = false;
+function startProgressPoll() {
+  stopProgressPoll();
+  _progPoll = setInterval(function() {
+    fetch(BACKEND_URL + '/api/transfer/progress').then(function(r) {
+      return r.json();
+    }).then(function(p) {
+      if (p) renderLiveProgress(p);
+    }).catch(function() {});
+  }, 400);
+}
+function stopProgressPoll() {
+  if (_progPoll) { clearInterval(_progPoll); _progPoll = null; }
+}
+function renderLiveProgress(p) {
+  // Before the backend POST calls _prog_reset, the progress endpoint still
+  // reports the previous transfer's finished items (running=false). Rendering
+  // those here makes it look like every customer was already transferred -
+  // which is exactly the "一按 transfer 就全部 success" bug. So we only start
+  // rendering once we've seen running=true for the real (new) transfer.
+  if (!p.running && !_progSawRunning) {
+    // Still pre-transfer: show the fetching state, never stale rows.
+    return;
+  }
+  if (p.running) _progSawRunning = true;
+  var done = (p.done || 0), total = (p.total || 0);
+  var pct = total > 0 ? Math.round(done / total * 100) : 0;
+  $('#progress-bar').css('width', pct + '%');
+  var cur = p.current || {};
+  var txt = '';
+  if (cur.label || cur.code) {
+    txt = cur.label || '';
+    if (cur.code) txt += ' ' + cur.code + (cur.name ? ' — ' + cur.name : '');
+    txt = 'Transferring ' + txt;
+  } else if (p.running) {
+    txt = 'Transferring...';
+  } else if (p.items && p.items.length) {
+    txt = 'Done';
+  }
+  if (total > 0) txt += ' ' + pct + '%';
+  $('#progress-text').text(txt);
+
+  var html = '';
+  (p.items || []).forEach(function(it) {
+    var cls = 'pending';
+    if (it.status === 'success') cls = 'done';
+    else if (it.status === 'error') cls = 'error';
+    var nm = it.label || '';
+    if (it.code) nm += (nm ? ' · ' : '') + it.code;
+    if (it.name) nm += ' — ' + it.name;
+    var st = it.status === 'success' ? (it.message || 'transferred') : (it.status || 'pending');
+    html += '<div class="transfer-item" data-st="' + escHtml(String(st).toLowerCase()) + '">';
+    html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
+    html += '<div class="detail">' + escHtml(it.status === 'success' ? 'transfer ' + st : (it.message || '')) + '</div></div>';
+    html += '<div class="status ' + cls + '">' + escHtml(st) + '</div>';
+    html += '</div>';
+  });
+  if (html) {
+    $('#results-list').html(html);
+    $('#transfer-results').css('display', 'block');
+    applyResultsFilter();
+  }
+}
+
+// ── Show transfer results ──
+function showTransferResults(results) {
+  var html = '';
+  (results || []).forEach(function(r) {
+    // 明细里一个都没成功 (全 error) 也算失败, 不能显示绿色 OK 误导人
+    var nErr = 0, nOk = 0;
+    (r.data || []).forEach(function(d) {
+      if (d.status === 'error') nErr++;
+      else if (d.status === 'success' || d.status === 'planned') nOk++;
+    });
+    var ok = !!r.success && !(nErr > 0 && nOk === 0);
+    var statusClass = ok ? 'done' : 'error';
+    var statusText = ok ? 'OK' : 'Failed';
+    var det = r.message || r.error || '';
+    if (!det && r.data && r.data.length) {
+      var firstErr = null;
+      r.data.forEach(function(d) {
+        if (d.status === 'error' && !firstErr) firstErr = d.error;
+      });
+      if (firstErr) det = firstErr;
+      else {
+        var parts = [];
+        if (r.inserted !== undefined && r.inserted) parts.push(r.inserted + ' inserted');
+        if (r.updated !== undefined && r.updated) parts.push(r.updated + ' updated');
+        if (r.skipped !== undefined && r.skipped) parts.push(r.skipped + ' skipped');
+        if (!parts.length && r.count !== undefined) parts.push(r.count + ' total');
+        det = parts.join(' · ') || 'done';
+      }
+    } else if (!det && r.count !== undefined) {
+      det = 'count: ' + r.count;
+    }
+    if (r.warnings && r.warnings.length) {
+      det += (det ? ' | ' : '') + 'warnings: ' + r.warnings.slice(0, 2).join('; ');
+    }
+    // Per-type rows can run to 100+ (customer/vendor master data) - default
+    // those collapsed so they don't bury the usually-short cashsales/invoice
+    // results below them; the header stays clickable to expand on demand.
+    var rowCount = (r.data || []).length;
+    var groupId = 'subgrp-' + escHtml(String(r.type)) + '-' + Math.random().toString(36).slice(2, 8);
+    var startCollapsed = rowCount > 5;
+    html += '<div class="transfer-item transfer-group-header" data-toggle="' + groupId + '" style="cursor:' + (rowCount ? 'pointer' : 'default') + ';">';
+    html += '<div class="info"><div class="name">' + (rowCount ? '<span class="subgroup-arrow">' + (startCollapsed ? '&#9656;' : '&#9662;') + '</span> ' : '') + escHtml(r.type) + '</div>';
+    html += '<div class="detail">' + escHtml(det) + '</div></div>';
+    html += '<div class="status ' + statusClass + '">' + statusText + '</div>';
+    html += '</div>';
+
+    // Per-record detail list (each customer/vendor shows its own status), so the
+    // result panel mirrors the live one-by-one progress instead of a single OK.
+    // Status shows the actual transfer outcome (action: created/updated), NOT the
+    // source load result - "loaded" does not mean "transferred".
+    html += '<div id="' + groupId + '" class="transfer-subgroup" style="display:' + (startCollapsed ? 'none' : 'block') + ';">';
+    (r.data || []).forEach(function(d) {
+      var cls = 'pending';
+      if (d.status === 'success' || d.status === 'planned') cls = 'done';
+      else if (d.status === 'error') cls = 'error';
+      else if (d.status === 'skipped') cls = 'pending';
+      var nm = '';
+      if (d.code) nm += (nm ? ' · ' : '') + d.code;
+      if (d.name) nm += (nm ? ' — ' : '') + d.name;
+      if (!nm) nm = r.type;
+      var msg = d.message || d.error || '';
+      var st = d.action || d.status || '';
+      if (st === 'success') st = 'transferred';
+      html += '<div class="transfer-item transfer-sub" data-st="' + escHtml(String(st).toLowerCase()) + '">';
+      html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
+      html += '<div class="detail">' + escHtml(msg) + '</div></div>';
+      html += '<div class="status ' + cls + '">' + escHtml(st) + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  $('#summary-list').html(html);
+  $('#transfer-summary').show();
+  applyResultsFilter();
+}
+
+// ── Status filter for Transfer Results / Summary ──
+// Lets the user narrow 100+ rows down to e.g. only Failed/Skipped.
+function rowMatchesStatusFilter(st, f) {
+  st = String(st || '').toLowerCase();
+  if (f === 'all') return true;
+  if (f === 'transferred') return st === 'created' || st === 'updated' || st === 'transferred';
+  if (f === 'created') return st === 'created';
+  if (f === 'updated') return st === 'updated';
+  if (f === 'skipped') return st === 'skipped' || st === 'pending';
+  if (f === 'failed') return st === 'error' || st === 'failed';
+  return true;
+}
+function applyResultsFilter() {
+  var f = $('#results-filter').val() || 'all';
+  var counts = { all: 0, transferred: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
+  function bucket(st) {
+    if (st === 'created') { counts.created++; counts.transferred++; }
+    else if (st === 'updated') { counts.updated++; counts.transferred++; }
+    else if (st === 'transferred') { counts.transferred++; }
+    else if (st === 'skipped' || st === 'pending') { counts.skipped++; }
+    else if (st === 'error' || st === 'failed') { counts.failed++; }
+  }
+  // Live list: every row is a per-record row.
+  $('#results-list .transfer-item').each(function() {
+    var st = String($(this).attr('data-st') || '').toLowerCase();
+    counts.all++;
+    bucket(st);
+    $(this).toggle(rowMatchesStatusFilter(st, f));
+  });
+  // Summary list: filter the per-record sub-rows, always keep type headers.
+  $('#summary-list .transfer-sub').each(function() {
+    var st = String($(this).attr('data-st') || '').toLowerCase();
+    $(this).toggle(rowMatchesStatusFilter(st, f));
+  });
+  // Show counts in the dropdown so failures are visible without filtering.
+  var labels = { all: 'All', transferred: 'Transferred', created: 'Created',
+                 updated: 'Updated', skipped: 'Skipped', failed: 'Failed' };
+  $('#results-filter option').each(function() {
+    var v = $(this).val();
+    $(this).text(labels[v] + ' (' + (counts[v] || 0) + ')');
+  });
+}
+$('#results-filter').on('change', applyResultsFilter);
+
+// ── Collapse/expand for Transfer Results / Summary ──
+// The customer list can be 100+ rows; collapsing it lets the cash sales
+// summary below be reached without scrolling through everything.
+function setResultsCollapsed(collapsed) {
+  $('#results-list').toggle(!collapsed);
+  $('#results-collapse').html(collapsed ? '&#9656;' : '&#9662;');
+}
+function setSummaryCollapsed(collapsed) {
+  $('#summary-list').toggle(!collapsed);
+  $('#summary-collapse').html(collapsed ? '&#9656;' : '&#9662;');
+}
+$('#results-collapse').on('click', function() {
+  setResultsCollapsed($('#results-list').is(':visible'));
+});
+$('#summary-collapse').on('click', function() {
+  setSummaryCollapsed($('#summary-list').is(':visible'));
+});
+
+// Per-type collapse (customer/vendor lists default collapsed - see renderSummary)
+$(document).on('click', '.transfer-group-header[data-toggle]', function() {
+  var grp = $('#' + $(this).data('toggle'));
+  if (!grp.length) return;
+  var showing = grp.is(':visible');
+  grp.toggle(!showing);
+  $(this).find('.subgroup-arrow').html(showing ? '&#9656;' : '&#9662;');
+});
+
+// ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
+$('.tab-btn').on('click', function() {
+  var tab = $(this).data('tab');
+  $('.tab-btn').removeClass('active');
+  $(this).addClass('active');
+  $('.tab-panel').removeClass('active');
+  $('#tab-' + tab).addClass('active');
+});
+
+$('#sql-company, #s-sql-company').on('change', function() {
+  selectActiveCompany($(this).val());
+});
+
+// ΓöÇΓöÇ Clear log ΓöÇΓöÇ
+$('#btn-clear-log').on('click', function() {
+  $('#log-panel').empty();
+  addLog('Log cleared', 'log-info');
+});
+
+// ΓöÇΓöÇ DCF file browser (server-side paths via backend) ΓöÇΓöÇ
+function openDcfBrowser() {
+  $('#dcf-browser-overlay').remove();
+  var ov = $('<div id="dcf-browser-overlay">').css({
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(0,0,0,0.4)', 'z-index': 10000,
+    display: 'flex', 'align-items': 'center', 'justify-content': 'center'
+  });
+  var box = $('<div>').css({ background: '#fff', 'border-radius': '12px', padding: '20px',
+    width: '480px', 'max-width': '90vw', 'max-height': '70vh', display: 'flex',
+    'flex-direction': 'column', 'box-shadow': '0 8px 30px rgba(0,0,0,0.25)' });
+  box.append('<h2 style="margin-bottom:4px;">Select Default.DCF</h2>');
+  box.append('<div class="sub">Browsing files on the backend machine (where SQL Account lives).</div>');
+  var curPath = $('<div style="font-size:0.75rem;color:#6b7280;margin-bottom:8px;word-break:break-all;">').text('');
+  var list = $('<div>').css({ overflow: 'auto', border: '1px solid #e5e7eb', 'border-radius': '8px',
+    'min-height': '200px', 'margin-bottom': '12px' });
+  var btnRow = $('<div class="btn-row">').css({ 'justify-content': 'flex-end' });
+  btnRow.append('<button id="dcf-cancel" class="btn-secondary">Cancel</button>');
+  box.append(curPath).append(list).append(btnRow);
+  ov.append(box).appendTo('body');
+
+  function loadDir(path) {
+    list.html('<div style="padding:12px;color:#6b7280;font-size:0.82rem;">Loading...</div>');
+    backendAjax({
+      url: BACKEND_URL + '/api/browse', type: 'GET', cache: false,
+      data: { path: path || '', ext: '.DCF' },
+      success: function(r) {
+        if (!r.success) { list.html('<div style="padding:12px;color:#991b1b;">' + escHtml(r.error || 'failed') + '</div>'); return; }
+        curPath.text(r.path);
+        list.empty();
+        function row(icon, name, cb) {
+          var d = $('<div>').css({ padding: '8px 12px', 'border-bottom': '1px solid #f3f4f6',
+            cursor: 'pointer', 'font-size': '0.82rem' }).text(icon + ' ' + name)
+            .hover(function() { $(this).css('background', '#f3f4f6'); },
+                   function() { $(this).css('background', ''); })
+            .on('click', cb);
+          list.append(d);
+        }
+        if (r.parent) row('⬆', '.. (parent)', function() { loadDir(r.parent); });
+        if (!r.dirs.length && !r.files.length) {
+          list.append('<div style="padding:12px;color:#6b7280;">Empty folder.</div>');
+        }
+        r.dirs.forEach(function(dn) {
+          row('📁', dn, function() { loadDir(r.path + '\\' + dn); });
+        });
+        r.files.forEach(function(fn) {
+          row('📄', fn, function() {
+            $('#s-dcf-path').val(r.path + '\\' + fn);
+            $('#dcf-browser-overlay').remove();
+            addLog('DCF selected: ' + r.path + '\\' + fn, 'log-ok');
+          });
+        });
+      },
+      error: function(xhr) {
+        list.html('<div style="padding:12px;color:#991b1b;">Backend unreachable.</div>');
+      }
+    });
+  }
+  $('#dcf-cancel').on('click', function() { ov.remove(); });
+  ov.on('click', function(e) { if (e.target === ov[0]) ov.remove(); });
+  var start = $('#s-dcf-path').val() || '';
+  var startDir = start.replace(/\\[^\\]*$/, '');
+  loadDir(startDir || 'C:\\eStream');
+}
+$('#btn-browse-dcf').on('click', function() { openDcfBrowser(); });
+
+// ΓöÇΓöÇ Save settings ΓöÇΓöÇ
+$('#btn-save-settings').on('click', function() {
+  try {
+    saveSettings();
+  } catch (e) {
+    showToast('Save crashed before reaching the database: ' + e.message, true);
+    addLog('saveSettings() threw synchronously: ' + (e && e.stack || e), 'log-err');
+  }
+});
+$('#btn-save-default-company').on('click', function() {
+  var id = currentAlayaCompanyID();
+  var code = currentAlayaCompanyCode();
+  if (!id) { showToast('No Alaya company selected in the dropdown yet', true); return; }
+  settings.alayaCompanyId = id;
+  settings.alayaCompany = code;
+  $('#s-alaya-company').val(code);
+  try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
+  var name = $('#alaya-company-select').find('option:selected').text() || code;
+  var display = code;
+  if (name && name !== code) {
+    var dash = name.indexOf('-');
+    display = code + (dash >= 0 ? ' (' + $.trim(name.slice(dash + 1)) + ')' : '');
+  }
+  showToast('Default company saved: ' + display);
+  addLog('Default Alaya company saved: ' + code + ' (ID ' + id + ')', 'log-ok');
+  saveSettings();
+});
+try { $('#build-tag').text(new Date(document.lastModified).toLocaleString() + ' [' + PLUGIN_VERSION + ']'); } catch(e) {}
+
+addLog('Plugin initialized ' + PLUGIN_VERSION + ' - listening for ALAYA_INIT', 'log-info');
+</script>
+</body>
+</html>
