@@ -344,6 +344,7 @@
         v1 over Restful API: Customer + Cash Sales (Itemize).</div>
     </div>
 
+    <div id="sdk-only">
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">SQL Account Connection (SDK Live only)</h3>
     <div class="sub" style="margin-top:-4px;">
       Saved to the Alaya UDF settings table along with everything else on this page (use the
@@ -394,6 +395,7 @@
         <label>Estream Login Password</label>
         <input type="password" id="s-estream-password" placeholder="(unchanged)" autocomplete="new-password" />
       </div>
+    </div>
     </div>
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Settings</h3>
     <div class="form-row">
@@ -979,6 +981,7 @@ function showDest(d) {
   $('#d-rest').toggle(d.mode === 'rest');
   window.DEST_REST = d.mode === 'rest';   // API key is bound to one SQL company: no company picker
   $('#sql-company, #s-sql-company').closest('.form-group').toggle(!window.DEST_REST);
+  $('#sdk-only').toggle(!window.DEST_REST);   // Firebird / DCF / eStream login are COM-only
   $('#d-access').val(d.accessKey || '');
   $('#d-secret').attr('placeholder', d.secretKeySet ? '(unchanged)' : '');
   $('#d-host').val(d.host || '');
