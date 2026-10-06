@@ -1018,7 +1018,23 @@ $('#d-test').on('click', function() {
 // handler passes the OUTGOING id so its edits are stored before the swap,
 // while GENERAL (the global default-company pointer) still advances to the
 // newly selected company from the dropdown.
+// While a save runs nothing else is clickable: the host's SQL control handles one statement at a time, so a
+// second click (Save as default, Transfer...) made the save time out.
+function setSaving(on) {
+  window._saving = on;
+  var el = document.getElementById('save-lock');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'save-lock'; el.textContent = 'Saving settings...';
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(255,255,255,.7);display:none;' +
+      'align-items:center;justify-content:center;font:600 1.1rem sans-serif;color:#1565c0;cursor:wait';
+    document.body.appendChild(el);
+  }
+  el.style.display = on ? 'flex' : 'none';
+}
+
 function saveSettings(mappingCid) {
+  if (window._saving) return;
+  setSaving(true);
   var maps = collectMappingsFromUI();
   settings = {
     backendUrl: normalizeBackendUrl($('#s-backend-url').val() || defaultSettings.backendUrl),
@@ -1136,7 +1152,7 @@ function saveSettings(mappingCid) {
   // all (times out no matter how long we wait), while single statements work.
   var chain = Promise.resolve();
   stmts.forEach(function(stmt) {
-    chain = chain.then(function() { return executeSqlViaHost(stmt, 10000); }).then(function(msg) {
+    chain = chain.then(function() { return executeSqlViaHost(stmt, 30000); }).then(function(msg) {
       if (msg.error) throw new Error(msg.error);
     });
   });
@@ -1144,7 +1160,9 @@ function saveSettings(mappingCid) {
     showToast('Settings saved (' + okRows.length + ' rows to Alaya DB)');
     addLog('Settings saved to UDF table (' + okRows.length + ' rows) + local backup', 'log-ok');
     testBackendConnection();
+    setSaving(false);
   }).catch(function(err) {
+    setSaving(false);
     showToast('UDF save failed, kept local backup: ' + err.message, true);
     addLog('Save to UDF failed (' + err.message + '). Local backup kept. To enable server storage, create a UDF module with code LINKSQLHYB in Module Editor.', 'log-err');
   });
@@ -3402,6 +3420,7 @@ $('#btn-save-settings').on('click', function() {
   try {
     saveSettings();
   } catch (e) {
+    setSaving(false);
     showToast('Save crashed before reaching the database: ' + e.message, true);
     addLog('saveSettings() threw synchronously: ' + (e && e.stack || e), 'log-err');
   }
