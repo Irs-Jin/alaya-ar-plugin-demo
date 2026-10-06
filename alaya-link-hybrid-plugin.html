@@ -1589,23 +1589,6 @@ function testBackendConnection() {
   });
 }
 
-// Click the red "Backend: offline" badge -> OS protocol (install-protocol.bat, once per PC) starts the backend
-$('#backend-badge').css('cursor', 'pointer').on('click', function() {
-  if (!$(this).hasClass('badge-fail')) return;
-  $(this).removeClass('badge-fail').addClass('badge-waiting').text('Backend: starting...');
-  var a = document.createElement('a'); a.href = 'linksqlhybrid://start';
-  document.body.appendChild(a); a.click(); a.remove();
-  var tries = 0, t = setInterval(function() {
-    backendAjax({ url: BACKEND_URL + '/api/health', type: 'GET', success: function() {
-      clearInterval(t); testBackendConnection(); loadDestination(); loadSqlCompanies();
-    }, error: function() {} });
-    if (++tries > 15) {
-      clearInterval(t); testBackendConnection();
-      addLog('Backend did not start - run install-protocol.bat once on this PC, or start.bat', 'log-err');
-    }
-  }, 2000);
-});
-
 function selectActiveCompany(code) {
   if (!code) return;
   backendAjax({
