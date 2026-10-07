@@ -3080,6 +3080,7 @@ function fetchAllSourceDocs(transfers, from, to, cid, done) {
   function next() {
     if (i >= steps.length) { done(out); return; }
     var s = steps[i++];
+    $('#progress-text').text('fetching docs ' + i + '/' + steps.length + '...');
     if (s.kind === 'rest') {
       var g = window._advGrid;
       // Ground truth (desktop c_Account.cs:1109 TransferDailyTotalCashSales +
@@ -3347,7 +3348,7 @@ function renderLiveProgress(p) {
   } else if (p.items && p.items.length) {
     txt = 'Done';
   }
-  if (total > 0) txt += ' ' + pct + '%';
+  if (total > 0) txt += ' ' + pct + '% (' + done + '/' + total + ')';
   $('#progress-text').text(txt);
 
   var html = '';
