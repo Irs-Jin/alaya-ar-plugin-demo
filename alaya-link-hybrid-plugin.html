@@ -135,6 +135,9 @@
     .map-toolbar { margin-bottom:12px; }
     .map-toolbar .map-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px; }
     .map-toolbar .map-desc { font-size:0.75rem; color:#6b7280; }
+
+    /* Company combobox dropdown */
+    .company-opt:hover { background:#eef2ff; }
   </style>
 </head>
 <body>
@@ -180,8 +183,10 @@
     <div class="form-row">
       <div class="form-group">
         <label>Alaya Company</label>
-        <input type="text" id="alaya-company-filter" list="alaya-company-list" placeholder="Type to filter (e.g. JIN6)..." style="margin-bottom:6px;" />
-        <datalist id="alaya-company-list"></datalist>
+        <div style="position:relative;">
+          <input type="text" id="alaya-company-filter" placeholder="Type to filter (e.g. JIN6)..." autocomplete="off" style="margin-bottom:6px;" />
+          <div id="alaya-company-list" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;border:1px solid #d1d5db;border-radius:4px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.18);"></div>
+        </div>
         <select id="alaya-company-select" style="display:none">
           <option value="">Loading companies...</option>
         </select>
@@ -1543,7 +1548,7 @@ function applyUserCompanyFilter() {
       sel.val(String(picked));
       settings.alayaCompanyId = picked;
     }
-    syncCompanyDatalist();   // datalist still lists the unfiltered set
+    syncCompanyDatalist();   // dropdown still lists the unfiltered set
     syncCompanyFilterInput();
   }).catch(function(err) {
     var short = String(err.message || err).slice(0, 100);
@@ -1553,29 +1558,32 @@ function applyUserCompanyFilter() {
   });
 }
 
-// Company dropdown search: the visible input + <datalist> IS the dropdown (the
-// native <select> stays hidden as the source of truth - all val()/change code
-// keeps working unchanged).
+// Company dropdown search: custom list under the input; the native <select>
+// stays hidden as the source of truth (all val()/change code keeps working).
+// Why not <datalist>: once the box holds the full "CODE - NAME", the native
+// suggestion list filters down to that one row - the arrow looks dead.
 function syncCompanyDatalist() {
-  var dl = $('#alaya-company-list').empty();
-  $('#alaya-company-select option').each(function() {
-    dl.append($('<option>').val($(this).text()));
-  });
+  var opts = [];
+  $('#alaya-company-select option').each(function() { opts.push({ id: $(this).val(), t: $(this).text() }); });
+  window._companyOptions = opts;
 }
 function syncCompanyFilterInput() {
   $('#alaya-company-filter').val($('#alaya-company-select option:selected').text() || '');
 }
-$('#alaya-company-filter').on('input', function() {
-  var q = $.trim($(this).val()).toUpperCase();
-  if (!q) { setScopeNote(); return; }
-  var shown = 0;
-  $('#alaya-company-select option').each(function() {
-    if ($(this).text().toUpperCase().indexOf(q) >= 0) shown++;
-  });
-  setScopeNote(shown + ' match');
-});
-$('#alaya-company-filter').on('change', function() {
-  var q = $.trim($(this).val()).toUpperCase();
+function renderCompanyList() {
+  var q = $.trim($('#alaya-company-filter').val()).toUpperCase();
+  var list = window._companyOptions || [], html = '', n = 0;
+  for (var i = 0; i < list.length; i++) {
+    if (q && list[i].t.toUpperCase().indexOf(q) < 0) continue;
+    html += '<div class="company-opt" data-id="' + list[i].id + '" style="padding:6px 10px;cursor:pointer;font-size:0.85rem;">' + escHtml(list[i].t) + '</div>';
+    n++;
+  }
+  $('#alaya-company-list').html(html || '<div style="padding:6px 10px;color:#6b7280;font-size:0.85rem;">No match</div>').show();
+  setScopeNote(q ? n + ' match' : '');
+  return n;
+}
+function resolveCompanyFilterText() {
+  var q = $.trim($('#alaya-company-filter').val()).toUpperCase();
   var exact = null, matchedVal = null, hits = 0;
   $('#alaya-company-select option').each(function() {
     var t = $(this).text().toUpperCase();
@@ -1591,6 +1599,26 @@ $('#alaya-company-filter').on('change', function() {
     $('#alaya-company-select').val(matchedVal).trigger('change');
   }
   syncCompanyFilterInput(); // unmatched text reverts to the current selection
+}
+$('#alaya-company-filter').on('focus input click', function() { renderCompanyList(); });
+$('#alaya-company-filter').on('blur', function() {
+  setTimeout(function() { $('#alaya-company-list').hide(); resolveCompanyFilterText(); }, 120);
+});
+// mousedown (not click) fires before the input's blur, so the pick wins
+$('#alaya-company-list').on('mousedown', '.company-opt', function(e) {
+  e.preventDefault();
+  var id = String($(this).attr('data-id'));
+  $('#alaya-company-list').hide();
+  if (String($('#alaya-company-select').val()) !== id) {
+    $('#alaya-company-select').val(id).trigger('change');
+  }
+  syncCompanyFilterInput();
+});
+$('#alaya-company-filter').on('change keydown', function(e) {
+  if (e.type === 'keydown' && e.key !== 'Enter') return;
+  if (e.key === 'Enter') e.preventDefault();
+  resolveCompanyFilterText();
+  $('#alaya-company-list').hide();
 });
 function clearCompanyFilter() {
   syncCompanyFilterInput();
