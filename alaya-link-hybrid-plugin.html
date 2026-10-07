@@ -2386,7 +2386,11 @@ function finishScopedLoad(done) {
     renderPreview();
     if (done) done();
   };
-  if (advType === 'vendor') {
+  // Scoped REST load already populated vendors via CompanyVendor JOIN (with
+  // _raw refs) - only fall back to the legacy AP_SUPPLIER query when that
+  // list is empty, otherwise the empty result clobbers the real 11 vendors
+  // and the "no master data" guard blocks every vendor transfer.
+  if (advType === 'vendor' && !(alayaData.vendors && alayaData.vendors.length)) {
     var vendorSql = "SELECT CODE, COMPANYNAME, CREDITTERM, CREDITLIMIT FROM AP_SUPPLIER WHERE STATUS = 'Active' ORDER BY CODE";
     executeSqlViaHost(vendorSql).then(function(vmsg) {
       try {
@@ -3162,10 +3166,14 @@ function runTransferMaster(from, to, company, alayaCid) {
              _raw: rawByCode(alayaData.vendorRaw, code, ['VE_AccountCode', 'VE_Code']) };
   }).filter(function(d) { return d.code; });
   if (settings.tCashpurchpay && transfers.indexOf('vendorpayment') < 0) transfers.push('vendorpayment');
-  if ((transfers.indexOf('customer') >= 0 && !custDocs.length) ||
-      (transfers.indexOf('vendor') >= 0 && !vendDocs.length)) {
-    showToast('No master data from Alaya to transfer', true);
-    addLog('Transfer blocked: no master data loaded - load returned empty', 'log-err');
+  var noCust = transfers.indexOf('customer') >= 0 && !custDocs.length;
+  var noVend = transfers.indexOf('vendor') >= 0 && !vendDocs.length;
+  if (noCust || noVend) {
+    var what = [];
+    if (noCust) what.push('customers');
+    if (noVend) what.push('vendors');
+    showToast('No master data from Alaya to transfer (' + what.join(' + ') + ' list empty)', true);
+    addLog('Transfer blocked: ' + what.join(' + ') + ' master list empty - load returned 0 rows', 'log-err');
     $('#transfer-progress').hide();
     $('#btn-transfer').prop('disabled', false);
     return;
