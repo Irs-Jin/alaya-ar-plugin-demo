@@ -2689,14 +2689,40 @@ function normSalesDoc(raw) {
   return doc;
 }
 
+// Docs carry the vendor's raw/global code (VE_AccountCode, e.g. '000001') but the
+// SQL Account master was created under the company-scoped CV_ReferenceNo
+// (e.g. 'V000001') - posting the raw code fails with "Invalid Company Code".
+// Remap raw -> ref using the CompanyVendor JOIN rows loaded into vendorRaw
+// (those carry VE_RawAccountCode + VE_AccountCode=CV_ReferenceNo); rows
+// without VE_RawAccountCode (REST fallback) pass through unchanged.
+function vendorRefFor(code) {
+  code = String(code == null ? '' : code).trim();
+  if (!code) return code;
+  var rows = alayaData.vendorRaw || [];
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (r && r.VE_RawAccountCode && String(r.VE_RawAccountCode) === code) {
+      return String(r.VE_AccountCode || code);
+    }
+  }
+  return code;
+}
+
 function normPurchaseDoc(raw) {
   var split = splitNested(raw);
+  var supp = vendorRefFor(pick(raw, ['SuppCode', 'SupplierCode', 'CPH_SupplierCode', 'PIH_SupplierCode', 'PRH_SupplierCode', 'VendorCode', 'Code', 'AccountCode', 'SupplierReferenceNo',
+                      'VendorReferenceNo', 'CPH_VendorReferenceNo', 'PIH_VendorReferenceNo', 'PRH_VendorReferenceNo']));
+  // Server write_purchase prefers R(HP_VendorReferenceNo, VendorReferenceNo) over
+  // suppcode, so stamp every raw *VendorReferenceNo key with the remapped code.
+  for (var vk in raw) {
+    if (Object.prototype.hasOwnProperty.call(raw, vk) && /VendorReferenceNo$/i.test(vk)) raw[vk] = supp;
+  }
+  raw.VendorReferenceNo = supp;
   return {
     docno: pick(raw, ['DocNo', 'CPH_DocNo', 'PIH_DocNo', 'PRH_DocNo',
                       'CPH_SupplierInvoiceNo', 'PIH_SupplierInvoiceNo', 'PRH_SupplierInvoiceNo']),
     docdate: (pick(raw, ['DocDate', 'CPH_DocDate', 'PIH_DocDate', 'PRH_DocDate', 'PostingDate', 'Date', 'InvoiceDate']) || '').slice(0, 10),
-    suppcode: pick(raw, ['SuppCode', 'SupplierCode', 'CPH_SupplierCode', 'PIH_SupplierCode', 'PRH_SupplierCode', 'VendorCode', 'Code', 'AccountCode', 'SupplierReferenceNo',
-                      'CPH_VendorReferenceNo', 'PIH_VendorReferenceNo', 'PRH_VendorReferenceNo']),
+    suppcode: supp,
     suppname: pick(raw, ['SuppName', 'SupplierName', 'CompanyName', 'Name']),
     division: pick(raw, ['Division', 'PurchaseDivision', 'DivisionCode', 'CPH_DivisionCode', 'PIH_DivisionCode']),
     description: pick(raw, ['Description', 'CPH_Description', 'PIH_Description', 'Remark', 'Remarks']),
