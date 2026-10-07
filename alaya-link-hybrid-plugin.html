@@ -1699,6 +1699,41 @@ function loadSqlCompanies() {
 }
 
 // ΓöÇΓöÇ Test backend connection ΓöÇΓöÇ
+// Backend offline -> ask Windows to run start.bat via the alayalink:// protocol
+// (registered once in HKCU\Software\Classes\alayalink). Chrome shows a one-time
+// "Open alayalink?" prompt - tick Always allow. Click the badge to retry.
+var _backendStartAsked = false;
+function tryAutoStartBackend() {
+  if (_backendStartAsked) return;
+  _backendStartAsked = true;
+  $('#backend-badge').removeClass('badge-fail').addClass('badge-waiting').text('Backend: starting...');
+  addLog('Backend offline - asking Windows to run start.bat (alayalink://start)', 'log-warn');
+  try { window.location.href = 'alayalink://start'; } catch (e) { addLog('Protocol launch failed: ' + e, 'log-err'); }
+  var n = 0;
+  var iv = setInterval(function() {
+    n++;
+    backendAjax({
+      url: BACKEND_URL + '/api/health', type: 'GET',
+      success: function() {
+        clearInterval(iv);
+        addLog('Backend came online (start.bat launched from plugin)', 'log-ok');
+        testBackendConnection();
+        loadSqlCompanies();
+      },
+      error: function() {
+        if (n >= 15) {
+          clearInterval(iv);
+          addLog('Backend still offline after 30s - run start.bat manually (or allow the browser protocol prompt)', 'log-err');
+          $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+        }
+      }
+    });
+  }, 2000);
+}
+$('#backend-badge').css('cursor', 'pointer').attr('title', 'Click to start backend (start.bat)').on('click', function() {
+  _backendStartAsked = false;
+  tryAutoStartBackend();
+});
 function testBackendConnection() {
   backendAjax({
     url: BACKEND_URL + '/api/health',
@@ -1710,6 +1745,7 @@ function testBackendConnection() {
     error: function(xhr) {
       addLog('Backend unreachable', 'log-err');
       $('#backend-badge').removeClass('badge-waiting badge-received').addClass('badge-fail').text('Backend: offline');
+      tryAutoStartBackend();
     }
   });
 }
