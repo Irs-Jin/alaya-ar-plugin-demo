@@ -180,8 +180,9 @@
     <div class="form-row">
       <div class="form-group">
         <label>Alaya Company</label>
-        <input type="text" id="alaya-company-filter" placeholder="Type to filter (e.g. JIN6)..." style="margin-bottom:6px;" />
-        <select id="alaya-company-select">
+        <input type="text" id="alaya-company-filter" list="alaya-company-list" placeholder="Type to filter (e.g. JIN6)..." style="margin-bottom:6px;" />
+        <datalist id="alaya-company-list"></datalist>
+        <select id="alaya-company-select" style="display:none">
           <option value="">Loading companies...</option>
         </select>
         <div id="company-scope-note" style="font-size:0.72rem;color:#6b7280;margin-top:4px;"></div>
@@ -1404,11 +1405,13 @@ function loadCompaniesFromApi() {
         var id = c.CO_ID, code = String(c.CO_Code || '').trim();
         sel.append('<option value="' + id + '">' + escHtml(code) + ' - ' + escHtml(c.CO_Name || '') + '</option>');
       });
+      syncCompanyDatalist();
       var hadSaved = !!((settings && settings.alayaCompanyId));
       var picked = pickDefaultCompany(data);
       if (picked) {
         clearCompanyFilter();
         sel.val(String(picked));
+        syncCompanyFilterInput();
         settings.alayaCompanyId = picked;
         $('input[name="adv-type"]:checked').length; // noop guard
         addLog('Default company auto-selected: ' + sel.find('option:selected').text(), 'log-ok');
@@ -1471,6 +1474,7 @@ function probeDefaultCompanyByStaff(pickedId) {
       if (!id || !$('#alaya-company-select option[value="' + id + '"]').length) { tryComp(linkCol, j + 1); return; }
       clearCompanyFilter();
       $('#alaya-company-select').val(String(id));
+      syncCompanyFilterInput();
       settings.alayaCompanyId = id;
       settings.alayaCompany = currentAlayaCompanyCode();
       addLog('Default company auto-selected from Staff: ' + $('#alaya-company-select option:selected').text(), 'log-ok');
@@ -1522,6 +1526,8 @@ function applyUserCompanyFilter() {
     if (kept === 0 || kept >= total) {
       addLog('Mapping inconclusive (' + names.length + ' rows) - keeping full list', 'log-info');
       sel.html(fullHtml);
+      syncCompanyDatalist();
+      syncCompanyFilterInput();
       window._companyScopeMode = 'full list - mapping inconclusive';
       setScopeNote();
       return;
@@ -1537,6 +1543,8 @@ function applyUserCompanyFilter() {
       sel.val(String(picked));
       settings.alayaCompanyId = picked;
     }
+    syncCompanyDatalist();   // datalist still lists the unfiltered set
+    syncCompanyFilterInput();
   }).catch(function(err) {
     var short = String(err.message || err).slice(0, 100);
     addLog('Company access filter unavailable (' + short + ') - keeping full list', 'log-info');
@@ -1545,25 +1553,47 @@ function applyUserCompanyFilter() {
   });
 }
 
-// Company dropdown text filter (682-row SIT list is unusable without it)
+// Company dropdown search: the visible input + <datalist> IS the dropdown (the
+// native <select> stays hidden as the source of truth - all val()/change code
+// keeps working unchanged).
+function syncCompanyDatalist() {
+  var dl = $('#alaya-company-list').empty();
+  $('#alaya-company-select option').each(function() {
+    dl.append($('<option>').val($(this).text()));
+  });
+}
+function syncCompanyFilterInput() {
+  $('#alaya-company-filter').val($('#alaya-company-select option:selected').text() || '');
+}
 $('#alaya-company-filter').on('input', function() {
   var q = $.trim($(this).val()).toUpperCase();
-  var shown = 0, total = 0, matchedVal = null;
+  if (!q) { setScopeNote(); return; }
+  var shown = 0;
   $('#alaya-company-select option').each(function() {
-    total++;
-    var hit = !q || $(this).text().toUpperCase().indexOf(q) >= 0 || String($(this).val()).toUpperCase().indexOf(q) >= 0;
-    $(this).toggle(hit);
-    if (hit) { shown++; matchedVal = $(this).val(); }
+    if ($(this).text().toUpperCase().indexOf(q) >= 0) shown++;
   });
-  if (q) setScopeNote(shown + ' match');
-  // Single unambiguous match - select it automatically instead of making the user
-  // also click the dropdown to pick the one option left.
-  if (q && shown === 1 && matchedVal) {
+  setScopeNote(shown + ' match');
+});
+$('#alaya-company-filter').on('change', function() {
+  var q = $.trim($(this).val()).toUpperCase();
+  var exact = null, matchedVal = null, hits = 0;
+  $('#alaya-company-select option').each(function() {
+    var t = $(this).text().toUpperCase();
+    if (t === q) exact = $(this).val();
+    if (q && t.indexOf(q) >= 0) { hits++; matchedVal = $(this).val(); }
+  });
+  if (exact !== null) {
+    if (String($('#alaya-company-select').val()) !== String(exact)) {
+      $('#alaya-company-select').val(exact).trigger('change');
+    }
+  } else if (q && hits === 1) {
+    // Single unambiguous match - select it instead of forcing a second click.
     $('#alaya-company-select').val(matchedVal).trigger('change');
   }
+  syncCompanyFilterInput(); // unmatched text reverts to the current selection
 });
 function clearCompanyFilter() {
-  $('#alaya-company-filter').val('');
+  syncCompanyFilterInput();
   $('#alaya-company-select option').show();
 }
 
@@ -1817,6 +1847,7 @@ function applyCompanyMappings(cid) {
   addLog('Mappings swapped to company ID ' + cid + ' (' + pm.length + ' paymodes, ' + br.length + ' branches, ' + dv.length + ' divisions)', 'log-info');
 }
 $('#alaya-company-select').on('change', function() {
+  syncCompanyFilterInput();
   var id = parseInt($(this).val(), 10) || 0;
   var txt = $(this).find('option:selected').text();
   // The company whose mappings are currently on screen (set on load, tracked
