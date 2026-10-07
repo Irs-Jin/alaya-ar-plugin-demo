@@ -313,14 +313,14 @@
         <input type="text" id="s-alaya-user" autocomplete="off" />
       </div>
       <div class="form-group">
-        <label>Password (typed at Save, never stored)</label>
+        <label>Password (saved with Settings)</label>
         <input type="password" id="s-alaya-pass" autocomplete="new-password" />
       </div>
     </div>
     <div class="sub" style="margin-top:-4px;">
       Leave Client ID / Username empty to keep using the values from the Alaya page session.
-      A password typed here is held in memory only for this tab session and cleared from the
-      input after Save - it is never written to the UDF table or the local backup.
+      Password is stored with Save (same UDF table as the SQL connection settings), so it is
+      only typed once - change it by typing a new one and clicking Save.
     </div>
 
     <div id="api-license" style="display:none;">
@@ -655,9 +655,10 @@ var defaultSettings = {
   alayaCompany: 'qa3',
   alayaCompanyId: 0,
   // Alaya login override - blank = use ALAYA_INIT session values. Password is
-  // never part of settings (memory only, see window._alayaPass).
+  // stored with Save (UDF + local backup) like the SQL connection passwords.
   alayaLoginClient: '',
   alayaLoginUser: '',
+  alayaLoginPass: '',
   // API License (hidden section, Ctrl+click Settings heading)
   alayaProgram: 'AlayaApp',
   alayaGuid: '0a0a508d-cbff-469f-874b-e67e2f4c8e75',
@@ -753,7 +754,7 @@ function packRows(s, cid) {
     bu: s.backendUrl, ac: s.alayaCompany, aid: s.alayaCompanyId,
     cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod,
     pb: B(s.pmByBranch), at: s.advType, apd: s.advPreviewDoc,
-    lc: s.alayaLoginClient, lu: s.alayaLoginUser,
+    lc: s.alayaLoginClient, lu: s.alayaLoginUser, lp: s.alayaLoginPass,
     pg: s.alayaProgram, gg: s.alayaGuid, au: s.alayaApiUrl
   })]);
   rows.push(['CUSTOMER', JSON.stringify({
@@ -811,7 +812,7 @@ function unpackRows(rowArr) {
         s.backendUrl = g.bu; s.alayaCompany = g.ac; s.alayaCompanyId = g.aid;
         s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp; s.transferMethod = g.tm;
         s.pmByBranch = flag(g.pb); s.advType = g.at; s.advPreviewDoc = g.apd;
-        s.alayaLoginClient = g.lc; s.alayaLoginUser = g.lu;
+        s.alayaLoginClient = g.lc; s.alayaLoginUser = g.lu; s.alayaLoginPass = g.lp;
         s.alayaProgram = g.pg; s.alayaGuid = g.gg; s.alayaApiUrl = g.au;
       } else if (code === 'CUSTOMER') {
         var c = JSON.parse(val);
@@ -1002,11 +1003,12 @@ function applySettings() {
   $('#s-estream-user').val(s.estreamUser);
   $('#s-estream-password').val(s.estreamPassword);
   if (s.sqlCompanyCode) $('#sql-company, #s-sql-company').val(s.sqlCompanyCode);
-  // Alaya login override + hidden API License. Password input is always left
-  // blank on load (never persisted - memory var _alayaPass only).
+  // Alaya login override + hidden API License. Stored password fills the
+  // input and goes into memory so token mints use the real credential login.
   $('#s-alaya-client').val(s.alayaLoginClient || '');
   $('#s-alaya-user').val(s.alayaLoginUser || '');
-  $('#s-alaya-pass').val('');
+  $('#s-alaya-pass').val(s.alayaLoginPass || '');
+  window._alayaPass = s.alayaLoginPass || '';
   $('#s-alaya-program').val(s.alayaProgram || 'AlayaApp');
   $('#s-alaya-guid').val(s.alayaGuid || '');
   $('#s-alaya-apiurl').val(s.alayaApiUrl || '');
@@ -1022,6 +1024,7 @@ function applySettings() {
     remint = true;
   }
   if (remint && apiUrl && username) requestToken();
+  else if (s.alayaLoginPass && apiUrl && username) requestToken({ pass: s.alayaLoginPass });
   pushConnectionSettingsToBackend(s);
 }
 
@@ -1158,12 +1161,12 @@ function saveSettings(mappingCid) {
     estreamPassword: $('#s-estream-password').val(),
     alayaLoginClient: $('#s-alaya-client').val().trim(),
     alayaLoginUser: $('#s-alaya-user').val().trim(),
+    alayaLoginPass: $('#s-alaya-pass').val(),
     alayaProgram: $('#s-alaya-program').val().trim() || 'AlayaApp',
     alayaGuid: $('#s-alaya-guid').val().trim(),
     alayaApiUrl: $('#s-alaya-apiurl').val().trim()
-    // Password (if typed) goes to window._alayaPass below - never into settings.
   };
-  var typedPass = $('#s-alaya-pass').val();
+  var typedPass = settings.alayaLoginPass;
   var identityChanged = (settings.alayaLoginClient && settings.alayaLoginClient !== clientId) ||
                         (settings.alayaLoginUser && settings.alayaLoginUser !== username);
   BACKEND_URL = settings.backendUrl;
@@ -1241,12 +1244,9 @@ function saveSettings(mappingCid) {
     showToast('Settings saved (' + okRows.length + ' rows to Alaya DB)');
     addLog('Settings saved to UDF table (' + okRows.length + ' rows) + local backup', 'log-ok');
     testBackendConnection();
-    // Re-mint token under the new login (password held in memory only,
-    // cleared from the input so it does not linger in the DOM).
-    if (typedPass) {
-      window._alayaPass = typedPass;
-      $('#s-alaya-pass').val('');
-    }
+    // Re-mint token under the new login (stored password also feeds
+    // window._alayaPass so later devkey-path mints can switch to it).
+    if (typedPass) window._alayaPass = typedPass;
     if (typedPass || identityChanged || (settings.alayaApiUrl && String(settings.alayaApiUrl).replace(/\/+$/, '') + '/' !== apiUrl)) {
       requestToken(typedPass ? { pass: typedPass } : {});
     }
