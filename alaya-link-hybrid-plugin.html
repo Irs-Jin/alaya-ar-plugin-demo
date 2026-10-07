@@ -296,10 +296,6 @@
         <label>Backend URL</label>
         <input type="text" id="s-backend-url" placeholder="https://localhost:3101" />
       </div>
-      <div class="form-group">
-        <label>Alaya Company (Client ID)</label>
-        <input type="text" id="s-alaya-company" placeholder="qa3" />
-      </div>
     </div>
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Alaya Login</h3>
@@ -946,7 +942,6 @@ function applySettings() {
   $('#from-date').val(today);
   $('#to-date').val(today);
   $('#s-backend-url').val(s.backendUrl);
-  $('#s-alaya-company').val(s.alayaCompany);
   // Transfer tab method is the operative choice at transfer time (server
   // prefers transferMethod); keep the Settings-tab twin in sync on load so
   // the two can never silently disagree after a reload.
@@ -1113,10 +1108,9 @@ function saveSettings(mappingCid) {
   var maps = collectMappingsFromUI();
   settings = {
     backendUrl: normalizeBackendUrl($('#s-backend-url').val() || defaultSettings.backendUrl),
-    // NOTE: #s-alaya-company is the Client ID field (e.g. "qa3"), NOT the selected
-    // company code - keep whatever code btn-save-default-company (or a prior load)
-    // already put in settings.alayaCompany instead of clobbering it here.
-    alayaCompany: settings.alayaCompany || $('#s-alaya-company').val(),
+    // company CODE is bookkeeping only (fallback #4 in pickDefaultCompany); the
+    // dropdown's numeric alayaCompanyId below is what actually drives selection.
+    alayaCompany: settings.alayaCompany || defaultSettings.alayaCompany,
     alayaCompanyId: parseInt($('#alaya-company-select').val(), 10) || 0,
     cashsalesMethod: $('#s-cashsales-method').val(),
     transferMethod: $('#transfer-method').val() || 'summary',
@@ -1832,7 +1826,6 @@ $('#alaya-company-select').on('change', function() {
   // old values; switching back overwrote the originals).
   var prevId = (typeof window._currentCompanyId === 'number') ? window._currentCompanyId : (settings.alayaCompanyId || 0);
   settings.alayaCompany = currentAlayaCompanyCode();
-  $('#s-alaya-company').val(settings.alayaCompany);
   if (prevId && prevId !== id) {
     saveSettings(prevId);
   } else {
@@ -3629,7 +3622,6 @@ $('#btn-save-default-company').on('click', function() {
   if (!id) { showToast('No Alaya company selected in the dropdown yet', true); return; }
   settings.alayaCompanyId = id;
   settings.alayaCompany = code;
-  $('#s-alaya-company').val(code);
   try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
   var name = $('#alaya-company-select').find('option:selected').text() || code;
   var display = code;
