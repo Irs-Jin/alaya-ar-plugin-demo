@@ -881,7 +881,9 @@ function unpackRows(rowArr) {
 // ΓöÇΓöÇ Load/Save Settings (UDF table, localStorage backup) ΓöÇΓöÇ
 function loadSettings() {
   var sql = "SELECT ZZC_Code, ZZC_Description FROM " + SETTINGS_TABLE;
-  executeSqlViaHost(sql).then(function(msg) {
+  // row cap must exceed the UDF row count - default 100 silently dropped the
+  // newest mapping rows (save re-inserts them at the end of the table)
+  executeSqlViaHost(sql, 30000, 5000).then(function(msg) {
     if (msg.error) throw new Error(msg.error);
     var result = JSON.parse(msg.result);
     var rows = (result.success && result.results && result.results[0] && result.results[0].rows) ? result.results[0].rows : [];
