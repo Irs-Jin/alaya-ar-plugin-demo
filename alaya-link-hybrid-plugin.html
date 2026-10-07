@@ -2900,7 +2900,7 @@ function fetchPaymentsViaBridge(isVendor, from, to, cb, cid) {
     });
   }).catch(function(err) {
     addLog('Payment bridge query failed (' + err.message + ') - payments skipped', 'log-warn');
-    cb([]);
+    cb([], err.message);
   });
 }
 
@@ -2949,8 +2949,9 @@ function fetchAllSourceDocs(transfers, from, to, cid, done) {
         });
       }
     } else {
-      fetchPaymentsViaBridge(s.vendor, from, to, function(rows) {
+      fetchPaymentsViaBridge(s.vendor, from, to, function(rows, err) {
         out[s.vendor ? 'vendorpayment' : 'payment'] = rows;
+        if (err) out[s.vendor ? '_errVendorPayment' : '_errPayment'] = err;
         setTimeout(next, 300);
       }, cid);
     }
