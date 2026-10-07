@@ -281,15 +281,12 @@
     <div id="adv-doc-grid" style="margin-bottom:16px;">
       <p style="color:#6b7280;font-size:0.85rem;">Click "Reload Data" to load documents.</p>
     </div>
-    <div id="preview-content" style="max-height:400px;overflow-y:auto;">
-      <p style="color:#6b7280;font-size:0.85rem;">Data loads automatically when you click Transfer.</p>
-    </div>
   </div>
 
   <!-- ΓöÇΓöÇ Settings Tab ΓöÇΓöÇ -->
   <div id="tab-settings" class="tab-panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h2>Settings</h2>
+      <h2 id="settings-heading" style="cursor:default;" title="Ctrl+click to toggle API License">Settings</h2>
       <button id="btn-save-settings" class="btn-success">Save</button>
     </div>
 
@@ -302,6 +299,49 @@
       <div class="form-group">
         <label>Alaya Company (Client ID)</label>
         <input type="text" id="s-alaya-company" placeholder="qa3" />
+      </div>
+    </div>
+
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Alaya Login</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Alaya Client ID</label>
+        <input type="text" id="s-alaya-client" placeholder="qa3" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label>Alaya Username</label>
+        <input type="text" id="s-alaya-user" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label>Password (typed at Save, never stored)</label>
+        <input type="password" id="s-alaya-pass" autocomplete="new-password" />
+      </div>
+    </div>
+    <div class="sub" style="margin-top:-4px;">
+      Leave Client ID / Username empty to keep using the values from the Alaya page session.
+      A password typed here is held in memory only for this tab session and cleared from the
+      input after Save - it is never written to the UDF table or the local backup.
+    </div>
+
+    <div id="api-license" style="display:none;">
+      <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">API License</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Alaya Program</label>
+          <input type="text" id="s-alaya-program" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>Alaya GUID</label>
+          <input type="text" id="s-alaya-guid" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>API URL (blank = from Alaya page)</label>
+          <input type="text" id="s-alaya-apiurl" placeholder="https://api.irsalaya.com/SIT/" autocomplete="off" />
+        </div>
+      </div>
+      <div class="sub" style="margin-top:-4px;">
+        Hidden - Ctrl+click the "Settings" heading to toggle. Saved with Save (GUID included);
+        blank fields fall back to the Alaya page session values / built-in defaults.
       </div>
     </div>
 
@@ -614,6 +654,14 @@ var defaultSettings = {
   backendUrl: 'https://localhost:3101',
   alayaCompany: 'qa3',
   alayaCompanyId: 0,
+  // Alaya login override - blank = use ALAYA_INIT session values. Password is
+  // never part of settings (memory only, see window._alayaPass).
+  alayaLoginClient: '',
+  alayaLoginUser: '',
+  // API License (hidden section, Ctrl+click Settings heading)
+  alayaProgram: 'AlayaApp',
+  alayaGuid: '0a0a508d-cbff-469f-874b-e67e2f4c8e75',
+  alayaApiUrl: '',
   cashsalesMethod: 'summary',
   transferMethod: 'summary',
   cashsalesPrefix: '',
@@ -704,7 +752,9 @@ function packRows(s, cid) {
   rows.push(['GENERAL', JSON.stringify({
     bu: s.backendUrl, ac: s.alayaCompany, aid: s.alayaCompanyId,
     cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod,
-    pb: B(s.pmByBranch), at: s.advType, apd: s.advPreviewDoc
+    pb: B(s.pmByBranch), at: s.advType, apd: s.advPreviewDoc,
+    lc: s.alayaLoginClient, lu: s.alayaLoginUser,
+    pg: s.alayaProgram, gg: s.alayaGuid, au: s.alayaApiUrl
   })]);
   rows.push(['CUSTOMER', JSON.stringify({
     cs: s.acCashsales, cr: s.acCashrounding, is: s.acCreditsales,
@@ -761,6 +811,8 @@ function unpackRows(rowArr) {
         s.backendUrl = g.bu; s.alayaCompany = g.ac; s.alayaCompanyId = g.aid;
         s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp; s.transferMethod = g.tm;
         s.pmByBranch = flag(g.pb); s.advType = g.at; s.advPreviewDoc = g.apd;
+        s.alayaLoginClient = g.lc; s.alayaLoginUser = g.lu;
+        s.alayaProgram = g.pg; s.alayaGuid = g.gg; s.alayaApiUrl = g.au;
       } else if (code === 'CUSTOMER') {
         var c = JSON.parse(val);
         s.acCashsales = c.cs; s.acCashrounding = c.cr; s.acCreditsales = c.is;
@@ -950,6 +1002,26 @@ function applySettings() {
   $('#s-estream-user').val(s.estreamUser);
   $('#s-estream-password').val(s.estreamPassword);
   if (s.sqlCompanyCode) $('#sql-company, #s-sql-company').val(s.sqlCompanyCode);
+  // Alaya login override + hidden API License. Password input is always left
+  // blank on load (never persisted - memory var _alayaPass only).
+  $('#s-alaya-client').val(s.alayaLoginClient || '');
+  $('#s-alaya-user').val(s.alayaLoginUser || '');
+  $('#s-alaya-pass').val('');
+  $('#s-alaya-program').val(s.alayaProgram || 'AlayaApp');
+  $('#s-alaya-guid').val(s.alayaGuid || '');
+  $('#s-alaya-apiurl').val(s.alayaApiUrl || '');
+  var remint = false;
+  if (s.alayaApiUrl) {
+    var wantApi = String(s.alayaApiUrl).replace(/\/+$/, '') + '/';
+    if (wantApi !== apiUrl) { apiUrl = wantApi; remint = true; }
+  }
+  if (s.alayaLoginClient && (s.alayaLoginClient !== clientId || (s.alayaLoginUser && s.alayaLoginUser !== username))) {
+    clientId = s.alayaLoginClient;
+    if (s.alayaLoginUser) username = s.alayaLoginUser;
+    addLog('Saved Alaya login overrides page session: client=' + clientId + ' user=' + username);
+    remint = true;
+  }
+  if (remint && apiUrl && username) requestToken();
   pushConnectionSettingsToBackend(s);
 }
 
@@ -1083,8 +1155,17 @@ function saveSettings(mappingCid) {
     fbUser: $('#s-fb-user').val() || defaultSettings.fbUser,
     fbPassword: $('#s-fb-password').val(),
     estreamUser: $('#s-estream-user').val() || defaultSettings.estreamUser,
-    estreamPassword: $('#s-estream-password').val()
+    estreamPassword: $('#s-estream-password').val(),
+    alayaLoginClient: $('#s-alaya-client').val().trim(),
+    alayaLoginUser: $('#s-alaya-user').val().trim(),
+    alayaProgram: $('#s-alaya-program').val().trim() || 'AlayaApp',
+    alayaGuid: $('#s-alaya-guid').val().trim(),
+    alayaApiUrl: $('#s-alaya-apiurl').val().trim()
+    // Password (if typed) goes to window._alayaPass below - never into settings.
   };
+  var typedPass = $('#s-alaya-pass').val();
+  var identityChanged = (settings.alayaLoginClient && settings.alayaLoginClient !== clientId) ||
+                        (settings.alayaLoginUser && settings.alayaLoginUser !== username);
   BACKEND_URL = settings.backendUrl;
   pushConnectionSettingsToBackend(settings);
 
@@ -1160,6 +1241,15 @@ function saveSettings(mappingCid) {
     showToast('Settings saved (' + okRows.length + ' rows to Alaya DB)');
     addLog('Settings saved to UDF table (' + okRows.length + ' rows) + local backup', 'log-ok');
     testBackendConnection();
+    // Re-mint token under the new login (password held in memory only,
+    // cleared from the input so it does not linger in the DOM).
+    if (typedPass) {
+      window._alayaPass = typedPass;
+      $('#s-alaya-pass').val('');
+    }
+    if (typedPass || identityChanged || (settings.alayaApiUrl && String(settings.alayaApiUrl).replace(/\/+$/, '') + '/' !== apiUrl)) {
+      requestToken(typedPass ? { pass: typedPass } : {});
+    }
     setSaving(false);
   }).catch(function(err) {
     setSaving(false);
@@ -1257,14 +1347,30 @@ $(window).on('message', function(e) {
 });
 
 // ΓöÇΓöÇ Authentication ΓöÇΓöÇ
-function requestToken() {
-  addLog('POST ' + apiUrl + 'token');
+function requestToken(over) {
+  over = over || {};
+  var cid = over.client || settings.alayaLoginClient || clientId;
+  var usr = over.user || settings.alayaLoginUser || username;
+  var pass = over.pass || window._alayaPass || '';
+  if (settings.alayaApiUrl) apiUrl = String(settings.alayaApiUrl).replace(/\/+$/, '') + '/';
+  var data;
+  if (pass) {
+    // Real credential login - server checks password, needs program+GUID.
+    data = { grant_type: 'password', clientid: cid, username: usr, password: pass,
+             program: settings.alayaProgram || 'AlayaApp',
+             GUID: settings.alayaGuid || '0a0a508d-cbff-469f-874b-e67e2f4c8e75' };
+    addLog('POST ' + apiUrl + 'token (login as ' + usr + ')');
+  } else {
+    data = { grant_type: 'password', clientid: cid, username: usr, devkey: DEV_KEY, nonce: nonce };
+    addLog('POST ' + apiUrl + 'token');
+  }
   $.ajax({
     url: apiUrl + 'token', type: 'POST', cache: false,
-    data: { grant_type: 'password', clientid: clientId, username: username, devkey: DEV_KEY, nonce: nonce },
+    data: data,
     success: function (r) {
+      clientId = cid; username = usr;
       authToken = r.token_type + ' ' + r.access_token;
-      addLog('Token obtained', 'log-ok');
+      addLog('Token obtained (' + (pass ? 'password' : 'devkey') + ' login as ' + usr + ')', 'log-ok');
       extractJwtHints(authToken);
       loadCompaniesFromApi();
     },
@@ -1272,6 +1378,7 @@ function requestToken() {
       var msg = '';
       try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch (e) { msg = r.responseText || 'Unknown'; }
       addLog('Token failed: ' + msg, 'log-err');
+      showToast('Alaya login failed: ' + msg, true);
     }
   });
 }
@@ -2523,9 +2630,20 @@ function updateAdvSummaryNote() {
 $('input[name="adv-type"]').on('change', function() {
   settings.advType = $(this).val();
   updateAdvDocTypeOptions();
+  invalidateAdvGrid();
 });
-$('#adv-preview-doctype').on('change', updateAdvSummaryNote);
+$('#adv-preview-doctype').on('change', function() { updateAdvSummaryNote(); invalidateAdvGrid(); });
 $('#transfer-method, #s-cashsales-method').on('change', updateAdvSummaryNote);
+// Party/doc-type switch must invalidate the loaded grid: otherwise the OLD
+// rows stay tickable and Transfer Ticked would push them (g.type drives
+// fetchAllSourceDocs), silently transferring e.g. cash sales while the
+// dropdown says CASH PURCHASES.
+function invalidateAdvGrid() {
+  if ($('#adv-summary-note').is(':visible')) return; // summary note owns the grid area
+  window._advGrid = { key: '', type: '', docs: [] };
+  $('#adv-doc-grid').html('<p style="color:#6b7280;font-size:0.85rem;">Doc selection changed - click Reload Data to load documents.</p>');
+  renderPreview();
+}
 
 // ΓöÇΓöÇ Render preview ΓöÇΓöÇ
 function renderPreview() {
@@ -3268,9 +3386,11 @@ function showTransferResults(results) {
       else if (d.status === 'skipped') cls = 'pending';
       var nm = '';
       if (d.code) nm += (nm ? ' · ' : '') + d.code;
+      if (d.docno) nm += (nm ? ' · ' : '') + d.docno;
       if (d.name) nm += (nm ? ' — ' : '') + d.name;
       if (!nm) nm = r.type;
       var msg = d.message || d.error || '';
+      if (!msg && d.total != null) msg = 'total ' + d.total;
       var st = d.action || d.status || '';
       if (st === 'success') st = 'transferred';
       html += '<div class="transfer-item transfer-sub" data-st="' + escHtml(String(st).toLowerCase()) + '">';
@@ -3451,6 +3571,12 @@ $('#btn-save-settings').on('click', function() {
     showToast('Save crashed before reaching the database: ' + e.message, true);
     addLog('saveSettings() threw synchronously: ' + (e && e.stack || e), 'log-err');
   }
+});
+// Hidden API License section - Ctrl+click the Settings heading to toggle.
+$('#settings-heading').on('click', function(e) {
+  if (!e.ctrlKey) return;
+  $('#api-license').toggle();
+  addLog('API License section ' + ($('#api-license').is(':visible') ? 'shown' : 'hidden'), 'log-info');
 });
 $('#btn-save-default-company').on('click', function() {
   var id = currentAlayaCompanyID();
