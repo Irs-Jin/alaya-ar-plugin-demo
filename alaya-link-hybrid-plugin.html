@@ -408,16 +408,19 @@
         </div>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Firebird Host</label>
-        <input type="text" id="s-fb-host" placeholder="127.0.0.1" />
+    <details id="adv-firebird-host" style="margin:4px 0 8px;">
+      <summary style="cursor:pointer;font-size:0.82rem;color:#6b7280;">Advanced - Firebird Host / Port (backend machine only, usually leave as-is)</summary>
+      <div class="form-row" style="margin-top:8px;">
+        <div class="form-group">
+          <label>Firebird Host</label>
+          <input type="text" id="s-fb-host" placeholder="127.0.0.1" />
+        </div>
+        <div class="form-group">
+          <label>Firebird Port</label>
+          <input type="text" id="s-fb-port" placeholder="3050" />
+        </div>
       </div>
-      <div class="form-group">
-        <label>Firebird Port</label>
-        <input type="text" id="s-fb-port" placeholder="3050" />
-      </div>
-    </div>
+    </details>
     <div class="form-row">
       <div class="form-group">
         <label>Firebird Username</label>
@@ -713,7 +716,15 @@ var defaultSettings = {
 };
 
 // ΓöÇΓöÇ State ΓöÇΓöÇ
+// Per-machine Backend URL: localStorage wins over the UDF row (the UDF
+// GENERAL row is shared by every computer, so each machine keeps its own
+// URL here - server=localhost, second PC over VPN=that machine's address).
+var LOCAL_BU_KEY = 'alaya-to-sql-backend-url';
 var BACKEND_URL = defaultSettings.backendUrl;
+try {
+  var _initialBu = localStorage.getItem(LOCAL_BU_KEY);
+  if (_initialBu) BACKEND_URL = normalizeBackendUrl(_initialBu);
+} catch (e) {}
 var hostOrigin = '';
 var apiUrl = '';
 var nonce = '';
@@ -991,6 +1002,12 @@ function applySettings() {
   }
   if (s.alayaCompanyId) $('#alaya-company-select').val(String(s.alayaCompanyId));
   s.backendUrl = normalizeBackendUrl(s.backendUrl);
+  // localStorage (this machine) beats the shared UDF row - see LOCAL_BU_KEY.
+  try {
+    var _localBu = localStorage.getItem(LOCAL_BU_KEY);
+    if (_localBu) s.backendUrl = normalizeBackendUrl(_localBu);
+  } catch (e) {}
+  $('#s-backend-url').val(s.backendUrl);
   BACKEND_URL = s.backendUrl;
   loadDestination();
   renderPaymodeTable(s.paymodes || []);
@@ -1172,6 +1189,9 @@ function saveSettings(mappingCid) {
   var identityChanged = (settings.alayaLoginClient && settings.alayaLoginClient !== clientId) ||
                         (settings.alayaLoginUser && settings.alayaLoginUser !== username);
   BACKEND_URL = settings.backendUrl;
+  // Persist the URL for THIS machine only (UDF copy is the shared default;
+  // localStorage is what this browser will prefer on next load).
+  try { localStorage.setItem(LOCAL_BU_KEY, settings.backendUrl); } catch(e) {}
   pushConnectionSettingsToBackend(settings);
 
   // Always keep a local backup
