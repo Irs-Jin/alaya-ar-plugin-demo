@@ -184,7 +184,8 @@
       <div class="form-group">
         <label>Alaya Company</label>
         <div style="position:relative;">
-          <input type="text" id="alaya-company-filter" placeholder="Type to filter (e.g. JIN6)..." autocomplete="off" style="margin-bottom:6px;" />
+          <input type="text" id="alaya-company-filter" placeholder="Type to filter (e.g. JIN6)..." autocomplete="off" style="margin-bottom:6px;padding-right:26px;" />
+          <button type="button" id="btn-clear-company" title="Clear filter" style="display:none;position:absolute;right:4px;top:3px;border:none;background:transparent;cursor:pointer;font-size:0.9rem;color:#6b7280;line-height:1;padding:4px;">&#10005;</button>
           <div id="alaya-company-list" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;border:1px solid #d1d5db;border-radius:4px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.18);"></div>
         </div>
         <select id="alaya-company-select" style="display:none">
@@ -1591,8 +1592,13 @@ function syncCompanyDatalist() {
 }
 function syncCompanyFilterInput() {
   $('#alaya-company-filter').val($('#alaya-company-select option:selected').text() || '');
+  toggleCompanyClearBtn();
+}
+function toggleCompanyClearBtn() {
+  $('#btn-clear-company').css('display', $.trim($('#alaya-company-filter').val()) ? 'block' : 'none');
 }
 function renderCompanyList() {
+  toggleCompanyClearBtn();
   var q = $.trim($('#alaya-company-filter').val()).toUpperCase();
   var list = window._companyOptions || [], html = '', n = 0;
   for (var i = 0; i < list.length; i++) {
@@ -1623,6 +1629,13 @@ function resolveCompanyFilterText() {
   syncCompanyFilterInput(); // unmatched text reverts to the current selection
 }
 $('#alaya-company-filter').on('focus input click', function() { renderCompanyList(); });
+// mousedown + preventDefault: input never blurs, so resolveCompanyFilterText
+// does not rewrite the selection text back over the cleared box.
+$('#btn-clear-company').on('mousedown', function(e) {
+  e.preventDefault();
+  $('#alaya-company-filter').val('').focus();
+  renderCompanyList();
+});
 $('#alaya-company-filter').on('blur', function() {
   setTimeout(function() { $('#alaya-company-list').hide(); resolveCompanyFilterText(); }, 120);
 });
