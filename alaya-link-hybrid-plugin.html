@@ -3241,6 +3241,10 @@ function runTransferMaster(from, to, company, alayaCid) {
   _showAllRows = false;
   _lastProg = null;
   window._resCounts = null;
+  // Every transfer starts from the compact default view - the previous run's
+  // Show all click left the dropdown on "All", which buried the footer
+  // (and thus the Show all button) under 100+ rows.
+  $('#results-filter').val('issues');
   $('#results-list').empty();
   $('#transfer-results').hide();
   $('#summary-list').empty();
@@ -3490,7 +3494,13 @@ function renderLiveProgress(p) {
   var shown = _showAllRows ? oks : (f === 'issues' ? [] : oks.slice(-LIVE_OK_CAP));
   var html = issues.map(rowHtml).join('') + shown.map(rowHtml).join('');
   var hidden = oks.length - shown.length;
-  if (hidden > 0 || (!p.running && oks.length > 0 && !issues.length)) {
+  if (_showAllRows) {
+    if (oks.length) {
+      html += '<div class="transfer-foot" style="padding:8px 12px;font-size:0.8rem;color:#6b7280;text-align:center;">' +
+        'Showing all ' + oks.length + ' transferred rows ' +
+        '<button id="btn-show-less" style="margin-left:8px;padding:3px 10px;font-size:0.78rem;cursor:pointer;">Show less</button></div>';
+    }
+  } else if (hidden > 0 || (!p.running && oks.length > 0 && !issues.length)) {
     var foot = '';
     if (!issues.length) {
       foot += '<div style="padding:8px 12px;font-size:0.82rem;color:#166534;text-align:center;">No issues - all ' + oks.length + ' rows transferred</div>';
@@ -3511,6 +3521,11 @@ function renderLiveProgress(p) {
 $('#results-list').on('click', '#btn-show-all-rows', function() {
   _showAllRows = true;
   $('#results-filter').val('all');
+  if (_lastProg) renderLiveProgress(_lastProg);
+});
+$('#results-list').on('click', '#btn-show-less', function() {
+  _showAllRows = false;
+  $('#results-filter').val('issues');
   if (_lastProg) renderLiveProgress(_lastProg);
 });
 
@@ -3647,6 +3662,7 @@ function applyResultsFilter() {
   // render time (Issues renders no success rows at all), toggle alone is not
   // enough to bring them back.
   $('#results-filter').on('change', function() {
+    _showAllRows = false; // manual pick collapses an expanded (Show all) view
     if (_lastProg) renderLiveProgress(_lastProg);
     else applyResultsFilter();
   });
