@@ -756,7 +756,7 @@ function normalizeBackendUrl(u) {
 // to the company id stored in the GENERAL row at load time.
 function scopedKey(prefix, cid, code) { return prefix + cid + '_' + code; }
 function parseScopedKey(code) {
-  var m = /^(PM_|BR_|DV_)(\d+)_(.*)$/.exec(code || '');
+  var m = /^(PM_|BR_|DV_|SC_)(\d+)_(.*)$/.exec(code || '');
   return m ? { prefix: m[1], cid: parseInt(m[2], 10), code: m[3] } : null;
 }
 
@@ -791,13 +791,11 @@ function packRows(s, cid) {
     sc: s.sqlCompanyCode, dp: s.dcfPath, h: s.fbHost, po: s.fbPort,
     u: s.fbUser, pw: s.fbPassword, eu: s.estreamUser, epw: s.estreamPassword
   })]);
-  // Per-Alaya-company SQL company pairing (SC_<cid> = SQL code) - switching
-  // Alaya company auto-switches the SQL company so transfers never write
-  // into the previous company's database.
-  var sqMap = s.sqlCompanyByCid || {};
-  Object.keys(sqMap).forEach(function(k) {
-    if (sqMap[k]) rows.push(['SC_' + k, String(sqMap[k])]);
-  });
+  // Per-Alaya-company SQL company pairing (SC_<cid>_SQL) - switching Alaya
+  // company auto-switches the SQL company so transfers never write into the
+  // previous company's database. Only the saving company's row is emitted,
+  // same scoping as PM_/BR_/DV_ (other companies' rows stay untouched).
+  if (s.sqlCompanyCode && cid > 0) rows.push([scopedKey('SC_', cid, 'SQL'), String(s.sqlCompanyCode)]);
   (s.paymodes || []).forEach(function(pm) {
     if (pm && pm.code) rows.push([scopedKey('PM_', cid, pm.code), String(pm.acct || '')]);
   });
