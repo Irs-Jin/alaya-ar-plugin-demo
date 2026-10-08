@@ -3760,7 +3760,7 @@ $(document).on('click', '.transfer-group-header[data-toggle]', function() {
   var showing = grp.is(':visible');
   grp.toggle(!showing);
   $(this).find('.subgroup-arrow').html(showing ? '&#9654;' : '&#9662;');
-  if (showing) {
+  if (!showing) {
     updateSummaryGroupHints();
   } else {
     grp.children('.subgroup-filter-hint').remove();
