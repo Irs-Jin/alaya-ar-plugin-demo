@@ -184,7 +184,7 @@
       <div class="form-group">
         <label>Alaya Company</label>
         <div style="position:relative;">
-          <input type="text" id="alaya-company-filter" placeholder="Type to filter (e.g. JIN6)..." autocomplete="off" style="margin-bottom:6px;padding-right:26px;" />
+          <input type="text" id="alaya-company-filter" placeholder="Type to filter (e.g. IRS Software)..." autocomplete="off" style="margin-bottom:6px;padding-right:26px;" />
           <button type="button" id="btn-clear-company" title="Clear filter" style="display:none;position:absolute;right:4px;top:3px;border:none;background:transparent;cursor:pointer;font-size:0.9rem;color:#6b7280;line-height:1;padding:4px;">&#10005;</button>
           <div id="alaya-company-list" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;border:1px solid #d1d5db;border-radius:4px;max-height:240px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.18);"></div>
         </div>
@@ -3101,13 +3101,13 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
             error: function(xhr2) {
               // A later page failing must not discard earlier pages.
               if (acc.length) { handle({ data: [] }, true); return; }
-              addLog(type + ' fetch failed (' + errDetail(xhr2) + ')', 'log-err'); cb([]);
+              addLog(type + ' fetch failed (' + errDetail(xhr2) + ')', 'log-err'); cb(null);
             }
           });
         } else {
           if (acc.length) { handle({ data: [] }, false); return; }
           addLog(type + ' fetch failed (' + errDetail(xhr) + ')', 'log-err');
-          cb([]);
+          cb(null);
         }
       }
     });
