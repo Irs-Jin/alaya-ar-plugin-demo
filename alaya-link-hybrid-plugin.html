@@ -391,9 +391,9 @@
     <div id="sdk-only">
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">SQL Account Connection (SDK Live only)</h3>
     <div class="sub" style="margin-top:-4px;">
-      Saved to the Alaya UDF settings table along with everything else on this page (use the
-      main <b>Save</b> button above) - and mirrored to the backend's <code>config.json</code>
-      automatically so it stays in sync.
+      Saved on <b>this PC only</b> (the backend's <code>config.json</code>) - not in the shared Alaya
+      settings table - so every PC can point at its own SQL Account (e.g. a network PC using
+      <code>\server\eStream\SQLAccounting\Share\Default.DCF</code>). Use the main <b>Save</b> button above.
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -795,10 +795,6 @@ function packRows(s, cid) {
     cp: B(s.tCashpayment), i: B(s.tInvoice), n: B(s.tCn),
     cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv)
   })]);
-  rows.push(['CONN', JSON.stringify({
-    sc: s.sqlCompanyCode, dp: s.dcfPath, h: s.fbHost, po: s.fbPort,
-    u: s.fbUser, pw: s.fbPassword, eu: s.estreamUser, epw: s.estreamPassword
-  })]);
   // Per-Alaya-company SQL company pairing (SC_<cid>_SQL) - switching Alaya
   // company auto-switches the SQL company so transfers never write into the
   // previous company's database. Only the saving company's row is emitted,
@@ -858,9 +854,7 @@ function unpackRows(rowArr) {
         s.tCashpayment = flag(o.cp); s.tInvoice = flag(o.i); s.tCn = flag(o.n);
         s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi);
       } else if (code === 'CONN') {
-        var cn = JSON.parse(val);
-        s.sqlCompanyCode = cn.sc; s.dcfPath = cn.dp; s.fbHost = cn.h; s.fbPort = cn.po;
-        s.fbUser = cn.u; s.fbPassword = cn.pw; s.estreamUser = cn.eu; s.estreamPassword = cn.epw;
+        // legacy shared row: connection settings are per PC now (backend config.json) - ignored
       } else if (code.indexOf('SC_') === 0) {
         var scid = parseInt(code.slice(3), 10) || 0;
         if (scid) {
@@ -1076,12 +1070,30 @@ function applySettings() {
     s.alayaLoginPass = pw; window._alayaPass = pw; $('#s-alaya-pass').val(pw);
     if (!_rm && _ap && _au) requestToken({ pass: pw });
   }).catch(function() { window._passLoaded = true; });
-  pushConnectionSettingsToBackend(s);
+  loadConnection(s);
 }
 
 // Keep the backend's config.json in sync with whatever's in the UDF table, so the
 // two never drift apart. Called after every load and every save - no separate
 // "Save Connection Settings" button anymore.
+// DCF path / Firebird host / eStream user differ per PC (a network PC points at \server\...): the local
+// backend's config.json is the source of truth, the shared UDF table does not carry them.
+function loadConnection(s) {
+  backendAjax({ url: BACKEND_URL + '/api/settings/connection', type: 'GET', success: function(r) {
+    var d = r && r.success && r.data; if (!d) return;
+    if (d.dcfPath) s.dcfPath = d.dcfPath;
+    if (d.host) s.fbHost = d.host;
+    if (d.port) s.fbPort = String(d.port);
+    if (d.user) s.fbUser = d.user;
+    if (d.estreamUsername) s.estreamUser = d.estreamUsername;
+    $('#s-dcf-path').val(s.dcfPath); $('#s-fb-host').val(s.fbHost); $('#s-fb-port').val(s.fbPort);
+    $('#s-fb-user').val(s.fbUser); $('#s-estream-user').val(s.estreamUser);
+    $('#s-fb-password').attr('placeholder', d.passwordSet ? '(unchanged)' : '');
+    $('#s-estream-password').attr('placeholder', d.estreamPasswordSet ? '(unchanged)' : '');
+    if (s.sqlCompanyCode) selectActiveCompany(s.sqlCompanyCode);
+  }, error: function() {} });
+}
+
 function pushConnectionSettingsToBackend(s) {
   var body = {
     dcfPath: s.dcfPath, host: s.fbHost, port: s.fbPort, user: s.fbUser,
@@ -1283,6 +1295,7 @@ function saveSettings(mappingCid) {
   var delSet = {};
   okRows.forEach(function(r) { delSet[r[0]] = 1; });
   extraDel.forEach(function(k) { delSet[k] = 1; });
+  delSet['CONN'] = 1;   // drop the obsolete shared connection row
   var delList = Object.keys(delSet).map(function(k) { return "'" + String(k).replace(/'/g, "''") + "'"; });
   var stmts = ['DELETE FROM ' + SETTINGS_TABLE + ' WHERE ZZC_Code IN (' + delList.join(',') + ');'];
   okRows.forEach(function(r) {
