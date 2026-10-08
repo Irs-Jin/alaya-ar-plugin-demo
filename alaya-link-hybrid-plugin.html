@@ -196,7 +196,7 @@
           <button id="btn-save-default-company" class="btn-secondary" style="padding:6px 14px;font-size:0.8rem;">Save as default</button>
         </div>
       </div>
-      <div class="form-group">
+      <div class="form-group" style="display:none;">   <!-- company is chosen in Settings (Browse...); this copy stays in sync -->
         <label>SQL Account Company</label>
         <select id="sql-company">
           <option value="">Loading companies...</option>
@@ -1126,7 +1126,7 @@ function showDest(d) {
   $('#d-mode').val(d.mode);
   $('#d-rest').toggle(d.mode === 'rest');
   window.DEST_REST = d.mode === 'rest';   // API key is bound to one SQL company: no company picker
-  $('#sql-company, #s-sql-company').closest('.form-group').toggle(!window.DEST_REST);
+  $('#s-sql-company').closest('.form-group').toggle(!window.DEST_REST);   // the Transfer-tab copy stays hidden
   $('#sdk-only').toggle(!window.DEST_REST);   // Firebird / DCF / eStream login are COM-only
   $('#d-access').val(d.accessKey || '');
   $('#d-secret').attr('placeholder', d.secretKeySet ? '(unchanged)' : '');
