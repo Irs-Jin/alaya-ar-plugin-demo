@@ -3616,11 +3616,12 @@ function showTransferResults(results) {
       det += (det ? ' | ' : '') + 'warnings: ' + r.warnings.slice(0, 2).join('; ');
     }
     // Per-type rows can run to 100+ (customer/vendor master data) - default
-    // those collapsed so they don't bury the usually-short cashsales/invoice
-    // results below them; the header stays clickable to expand on demand.
+    // ALL groups collapsed: auto-opened groups bypass the status filter
+    // (expanded = show everything), so a 5-row group would leak its rows
+    // into the Issues view. Expand on demand reveals all rows.
     var rowCount = (r.data || []).length;
     var groupId = 'subgrp-' + escHtml(String(r.type)) + '-' + Math.random().toString(36).slice(2, 8);
-    var startCollapsed = rowCount > 5;
+    var startCollapsed = rowCount > 0;
     html += '<div class="transfer-item transfer-group-header" data-toggle="' + groupId + '" style="cursor:' + (rowCount ? 'pointer' : 'default') + ';">';
     html += '<div class="info"><div class="name">' + (rowCount ? '<span class="subgroup-arrow">' + (startCollapsed ? '&#9656;' : '&#9662;') + '</span> ' : '') + escHtml(r.type) + '</div>';
     html += '<div class="detail">' + escHtml(det) + '</div></div>';
