@@ -3758,7 +3758,7 @@ $(document).on('click', '.transfer-group-header[data-toggle]', function() {
   if (!grp.length) return;
   var showing = grp.is(':visible');
   grp.toggle(!showing);
-  $(this).find('.subgroup-arrow').html(showing ? '&#9654;' : '&#9662;');
+  $(this).find('.subgroup-arrow').html(showing ? '&#9656;' : '&#9662;');
   if (!showing) {
     // Expanded group shows ALL its rows regardless of the status filter.
     grp.children('.transfer-sub').show();
