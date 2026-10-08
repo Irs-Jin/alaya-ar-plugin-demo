@@ -2990,8 +2990,25 @@ function vendorRefFor(code) {
 function normPurchaseDoc(raw) {
   var split = splitNested(raw);
   var supp = vendorRefFor(pick(raw, ['SuppCode', 'SupplierCode', 'CPH_SupplierCode', 'PIH_SupplierCode', 'PRH_SupplierCode', 'VendorCode', 'Code', 'AccountCode', 'SupplierReferenceNo',
-                      'VendorReferenceNo', 'CPH_VendorReferenceNo', 'PIH_VendorReferenceNo', 'PRH_VendorReferenceNo',
-                      'CPH_VendorCode', 'PIH_VendorCode', 'PRH_VendorCode']));
+                      'VendorReferenceNo', 'CPH_VendorReferenceNo', 'PIH_VendorReferenceNo', 'PRH_VendorReferenceNo']));
+  // Doc snapshot PIH_VendorReferenceNo can be empty (created before the vendor
+  // got its SQL ref) - resolve by unique VendorID against the company-scoped
+  // vendorRaw rows (VE_ID -> VE_AccountCode = CV_ReferenceNo). NEVER fall back
+  // to VE_AccountCode itself: codes are not unique (SIT has 39 vendors on
+  // '000005'), so guessing would post the wrong supplier.
+  if (!supp) {
+    var vid = String(pick(raw, ['VendorID', 'CPH_VendorID', 'PIH_VendorID', 'PRH_VendorID']) || '');
+    if (vid) {
+      var vr = alayaData.vendorRaw || [];
+      for (var vi = 0; vi < vr.length; vi++) {
+        if (vr[vi] && String(vr[vi].VE_ID) === vid) {
+          var ref = String(vr[vi].VE_AccountCode || '');
+          if (ref && ref !== '[IGNORE]') supp = ref;
+          break;
+        }
+      }
+    }
+  }
   // Server write_purchase prefers R(HP_VendorReferenceNo, VendorReferenceNo) over
   // suppcode, so stamp every raw *VendorReferenceNo key with the remapped code.
   for (var vk in raw) {
