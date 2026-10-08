@@ -298,12 +298,15 @@
       <button id="btn-save-settings" class="btn-success">Save</button>
     </div>
 
+    <!-- hidden: the default http://localhost:3101 is right for a normal install. Ctrl+click the Settings heading to show. -->
+    <div id="backend-conn" style="display:none;">
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin-bottom:12px;">Backend Connection</h3>
     <div class="form-row">
       <div class="form-group">
         <label>Backend URL</label>
         <input type="text" id="s-backend-url" placeholder="http://localhost:3101" />
       </div>
+    </div>
     </div>
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Alaya Login</h3>
@@ -3916,8 +3919,8 @@ $('#btn-save-settings').on('click', function() {
 // Hidden API License section - Ctrl+click the Settings heading to toggle.
 $('#settings-heading').on('click', function(e) {
   if (!e.ctrlKey) return;
-  $('#api-license').toggle();
-  addLog('API License section ' + ($('#api-license').is(':visible') ? 'shown' : 'hidden'), 'log-info');
+  $('#api-license, #backend-conn').toggle();
+  addLog('Hidden settings (API License, Backend URL) ' + ($('#api-license').is(':visible') ? 'shown' : 'hidden'), 'log-info');
 });
 $('#btn-save-default-company').on('click', function() {
   var id = currentAlayaCompanyID();
