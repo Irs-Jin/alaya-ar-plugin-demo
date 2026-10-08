@@ -2990,7 +2990,8 @@ function vendorRefFor(code) {
 function normPurchaseDoc(raw) {
   var split = splitNested(raw);
   var supp = vendorRefFor(pick(raw, ['SuppCode', 'SupplierCode', 'CPH_SupplierCode', 'PIH_SupplierCode', 'PRH_SupplierCode', 'VendorCode', 'Code', 'AccountCode', 'SupplierReferenceNo',
-                      'VendorReferenceNo', 'CPH_VendorReferenceNo', 'PIH_VendorReferenceNo', 'PRH_VendorReferenceNo']));
+                      'VendorReferenceNo', 'CPH_VendorReferenceNo', 'PIH_VendorReferenceNo', 'PRH_VendorReferenceNo',
+                      'CPH_VendorCode', 'PIH_VendorCode', 'PRH_VendorCode']));
   // Server write_purchase prefers R(HP_VendorReferenceNo, VendorReferenceNo) over
   // suppcode, so stamp every raw *VendorReferenceNo key with the remapped code.
   for (var vk in raw) {
@@ -3587,7 +3588,8 @@ function showTransferResults(results) {
         if (r.inserted !== undefined && r.inserted) parts.push(r.inserted + ' inserted');
         if (r.updated !== undefined && r.updated) parts.push(r.updated + ' updated');
         if (r.skipped !== undefined && r.skipped) parts.push(r.skipped + ' skipped');
-        if (!parts.length && r.count !== undefined) parts.push(r.count + ' total');
+        if (!parts.length && r.data && r.data.length) parts.push(r.data.length + ' rows');
+        else if (!parts.length && r.count !== undefined) parts.push(r.count + ' total');
         det = parts.join(' · ') || 'done';
       }
     } else if (!det && r.count !== undefined) {
@@ -3701,6 +3703,28 @@ function applyResultsFilter() {
     var v = $(this).val();
     $(this).text(labels[v] + ' (' + (counts[v] || 0) + ')');
   });
+  updateSummaryGroupHints();
+}
+
+// Expanded group whose rows are ALL hidden by the status filter shows an
+// empty box - looks like the expand click did nothing. Say why inline.
+function updateSummaryGroupHints() {
+  $('#summary-list .transfer-subgroup').each(function() {
+    var grp = $(this);
+    var hint = grp.children('.subgroup-filter-hint');
+    if (!grp.is(':visible')) { hint.remove(); return; }
+    var total = grp.children('.transfer-sub').length;
+    var shown = grp.children('.transfer-sub').filter(function() { return $(this).css('display') !== 'none'; }).length;
+    if (total > 0 && shown === 0) {
+      if (!hint.length) {
+        hint = $('<div class="transfer-item subgroup-filter-hint"></div>').css({ fontStyle: 'italic', opacity: 0.75 });
+        grp.prepend(hint);
+      }
+      hint.text('all ' + total + ' rows hidden by current filter — switch filter to All');
+    } else {
+      hint.remove();
+    }
+  });
 }
   // Filter change re-renders the live list too - row visibility is decided at
   // render time (Issues renders no success rows at all), toggle alone is not
@@ -3735,7 +3759,16 @@ $(document).on('click', '.transfer-group-header[data-toggle]', function() {
   if (!grp.length) return;
   var showing = grp.is(':visible');
   grp.toggle(!showing);
-  $(this).find('.subgroup-arrow').html(showing ? '&#9656;' : '&#9662;');
+  $(this).find('.subgroup-arrow').html(showing ? '&#9654;' : '&#9662;');
+  if (showing) {
+    updateSummaryGroupHints();
+  } else {
+    grp.children('.subgroup-filter-hint').remove();
+  }
+  var gname = String($(this).find('.name').text() || '').replace(/[▸▾▶▼]/g, '').trim() || 'group';
+  var vis = grp.children('.transfer-sub').filter(function() { return $(this).css('display') !== 'none'; }).length;
+  addLog('summary: ' + gname + (showing ? ' collapsed' : ' expanded') +
+         (!showing && vis === 0 && grp.children('.transfer-sub').length ? ' (0 rows visible under current filter)' : ''));
 });
 
 // ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
