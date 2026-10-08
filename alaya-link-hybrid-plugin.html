@@ -3844,7 +3844,7 @@ function openDcfBrowser() {
     width: '480px', 'max-width': '90vw', 'max-height': '70vh', display: 'flex',
     'flex-direction': 'column', 'box-shadow': '0 8px 30px rgba(0,0,0,0.25)' });
   box.append('<h2 style="margin-bottom:4px;">Select Default.DCF</h2>');
-  box.append('<div class="sub">Browsing files from this PC. Type a path to jump, e.g. a network share <code>\\server\eStream</code>.</div>');
+  box.append('<div class="sub">Browsing files from this PC. Type a path to jump, e.g. a network share <code>\\\\server\\eStream</code>.</div>');
   // editable path: type a local folder or a network share (e.g. \\26.56.46.229\eStream) and press Enter / Go
   var curPath = $('<input type="text" spellcheck="false">').css({ flex: 1, 'min-width': 0, 'font-size': '0.8rem' });
   var goBtn = $('<button class="btn-secondary" style="padding:6px 12px;">Go</button>');
