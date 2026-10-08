@@ -3604,6 +3604,17 @@ function showTransferResults(results) {
   });
   $('#summary-list').html(html);
   $('#transfer-summary').show();
+  // Full-accuracy counts from the final POST results - the live progress
+  // panel may not have run/rendered (short transfers), leaving stale counts.
+  var sts = [];
+  (results || []).forEach(function(r) {
+    (r.data || []).forEach(function(d) {
+      var st = d.action || d.status || '';
+      if (st === 'success') st = 'transferred';
+      sts.push(String(st).toLowerCase());
+    });
+  });
+  window._resCounts = countResultStates(sts);
   applyResultsFilter();
 }
 
@@ -3621,7 +3632,7 @@ function rowMatchesStatusFilter(st, f) {
   return true;
 }
 function applyResultsFilter() {
-  var f = $('#results-filter').val() || 'all';
+  var f = $('#results-filter').val() || 'issues';
   var counts = window._resCounts || null;
   if (!counts) counts = { all: 0, transferred: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
   function bucket(st) {
