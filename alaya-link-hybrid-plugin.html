@@ -3708,7 +3708,10 @@ function applyResultsFilter() {
     $(this).toggle(rowMatchesStatusFilter(st, f));
   });
   // Summary list: filter the per-record sub-rows, always keep type headers.
+  // An EXPANDED group shows all its rows (expand = show me everything) -
+  // only collapsed groups obey the status filter.
   $('#summary-list .transfer-sub').each(function() {
+    if ($(this).closest('.transfer-subgroup').is(':visible')) return;
     var st = String($(this).attr('data-st') || '').toLowerCase();
     $(this).toggle(rowMatchesStatusFilter(st, f));
   });
@@ -3719,28 +3722,6 @@ function applyResultsFilter() {
   $('#results-filter option').each(function() {
     var v = $(this).val();
     $(this).text(labels[v] + ' (' + (counts[v] || 0) + ')');
-  });
-  updateSummaryGroupHints();
-}
-
-// Expanded group whose rows are ALL hidden by the status filter shows an
-// empty box - looks like the expand click did nothing. Say why inline.
-function updateSummaryGroupHints() {
-  $('#summary-list .transfer-subgroup').each(function() {
-    var grp = $(this);
-    var hint = grp.children('.subgroup-filter-hint');
-    if (!grp.is(':visible')) { hint.remove(); return; }
-    var total = grp.children('.transfer-sub').length;
-    var shown = grp.children('.transfer-sub').filter(function() { return $(this).css('display') !== 'none'; }).length;
-    if (total > 0 && shown === 0) {
-      if (!hint.length) {
-        hint = $('<div class="transfer-item subgroup-filter-hint"></div>').css({ fontStyle: 'italic', opacity: 0.75 });
-        grp.prepend(hint);
-      }
-      hint.text('all ' + total + ' rows hidden by current filter — switch filter to All');
-    } else {
-      hint.remove();
-    }
   });
 }
   // Filter change re-renders the live list too - row visibility is decided at
@@ -3778,14 +3759,13 @@ $(document).on('click', '.transfer-group-header[data-toggle]', function() {
   grp.toggle(!showing);
   $(this).find('.subgroup-arrow').html(showing ? '&#9654;' : '&#9662;');
   if (!showing) {
-    updateSummaryGroupHints();
+    // Expanded group shows ALL its rows regardless of the status filter.
+    grp.children('.transfer-sub').show();
+    var gname = String($(this).find('.name').text() || '').replace(/[▸▾▶▼]/g, '').trim() || 'group';
+    addLog('summary: ' + gname + ' expanded (' + grp.children('.transfer-sub').length + ' rows)');
   } else {
-    grp.children('.subgroup-filter-hint').remove();
+    applyResultsFilter(); // collapsed again -> status filter takes over its rows
   }
-  var gname = String($(this).find('.name').text() || '').replace(/[▸▾▶▼]/g, '').trim() || 'group';
-  var vis = grp.children('.transfer-sub').filter(function() { return $(this).css('display') !== 'none'; }).length;
-  addLog('summary: ' + gname + (showing ? ' collapsed' : ' expanded') +
-         (!showing && vis === 0 && grp.children('.transfer-sub').length ? ' (0 rows visible under current filter)' : ''));
 });
 
 // ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
