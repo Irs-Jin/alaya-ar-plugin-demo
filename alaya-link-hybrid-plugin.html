@@ -2786,6 +2786,7 @@ $('#btn-adv-transfer').on('click', function() {
   var ticked = g.docs.filter(function(d) { return d._ticked !== false; });
   if (!ticked.length && !isCashSummary) { showToast('Tick at least one row to transfer', true); return; }
   addLog('Advanced transfer: ' + (isCashSummary ? g.docs.length + '/' + g.docs.length + ' (Summary ignores ticks) ' : ticked.length + '/' + g.docs.length + ' ticked ') + g.type + ' docs', 'log-ok');
+  window._advOnly = g.type; window._advOnlyAt = Date.now();     // Advanced transfers ONLY the selected doc type (desktop frmAdvancedMode parity)
   $('.tab-btn[data-tab="transfer"]').trigger('click');
   $('#btn-transfer').trigger('click');
 });
@@ -3258,7 +3259,7 @@ function fetchAllSourceDocs(transfers, from, to, cid, done) {
   if (transfers.indexOf('cashpurchases') >= 0) steps.push({ kind: 'rest', type: 'cashpurchases', ep: DOC_ENDPOINTS.cashpurchases });
   if (transfers.indexOf('vendorinvoice') >= 0) steps.push({ kind: 'rest', type: 'vendorinvoice', ep: DOC_ENDPOINTS.vendorinvoice });
   if (transfers.indexOf('payment') >= 0) steps.push({ kind: 'pay', vendor: false });
-  if (settings.tCashpurchpay) steps.push({ kind: 'pay', vendor: true });
+  if (settings.tCashpurchpay && !window._advRun) steps.push({ kind: 'pay', vendor: true });
   var i = 0;
   function next() {
     if (i >= steps.length) { done(out); return; }
@@ -3358,6 +3359,12 @@ function runTransferMaster(from, to, company, alayaCid) {
   if ($('#s-t-cashpurch').is(':checked')) transfers.push('cashpurchases');
   if ($('#s-t-vendorinv').is(':checked')) transfers.push('vendorinvoice');
 
+  // a stale flag (the click aborted before the run, e.g. a validation toast) must not limit a later normal transfer
+  var advOnly = (window._advOnly && Date.now() - (window._advOnlyAt || 0) < 600000) ? window._advOnly : '';
+  window._advOnly = '';
+  window._advRun = !!advOnly;
+  if (advOnly) transfers = [advOnly];
+
   if (transfers.length === 0) {
     showToast('No transfer options selected', true);
     $('#transfer-progress').hide();
@@ -3392,7 +3399,7 @@ function runTransferMaster(from, to, company, alayaCid) {
     return { code: code, name: v[1] || '', creditterm: v[2] || '', creditlimit: v[3] || 0,
              _raw: rawByCode(alayaData.vendorRaw, code, ['VE_AccountCode', 'VE_Code']) };
   }).filter(function(d) { return d.code; });
-  if (settings.tCashpurchpay && transfers.indexOf('vendorpayment') < 0) transfers.push('vendorpayment');
+  if (settings.tCashpurchpay && !advOnly && transfers.indexOf('vendorpayment') < 0) transfers.push('vendorpayment');
   var noCust = transfers.indexOf('customer') >= 0 && !custDocs.length;
   var noVend = transfers.indexOf('vendor') >= 0 && !vendDocs.length;
   if (noCust || noVend) {
