@@ -323,8 +323,8 @@
     </div>
     <div class="sub" style="margin-top:-4px;">
       Leave Client ID / Username empty to keep using the values from the Alaya page session.
-      Password is stored with Save (same UDF table as the SQL connection settings), so it is
-      only typed once - change it by typing a new one and clicking Save.
+      The password is saved on <b>this PC only</b> (encrypted by Windows, in the local backend) - never in the
+      Alaya database - so it is only typed once. Change it by typing a new one and clicking Save.
     </div>
 
     <div id="api-license" style="display:none;">
@@ -1315,8 +1315,8 @@ function saveSettings(mappingCid) {
     });
   });
   chain.then(function() {
-    showToast('Settings saved (' + okRows.length + ' rows to Alaya DB)');
-    addLog('Settings saved to UDF table (' + okRows.length + ' rows) + local backup', 'log-ok');
+    showToast('Settings saved - ' + okRows.length + ' shared rows in Alaya DB; connection, keys and password on this PC');
+    addLog('Settings saved: ' + okRows.length + ' shared rows in the Alaya UDF table; SQL connection, API keys and Alaya password stored on this PC (backend config.json)', 'log-ok');
     testBackendConnection();
     // Re-mint token under the new login (stored password also feeds
     // window._alayaPass so later devkey-path mints can switch to it).
