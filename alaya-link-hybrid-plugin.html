@@ -791,6 +791,13 @@ function packRows(s, cid) {
     sc: s.sqlCompanyCode, dp: s.dcfPath, h: s.fbHost, po: s.fbPort,
     u: s.fbUser, pw: s.fbPassword, eu: s.estreamUser, epw: s.estreamPassword
   })]);
+  // Per-Alaya-company SQL company pairing (SC_<cid> = SQL code) - switching
+  // Alaya company auto-switches the SQL company so transfers never write
+  // into the previous company's database.
+  var sqMap = s.sqlCompanyByCid || {};
+  Object.keys(sqMap).forEach(function(k) {
+    if (sqMap[k]) rows.push(['SC_' + k, String(sqMap[k])]);
+  });
   (s.paymodes || []).forEach(function(pm) {
     if (pm && pm.code) rows.push([scopedKey('PM_', cid, pm.code), String(pm.acct || '')]);
   });
@@ -848,6 +855,12 @@ function unpackRows(rowArr) {
         var cn = JSON.parse(val);
         s.sqlCompanyCode = cn.sc; s.dcfPath = cn.dp; s.fbHost = cn.h; s.fbPort = cn.po;
         s.fbUser = cn.u; s.fbPassword = cn.pw; s.estreamUser = cn.eu; s.estreamPassword = cn.epw;
+      } else if (code.indexOf('SC_') === 0) {
+        var scid = parseInt(code.slice(3), 10) || 0;
+        if (scid) {
+          s.sqlCompanyByCid = s.sqlCompanyByCid || {};
+          s.sqlCompanyByCid[scid] = val;
+        }
       } else if (code.indexOf('PM_') === 0) {
         var pmk = parseScopedKey(code);
         s.paymodes = s.paymodes || [];
@@ -1024,7 +1037,9 @@ function applySettings() {
   $('#s-fb-password').val(s.fbPassword);
   $('#s-estream-user').val(s.estreamUser);
   $('#s-estream-password').val(s.estreamPassword);
-  if (s.sqlCompanyCode) $('#sql-company, #s-sql-company').val(s.sqlCompanyCode);
+  var prefSc = (s.sqlCompanyByCid || {})[s.alayaCompanyId || 0] || '';
+  if (prefSc) $('#sql-company, #s-sql-company').val(prefSc);
+  else if (s.sqlCompanyCode) $('#sql-company, #s-sql-company').val(s.sqlCompanyCode);
   // Alaya login override + hidden API License. Stored password fills the
   // input and goes into memory so token mints use the real credential login.
   $('#s-alaya-client').val(s.alayaLoginClient || '');
@@ -1185,7 +1200,8 @@ function saveSettings(mappingCid) {
     alayaLoginPass: $('#s-alaya-pass').val(),
     alayaProgram: $('#s-alaya-program').val().trim() || 'AlayaApp',
     alayaGuid: $('#s-alaya-guid').val().trim(),
-    alayaApiUrl: $('#s-alaya-apiurl').val().trim()
+    alayaApiUrl: $('#s-alaya-apiurl').val().trim(),
+    sqlCompanyByCid: settings.sqlCompanyByCid || {}
   };
   var typedPass = settings.alayaLoginPass;
   var identityChanged = (settings.alayaLoginClient && settings.alayaLoginClient !== clientId) ||
@@ -1203,6 +1219,12 @@ function saveSettings(mappingCid) {
   function p2(n) { return (n < 10 ? '0' : '') + n; }
   var dateStr = now.getFullYear() + '-' + p2(now.getMonth()+1) + '-' + p2(now.getDate()) + ' ' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + ':' + p2(now.getSeconds());
   var saveCid = (typeof mappingCid === 'number') ? mappingCid : (settings.alayaCompanyId || 0);
+  // Pair the SQL company currently shown in the dropdown with the company
+  // whose mappings are being saved (dropdown still holds the OLD company's
+  // choice during an Alaya-company switch - auto-switch runs after this save).
+  if (settings.sqlCompanyCode && saveCid > 0) {
+    settings.sqlCompanyByCid[saveCid] = settings.sqlCompanyCode;
+  }
   var rows = packRows(settings, saveCid);
   // Over-long rows are dropped BEFORE the DELETE is built (the previous
   // revision deleted first and then skipped the insert, permanently losing
@@ -1770,9 +1792,14 @@ function loadSqlCompanies() {
               var db = (rc && rc.data && rc.data.database) || '';
               var base = String(db).split(/[/\\]/).pop() || '';
               var code = base.replace(/\.[^.]*$/, '');
+              // This Alaya company's remembered SQL company beats the backend's
+              // last-active one (which only reflects whichever ran last).
+              var pref = ((settings.sqlCompanyByCid || {})[currentAlayaCompanyID()]) || '';
+              if (pref && $('#sql-company option[value="' + pref + '"]').length) code = pref;
               if (code && $('#sql-company option[value="' + code + '"]').length) {
                 $('#sql-company, #s-sql-company').val(code);
-                addLog('SQL Account company restored: ' + code, 'log-ok');
+                addLog((pref && code === pref ? 'SQL Account company for this Alaya company: ' : 'SQL Account company restored: ') + code, 'log-ok');
+                if (pref && code === pref && code !== base.replace(/\.[^.]*$/, '')) selectActiveCompany(code);
               }
             } catch(e) {}
           }
@@ -1929,6 +1956,14 @@ $('#alaya-company-select').on('change', function() {
   applyCompanyMappings(id);
   window._currentCompanyId = id;
   addLog('Alaya company selected: ' + txt + ' (ID ' + id + ') - saved as default', 'log-ok');
+  // Auto-switch SQL Account company to this Alaya company's remembered pick -
+  // forgetting to switch manually used to write transfers into the previous
+  // company's database.
+  var prefSql = (settings.sqlCompanyByCid || {})[id];
+  if (prefSql && $('#sql-company option[value="' + prefSql + '"]').length && $('#sql-company').val() !== prefSql) {
+    selectActiveCompany(prefSql);
+    addLog('SQL Account company auto-switched to ' + prefSql + ' for this Alaya company', 'log-ok');
+  }
   // Functional: auto-reload this company's mappings + preview data
   if (id && apiUrl && authToken) {
     refreshPaymodesForCompany(id);
@@ -3716,6 +3751,12 @@ $('.tab-btn').on('click', function() {
 
 $('#sql-company, #s-sql-company').on('change', function() {
   selectActiveCompany($(this).val());
+  // Remember the pairing for the Alaya company on screen, persist now so a
+  // stale pick can't auto-select the wrong database next session.
+  settings.sqlCompanyCode = $(this).val();
+  settings.sqlCompanyByCid = settings.sqlCompanyByCid || {};
+  settings.sqlCompanyByCid[currentAlayaCompanyID()] = $(this).val();
+  saveSettings();
 });
 
 // ΓöÇΓöÇ Clear log ΓöÇΓöÇ
