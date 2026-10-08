@@ -1240,6 +1240,12 @@ function saveSettings(mappingCid) {
   try { localStorage.setItem(LOCAL_BU_KEY, settings.backendUrl); } catch(e) {}
   pushConnectionSettingsToBackend(settings);
   if (settings.alayaLoginPass || window._passLoaded) secretsPost(settings.alayaLoginPass);
+  // Destination (mode / Access+Secret key / host) is saved by the main Save too, not only by Test Connection;
+  // a blank Secret Key field keeps the stored one.
+  destPost('/api/settings/destination', destBody(), function(r) {
+    if (r && r.success) { $('#d-secret').val(''); showDest(r.data); }
+    else addLog('Destination NOT saved: ' + ((r && r.error) || 'backend unreachable'), 'log-err');
+  });
 
   // Always keep a local backup
   try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(backupOf(settings))); } catch(e) {}
