@@ -739,6 +739,14 @@ var pendingDcbCallbacks = {};
 var pendingFetchCallbacks = {};
 var SETTINGS_TABLE = 'ZZT_LINKSQLHYB';
 var LOCAL_BACKUP_KEY = 'alaya-to-sql-settings-v2';
+// The Alaya login password never goes to the UDF table or localStorage: the local backend keeps it (DPAPI).
+function backupOf(s) { var c = $.extend({}, s); c.alayaLoginPass = ''; return c; }
+function secretsPost(pass) {
+  fetch(BACKEND_URL + '/api/settings/secrets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alayaLoginPass: pass }) }).catch(function() {
+    addLog('Alaya password NOT stored: local backend unreachable', 'log-err');
+  });
+}
 var settings = {};
 
 // The backend only listens on HTTPS now. Any stale http:// value saved in
@@ -769,7 +777,7 @@ function packRows(s, cid) {
     bu: s.backendUrl, ac: s.alayaCompany, aid: s.alayaCompanyId,
     cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod,
     pb: B(s.pmByBranch), at: s.advType, apd: s.advPreviewDoc,
-    lc: s.alayaLoginClient, lu: s.alayaLoginUser, lp: s.alayaLoginPass,
+    lc: s.alayaLoginClient, lu: s.alayaLoginUser, lp: '',
     pg: s.alayaProgram, gg: s.alayaGuid, au: s.alayaApiUrl
   })]);
   rows.push(['CUSTOMER', JSON.stringify({
@@ -832,7 +840,7 @@ function unpackRows(rowArr) {
         s.backendUrl = g.bu; s.alayaCompany = g.ac; s.alayaCompanyId = g.aid;
         s.cashsalesMethod = g.cm; s.cashsalesPrefix = g.cp; s.transferMethod = g.tm;
         s.pmByBranch = flag(g.pb); s.advType = g.at; s.advPreviewDoc = g.apd;
-        s.alayaLoginClient = g.lc; s.alayaLoginUser = g.lu; s.alayaLoginPass = g.lp;
+        s.alayaLoginClient = g.lc; s.alayaLoginUser = g.lu; s.alayaLoginPass = '';   // legacy rows may still hold a plaintext lp - ignore; the next Save blanks it
         s.alayaProgram = g.pg; s.alayaGuid = g.gg; s.alayaApiUrl = g.au;
       } else if (code === 'CUSTOMER') {
         var c = JSON.parse(val);
@@ -1042,8 +1050,8 @@ function applySettings() {
   // input and goes into memory so token mints use the real credential login.
   $('#s-alaya-client').val(s.alayaLoginClient || '');
   $('#s-alaya-user').val(s.alayaLoginUser || '');
-  $('#s-alaya-pass').val(s.alayaLoginPass || '');
-  window._alayaPass = s.alayaLoginPass || '';
+  $('#s-alaya-pass').val('');
+  window._alayaPass = '';
   $('#s-alaya-program').val(s.alayaProgram || 'AlayaApp');
   $('#s-alaya-guid').val(s.alayaGuid || '');
   $('#s-alaya-apiurl').val(s.alayaApiUrl || '');
@@ -1059,7 +1067,15 @@ function applySettings() {
     remint = true;
   }
   if (remint && apiUrl && username) requestToken();
-  else if (s.alayaLoginPass && apiUrl && username) requestToken({ pass: s.alayaLoginPass });
+  // password comes from the local backend (not the UDF table)
+  var _ap = apiUrl, _au = username, _rm = remint;
+  fetch(BACKEND_URL + '/api/settings/secrets').then(function(r) { return r.json(); }).then(function(r) {
+    window._passLoaded = true;
+    var pw = r && r.success && r.data && r.data.alayaLoginPass || '';
+    if (!pw) return;
+    s.alayaLoginPass = pw; window._alayaPass = pw; $('#s-alaya-pass').val(pw);
+    if (!_rm && _ap && _au) requestToken({ pass: pw });
+  }).catch(function() { window._passLoaded = true; });
   pushConnectionSettingsToBackend(s);
 }
 
@@ -1209,9 +1225,10 @@ function saveSettings(mappingCid) {
   // localStorage is what this browser will prefer on next load).
   try { localStorage.setItem(LOCAL_BU_KEY, settings.backendUrl); } catch(e) {}
   pushConnectionSettingsToBackend(settings);
+  if (settings.alayaLoginPass || window._passLoaded) secretsPost(settings.alayaLoginPass);
 
   // Always keep a local backup
-  try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
+  try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(backupOf(settings))); } catch(e) {}
 
   var now = new Date();
   function p2(n) { return (n < 10 ? '0' : '') + n; }
@@ -1528,7 +1545,7 @@ function probeDefaultCompanyByStaff(pickedId) {
       settings.alayaCompany = currentAlayaCompanyCode();
       addLog('Default company auto-selected from Staff: ' + $('#alaya-company-select option:selected').text(), 'log-ok');
       showToast('Company set to your default');
-      try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
+      try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(backupOf(settings))); } catch(e) {}
     }).catch(function(err) {
       addLog('Staff probe ' + cc + ': ' + String(err.message || err).slice(0, 120), 'log-info');
       tryComp(linkCol, j + 1);
@@ -3882,7 +3899,7 @@ $('#btn-save-default-company').on('click', function() {
   if (!id) { showToast('No Alaya company selected in the dropdown yet', true); return; }
   settings.alayaCompanyId = id;
   settings.alayaCompany = code;
-  try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(settings)); } catch(e) {}
+  try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(backupOf(settings))); } catch(e) {}
   var name = $('#alaya-company-select').find('option:selected').text() || code;
   var display = code;
   if (name && name !== code) {
