@@ -302,7 +302,7 @@
     <div class="form-row">
       <div class="form-group">
         <label>Backend URL</label>
-        <input type="text" id="s-backend-url" placeholder="https://localhost:3101" />
+        <input type="text" id="s-backend-url" placeholder="http://localhost:3101" />
       </div>
     </div>
 
@@ -658,7 +658,7 @@ var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQue
 
 // ΓöÇΓöÇ Default Settings ΓöÇΓöÇ
 var defaultSettings = {
-  backendUrl: 'https://localhost:3101',
+  backendUrl: 'http://localhost:3101',
   alayaCompany: 'qa3',
   alayaCompanyId: 0,
   // Alaya login override - blank = use ALAYA_INIT session values. Password is
@@ -755,6 +755,8 @@ var settings = {};
 function normalizeBackendUrl(u) {
   if (!u) return defaultSettings.backendUrl;
   u = String(u).replace(/\/+$/, '');
+  // local backend = plain HTTP (browsers treat http://localhost as secure: no certificate needed)
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(u)) return u.replace(/^https:/i, 'http:');
   if (u.indexOf('http:') === 0) u = 'https:' + u.slice(5);
   return u;
 }
