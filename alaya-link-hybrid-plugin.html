@@ -3904,7 +3904,18 @@ function openDcfBrowser() {
   var startDir = start.replace(/\\[^\\]*$/, '');
   loadDir(startDir || 'C:\\eStream');
 }
-$('#btn-browse-dcf').on('click', function() { openDcfBrowser(); });
+// Browse = the native Windows file dialog shown by the local backend (Explorer: Network, \server shares, drives);
+// the in-page list above is only the fallback when the dialog endpoint is not available.
+$('#btn-browse-dcf').on('click', function() {
+  fetch(BACKEND_URL + '/api/pick-file', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initial: $('#s-dcf-path').val() || '', title: 'Select Default.DCF', pattern: '*.DCF' }) })
+    .then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (!r.success) { openDcfBrowser(); return; }
+      if (r.path) { $('#s-dcf-path').val(r.path); addLog('DCF selected: ' + r.path, 'log-ok'); }
+    })
+    .catch(function() { openDcfBrowser(); });
+});
 
 // ΓöÇΓöÇ Save settings ΓöÇΓöÇ
 $('#btn-save-settings').on('click', function() {
