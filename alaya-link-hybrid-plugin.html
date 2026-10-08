@@ -230,6 +230,7 @@
         <h2 style="margin:0;"><button id="results-collapse" title="Collapse/Expand" style="border:none;background:none;cursor:pointer;font-size:16px;padding:0 6px 0 0;">&#9662;</button>Transfer Results</h2>
         <label style="font-size:12px;color:#4b5563;">Status
           <select id="results-filter" title="Filter rows by transfer status" style="margin-left:6px;padding:4px 8px;">
+            <option value="issues" selected>Issues</option>
             <option value="all">All</option>
             <option value="transferred">Transferred</option>
             <option value="created">Created</option>
@@ -3237,6 +3238,9 @@ function runTransferMaster(from, to, company, alayaCid) {
   // Fresh run: clear any leftover results from a previous transfer so the panel
   // never shows stale "success" rows before the new transfer actually finishes.
   _progSawRunning = false;
+  _showAllRows = false;
+  _lastProg = null;
+  window._resCounts = null;
   $('#results-list').empty();
   $('#transfer-results').hide();
   $('#summary-list').empty();
@@ -3397,6 +3401,27 @@ var _progPoll = null;
 // PREVIOUS run's completed items because _prog_reset only runs inside the
 // POST handler - rendering them would fake "all transferred" instantly.
 var _progSawRunning = false;
+// 5000-customer transfers: the live list renders ALL issue rows plus only the
+// last LIVE_OK_CAP transferred rows (footer offers Show all). Rebuilding 5000
+// rows every 400ms poll was the main lag source.
+var _showAllRows = false;
+var _lastProg = null;
+var LIVE_OK_CAP = 100;
+function liveItemState(it) {
+  var st = it.status === 'success' ? (it.message || 'transferred') : (it.status || 'pending');
+  return String(st).toLowerCase();
+}
+function countResultStates(sts) {
+  var counts = { all: sts.length, transferred: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
+  sts.forEach(function(st) {
+    if (st === 'created') { counts.created++; counts.transferred++; }
+    else if (st === 'updated') { counts.updated++; counts.transferred++; }
+    else if (st === 'transferred') counts.transferred++;
+    else if (st === 'skipped' || st === 'pending') counts.skipped++;
+    else if (st === 'error' || st === 'failed') counts.failed++;
+  });
+  return counts;
+}
 function startProgressPoll() {
   stopProgressPoll();
   _progPoll = setInterval(function() {
@@ -3438,8 +3463,12 @@ function renderLiveProgress(p) {
   if (total > 0) txt += ' ' + pct + '% (' + done + '/' + total + ')';
   $('#progress-text').text(txt);
 
-  var html = '';
-  (p.items || []).forEach(function(it) {
+  var items = p.items || [];
+  _lastProg = p;
+  // Full-accuracy counts for the Status dropdown (DOM scan would miss rows
+  // hidden by the cap below).
+  window._resCounts = countResultStates(items.map(liveItemState));
+  function rowHtml(it) {
     var cls = 'pending';
     if (it.status === 'success') cls = 'done';
     else if (it.status === 'error') cls = 'error';
@@ -3447,18 +3476,43 @@ function renderLiveProgress(p) {
     if (it.code) nm += (nm ? ' · ' : '') + it.code;
     if (it.name) nm += ' — ' + it.name;
     var st = it.status === 'success' ? (it.message || 'transferred') : (it.status || 'pending');
-    html += '<div class="transfer-item" data-st="' + escHtml(String(st).toLowerCase()) + '">';
-    html += '<div class="info"><div class="name">' + escHtml(nm) + '</div>';
-    html += '<div class="detail">' + escHtml(it.status === 'success' ? 'transfer ' + st : (it.message || '')) + '</div></div>';
-    html += '<div class="status ' + cls + '">' + escHtml(st) + '</div>';
-    html += '</div>';
-  });
+    return '<div class="transfer-item" data-st="' + escHtml(String(st).toLowerCase()) + '">' +
+      '<div class="info"><div class="name">' + escHtml(nm) + '</div>' +
+      '<div class="detail">' + escHtml(it.status === 'success' ? 'transfer ' + st : (it.message || '')) + '</div></div>' +
+      '<div class="status ' + cls + '">' + escHtml(st) + '</div></div>';
+  }
+  // Issue rows (error/skipped/pending) rendered in full; successful rows are
+  // NOT rendered while the default "Issues" filter is active - only after the
+  // user switches to All (or clicks Show all). Never rebuild 5000 rows per poll.
+  var issues = [], oks = [];
+  items.forEach(function(it) { (it.status === 'success' ? oks : issues).push(it); });
+  var f = $('#results-filter').val() || 'issues';
+  var shown = _showAllRows ? oks : (f === 'issues' ? [] : oks.slice(-LIVE_OK_CAP));
+  var html = issues.map(rowHtml).join('') + shown.map(rowHtml).join('');
+  var hidden = oks.length - shown.length;
+  if (hidden > 0 || (!p.running && oks.length > 0 && !issues.length)) {
+    var foot = '';
+    if (!issues.length) {
+      foot += '<div style="padding:8px 12px;font-size:0.82rem;color:#166534;text-align:center;">No issues - all ' + oks.length + ' rows transferred</div>';
+    }
+    if (hidden > 0) {
+      foot += '<div class="transfer-foot" style="padding:8px 12px;font-size:0.8rem;color:#6b7280;text-align:center;">' +
+        hidden + ' transferred rows not shown ' +
+        '<button id="btn-show-all-rows" style="margin-left:8px;padding:3px 10px;font-size:0.78rem;cursor:pointer;">Show all</button></div>';
+    }
+    html += foot;
+  }
   if (html) {
     $('#results-list').html(html);
     $('#transfer-results').css('display', 'block');
     applyResultsFilter();
   }
 }
+$('#results-list').on('click', '#btn-show-all-rows', function() {
+  _showAllRows = true;
+  $('#results-filter').val('all');
+  if (_lastProg) renderLiveProgress(_lastProg);
+});
 
 // ── Show transfer results ──
 function showTransferResults(results) {
@@ -3543,6 +3597,7 @@ function showTransferResults(results) {
 function rowMatchesStatusFilter(st, f) {
   st = String(st || '').toLowerCase();
   if (f === 'all') return true;
+  if (f === 'issues') return st === 'error' || st === 'failed' || st === 'skipped' || st === 'pending';
   if (f === 'transferred') return st === 'created' || st === 'updated' || st === 'transferred';
   if (f === 'created') return st === 'created';
   if (f === 'updated') return st === 'updated';
@@ -3552,19 +3607,26 @@ function rowMatchesStatusFilter(st, f) {
 }
 function applyResultsFilter() {
   var f = $('#results-filter').val() || 'all';
-  var counts = { all: 0, transferred: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
+  var counts = window._resCounts || null;
+  if (!counts) counts = { all: 0, transferred: 0, created: 0, updated: 0, skipped: 0, failed: 0 };
   function bucket(st) {
     if (st === 'created') { counts.created++; counts.transferred++; }
     else if (st === 'updated') { counts.updated++; counts.transferred++; }
-    else if (st === 'transferred') { counts.transferred++; }
-    else if (st === 'skipped' || st === 'pending') { counts.skipped++; }
-    else if (st === 'error' || st === 'failed') { counts.failed++; }
+    else if (st === 'transferred') counts.transferred++;
+    else if (st === 'skipped' || st === 'pending') counts.skipped++;
+    else if (st === 'error' || st === 'failed') counts.failed++;
   }
-  // Live list: every row is a per-record row.
+  // Live list: every row is a per-record row. Count from the DOM only when
+  // there is no full-data count (capped renders would undercount).
+  if (!window._resCounts) {
+    $('#results-list .transfer-item').each(function() {
+      var st = String($(this).attr('data-st') || '').toLowerCase();
+      counts.all++;
+      bucket(st);
+    });
+  }
   $('#results-list .transfer-item').each(function() {
     var st = String($(this).attr('data-st') || '').toLowerCase();
-    counts.all++;
-    bucket(st);
     $(this).toggle(rowMatchesStatusFilter(st, f));
   });
   // Summary list: filter the per-record sub-rows, always keep type headers.
@@ -3573,14 +3635,21 @@ function applyResultsFilter() {
     $(this).toggle(rowMatchesStatusFilter(st, f));
   });
   // Show counts in the dropdown so failures are visible without filtering.
-  var labels = { all: 'All', transferred: 'Transferred', created: 'Created',
+  counts.issues = counts.failed + counts.skipped;
+  var labels = { issues: 'Issues', all: 'All', transferred: 'Transferred', created: 'Created',
                  updated: 'Updated', skipped: 'Skipped', failed: 'Failed' };
   $('#results-filter option').each(function() {
     var v = $(this).val();
     $(this).text(labels[v] + ' (' + (counts[v] || 0) + ')');
   });
 }
-$('#results-filter').on('change', applyResultsFilter);
+  // Filter change re-renders the live list too - row visibility is decided at
+  // render time (Issues renders no success rows at all), toggle alone is not
+  // enough to bring them back.
+  $('#results-filter').on('change', function() {
+    if (_lastProg) renderLiveProgress(_lastProg);
+    else applyResultsFilter();
+  });
 
 // ── Collapse/expand for Transfer Results / Summary ──
 // The customer list can be 100+ rows; collapsing it lets the cash sales
