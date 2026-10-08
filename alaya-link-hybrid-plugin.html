@@ -401,9 +401,12 @@
     <div class="form-row">
       <div class="form-group">
         <label>SQL Account Company</label>
-        <select id="s-sql-company">
-          <option value="">Loading companies...</option>
-        </select>
+        <div style="display:flex;gap:8px;">
+          <select id="s-sql-company" style="flex:1;min-width:0;">
+            <option value="">Loading companies...</option>
+          </select>
+          <button id="btn-browse-db" class="btn-secondary" style="flex-shrink:0;" title="Pick the company database (.FDB) like the desktop tool">Browse...</button>
+        </div>
       </div>
       <div class="form-group">
         <label>Default.DCF Path</label>
@@ -1904,13 +1907,13 @@ function testBackendConnection() {
   });
 }
 
-function selectActiveCompany(code) {
+function selectActiveCompany(code, dbPath) {
   if (!code) return;
   backendAjax({
     url: BACKEND_URL + '/api/settings/company',
     type: 'POST',
     contentType: 'application/json',
-    data: JSON.stringify({ code: code }),
+    data: JSON.stringify(dbPath ? { code: code, database: dbPath } : { code: code }),
     success: function(r) {
       if (r.success) {
         addLog('Backend now writing to company ' + code + ' (' + r.data.database + ')', 'log-ok');
@@ -3904,6 +3907,32 @@ function openDcfBrowser() {
   var startDir = start.replace(/\\[^\\]*$/, '');
   loadDir(startDir || 'C:\\eStream');
 }
+// Company database: pick the .FDB with the native Windows dialog (like the desktop tool's "Estream Database Name"),
+// so a network PC can use a database that is not listed from Default.DCF.
+$('#btn-browse-db').on('click', function() {
+  var B = String.fromCharCode(92);
+  var dcf = $('#s-dcf-path').val() || '';
+  var i = dcf.toLowerCase().lastIndexOf('share');
+  var initial = i >= 0 ? dcf.substring(0, i) + 'DB' + B + 'x' : '';
+  fetch(BACKEND_URL + '/api/pick-file', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initial: initial, title: 'Select company database (.FDB)', pattern: '*.FDB' }) })
+    .then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (!r.success) { showToast('File dialog not available - update the backend (installer)', true); return; }
+      if (!r.path) return;
+      var file = r.path.split(B).pop().split('/').pop();
+      var code = file.replace(/[.][^.]*$/, '');
+      if (!$('#s-sql-company option[value="' + code + '"]').length) {
+        $('#sql-company, #s-sql-company').append($('<option>').val(code).text(code + ' (' + file + ')'));
+      }
+      $('#sql-company, #s-sql-company').val(code);
+      settings.sqlCompanyCode = code;
+      selectActiveCompany(code, r.path);
+      addLog('SQL database selected: ' + r.path, 'log-ok');
+    })
+    .catch(function() { showToast('File dialog not available - update the backend (installer)', true); });
+});
+
 // Browse = the native Windows file dialog shown by the local backend (Explorer: Network, \server shares, drives);
 // the in-page list above is only the fallback when the dialog endpoint is not available.
 $('#btn-browse-dcf').on('click', function() {
