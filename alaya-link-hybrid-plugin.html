@@ -581,10 +581,11 @@
       <div class="map-actions">
         <button id="btn-refresh-paymodes" class="btn-secondary">Refresh Alaya Payment Mode</button>
         <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
-          <input type="checkbox" id="s-pm-bybranch" disabled title="Not yet implemented - payment modes currently map globally, not per branch" /> Payment Mode by Sales Branch <span style="color:#9ca3af;">(Not yet implemented)</span>
+          <input type="checkbox" id="s-pm-bybranch" /> Payment Mode by Sales Branch
         </label>
+        <select id="pm-branch-select" style="display:none;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.82rem;"></select>
       </div>
-      <div class="map-desc">Map each Alaya payment mode to its Control Account in SQL Acct</div>
+      <div class="map-desc" id="pm-map-desc">Map each Alaya payment mode to its Control Account in SQL Acct</div>
     </div>
     <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
       <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
@@ -809,7 +810,8 @@ function packRows(s, cid) {
   // same scoping as PM_/BR_/DV_ (other companies' rows stay untouched).
   if (s.sqlCompanyCode && cid > 0) rows.push([scopedKey('SC_', cid, 'SQL'), String(s.sqlCompanyCode)]);
   (s.paymodes || []).forEach(function(pm) {
-    if (pm && pm.code) rows.push([scopedKey('PM_', cid, pm.code), String(pm.acct || '')]);
+    // Branch-scoped rows use the desktop's "branch|paymode" key form.
+    if (pm && pm.code) rows.push([scopedKey('PM_', cid, (pm.branch ? pm.branch + '|' : '') + pm.code), String(pm.acct || '')]);
   });
   (s.branches || []).forEach(function(b) {
     if (b && b.code) rows.push([scopedKey('BR_', cid, b.code), JSON.stringify({ c: b.cashAcct || '', a: b.acct || '', ig: B(b.itemGroup) })]);
@@ -874,11 +876,15 @@ function unpackRows(rowArr) {
         s.paymodes = s.paymodes || [];
         if (pmk) {
           if (pmk.cid !== ownerCid) return; // another company's mapping
+          var pbr = '', pcode = pmk.code;
+          var bar = pcode.indexOf('|');
+          if (bar >= 0) { pbr = pcode.slice(0, bar); pcode = pcode.slice(bar + 1); }
+          var dkey = pbr + '|' + pcode;
           // drop any legacy (or earlier scoped dupe) entry: last scoped wins
-          s.paymodes = s.paymodes.filter(function(e) { return e.code !== pmk.code; });
-          scopedSeen['PM:' + pmk.code] = true;
-          s.paymodes.push({ code: pmk.code, acct: val });
-        } else if (!scopedSeen['PM:' + code.slice(3)]) {
+          s.paymodes = s.paymodes.filter(function(e) { return ((e.branch || '') + '|' + e.code) !== dkey; });
+          scopedSeen['PM:' + dkey] = true;
+          s.paymodes.push({ code: pcode, acct: val, branch: pbr });
+        } else if (!scopedSeen['PM:|' + code.slice(3)]) {
           // legacy unscoped rows belong to the owner company: keep
           s.paymodes.push({ code: code.slice(3), acct: val });
         }
@@ -947,10 +953,21 @@ function loadSettings() {
 }
 
 function collectMappingsFromUI() {
+  var byBranch = pmBranchMode();
+  var viewBranch = byBranch ? ($('#pm-branch-select').val() || '') : '';
   var paymodes = [];
   $('#paymode-tbody tr').each(function() {
     var code = $(this).data('pm-code');
-    if (code) paymodes.push({ code: code, acct: $(this).find('.pm-acct').val() || '' });
+    if (code) paymodes.push({ code: code, acct: $(this).find('.pm-acct').val() || '', branch: viewBranch });
+  });
+  // Keep entries not shown in the current view (other branches' rows / global
+  // rows) - the table only ever renders ONE view, saving must not drop the rest.
+  // Branch mode with no branch selected: table is a hint row, keep everything.
+  var kept = (settings.paymodes || []).filter(function(pm) {
+    if (!pm || !pm.code) return false;
+    if (byBranch && !viewBranch) return true;
+    if (byBranch) return pm.branch !== viewBranch;
+    return !!pm.branch;
   });
   var branches = [];
   $('#branch-tbody tr').each(function() {
@@ -967,7 +984,7 @@ function collectMappingsFromUI() {
     var code = $(this).find('.dv-code').val() || '';
     if ($.trim(code)) divisions.push({ code: $.trim(code), itemGroup: $(this).find('.dv-ig').is(':checked') });
   });
-  return { paymodes: paymodes, branches: branches, divisions: divisions };
+  return { paymodes: kept.concat(paymodes), branches: branches, divisions: divisions };
 }
 
 function applySettings() {
@@ -1006,9 +1023,9 @@ function applySettings() {
   $('#s-desc-creditnote').val(s.descCreditnote);
   $('#s-ac-debitnote').val(s.acDebitnote);
   $('#s-desc-debitnote').val(s.descDebitnote);
-  // "Payment Mode by Sales Branch" is not implemented (checkbox disabled):
-  // always off, even if an old save had it on (it never took effect anyway).
-  $('#s-pm-bybranch').prop('checked', false);
+  // "Payment Mode by Sales Branch": when on, the paymode table edits the
+  // selected branch's rows (branch|code keys); when off, global rows only.
+  $('#s-pm-bybranch').prop('checked', !!s.pmByBranch);
   $('#s-t-customer').prop('checked', s.tCustomer);
   $('#s-t-cashpayment').prop('checked', s.tCashpayment !== false);
   $('#s-t-vendor').prop('checked', s.tVendor);
@@ -1033,7 +1050,7 @@ function applySettings() {
   $('#s-backend-url').val(s.backendUrl);
   BACKEND_URL = s.backendUrl;
   loadDestination();
-  renderPaymodeTable(s.paymodes || []);
+  renderPaymodeView();
   renderBranchTable(s.branches || []);
   renderDivisionTable(s.divisions || []);
 
@@ -1957,9 +1974,13 @@ function applyCompanyMappings(cid) {
     }
     try {
       if (prefix === 'PM_') {
-        if (scoped) { pm = pm.filter(function(e) { return e.code !== code; }); seen['PM:' + code] = true; }
-        else if (seen['PM:' + code]) return;
-        pm.push({ code: code, acct: val });
+        var mb = '', mc = code;
+        var mi = mc.indexOf('|');
+        if (mi >= 0) { mb = mc.slice(0, mi); mc = mc.slice(mi + 1); }
+        var mk = mb + '|' + mc;
+        if (scoped) { pm = pm.filter(function(e) { return ((e.branch || '') + '|' + e.code) !== mk; }); seen['PM:' + mk] = true; }
+        else if (seen['PM:|' + mc]) return;
+        pm.push({ code: mc, acct: val, branch: mb });
       }
       else if (prefix === 'BR_') {
         var b = JSON.parse(val);
@@ -1976,7 +1997,7 @@ function applyCompanyMappings(cid) {
     } catch(e) { /* skip bad row */ }
   });
   settings.paymodes = pm; settings.branches = br; settings.divisions = dv;
-  renderPaymodeTable(pm); renderBranchTable(br); renderDivisionTable(dv);
+  renderPaymodeView(); renderBranchTable(br); renderDivisionTable(dv);
   addLog('Mappings swapped to company ID ' + cid + ' (' + pm.length + ' paymodes, ' + br.length + ' branches, ' + dv.length + ' divisions)', 'log-info');
 }
 $('#alaya-company-select').on('change', function() {
@@ -2030,6 +2051,43 @@ function renderPaymodeTable(list) {
   });
 }
 
+// Payment Mode by Sales Branch: the table shows ONE view at a time - the
+// selected branch's rows (entries with branch set) when the checkbox is on,
+// global rows (no branch) when off. collectMappingsFromUI() merges the view
+// back into the full list so other branches' rows survive a Save.
+function pmBranchMode() { return $('#s-pm-bybranch').is(':checked'); }
+function visiblePaymodes() {
+  var br = $('#pm-branch-select').val() || '';
+  return (settings.paymodes || []).filter(function(pm) {
+    return pmBranchMode() ? (pm.branch === br) : !pm.branch;
+  });
+}
+function renderPaymodeView() {
+  var on = pmBranchMode();
+  var sel = $('#pm-branch-select');
+  sel.toggle(on);
+  if (on) {
+    var codes = [];
+    (settings.branches || []).forEach(function(b) { if (b && b.code && codes.indexOf(b.code) < 0) codes.push(b.code); });
+    var cur = sel.val();
+    sel.empty().append($('<option>').val('').text('-- Select Branch --'));
+    codes.forEach(function(c) { sel.append($('<option>').val(c).text(c)); });
+    if (cur && codes.indexOf(cur) >= 0) sel.val(cur);
+    $('#pm-map-desc').text(codes.length
+      ? 'Map each Alaya payment mode for the selected Sales Branch to its Control Account in SQL Acct'
+      : 'Refresh Alaya Sales Branch Code (Sales Branch Mapping below) first, then pick a branch here.');
+    if (!sel.val()) {
+      $('#paymode-tbody').empty().append('<tr><td colspan="2" style="padding:10px;color:#6b7280;">Select a branch to edit its payment mode mapping.</td></tr>');
+      return;
+    }
+  } else {
+    $('#pm-map-desc').text('Map each Alaya payment mode to its Control Account in SQL Acct');
+  }
+  renderPaymodeTable(visiblePaymodes());
+}
+$('#pm-branch-select').on('change', renderPaymodeView);
+$('#s-pm-bybranch').on('change', renderPaymodeView);
+
 function renderBranchTable(list) {
   var tb = $('#branch-tbody').empty();
   if (!list.length) { tb.append('<tr><td colspan="4" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Sales Branch Code" to load.</td></tr>'); return; }
@@ -2071,6 +2129,8 @@ function appendDivisionRow(code, itemGroup) {
 // ΓöÇΓöÇ Refresh mappings from Alaya API (callable: button or company-change) ΓöÇΓöÇ
 function refreshPaymodesForCompany(cid, btn) {
   if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  var viewBranch = pmBranchMode() ? ($('#pm-branch-select').val() || '') : '';
+  if (pmBranchMode() && !viewBranch) { showToast('Select a branch first', true); return; }
   if (btn) btn.prop('disabled', true).text('Loading...');
   addLog('POST api/PaymentMode/GetAllPaymentMode (company ' + cid + ')');
   $.ajax({
@@ -2079,12 +2139,17 @@ function refreshPaymodesForCompany(cid, btn) {
     success: function(resp) {
       var data = (resp && resp.data) || [];
       try { addLog('PayMode raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
+      // Preserve saved accounts for the CURRENT view only (selected branch or
+      // global) - the rendered rows are merged back with the other views'
+      // entries at Save time by collectMappingsFromUI().
       var saved = {};
-      (settings.paymodes || []).forEach(function(p) { saved[p.code] = p.acct; });
+      (settings.paymodes || []).forEach(function(p) {
+        if (pmBranchMode() ? (p.branch === viewBranch) : !p.branch) saved[p.code] = p.acct;
+      });
       renderPaymodeTable(data.map(function(p) {
-        if (typeof p === 'string') return { code: p, acct: saved[p] || '' };
+        if (typeof p === 'string') return { code: p, acct: saved[p] || '', branch: viewBranch };
         var code = String(pick(p, ['PM_Code', 'Code', 'PaymentModeCode', 'Description']) || '').trim();
-        return { code: code, acct: saved[code] || '' };
+        return { code: code, acct: saved[code] || '', branch: viewBranch };
       }).filter(function(r) { return r.code; }));
       addLog('Loading Done. ' + data.length + ' payment modes (remember to Save)', 'log-ok');
       showToast('Loading Done. ' + data.length + ' payment modes');
