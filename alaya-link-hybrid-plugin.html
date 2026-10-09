@@ -2380,6 +2380,16 @@ var _backendStartAsked = false;
 function tryAutoStartBackend() {
   if (_backendStartAsked) return;
   _backendStartAsked = true;
+  // A PC that has never had the helper does not know alayalink:// yet - Windows would pop up "You'll need a new app
+  // to open this link" (Microsoft Store). Only try the protocol on PCs where the backend was seen online before.
+  var seen = false;
+  try { seen = localStorage.getItem('lsh-backend-seen') === '1'; } catch (e) {}
+  if (!seen) {
+    addLog('Backend offline and never seen on this PC - install the helper first', 'log-warn');
+    $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+    showInstallPrompt();
+    return;
+  }
   $('#backend-badge').removeClass('badge-fail').addClass('badge-waiting').text('Backend: starting...');
   addLog('Backend offline - asking Windows to run start.bat (alayalink://start)', 'log-warn');
   try { window.location.href = 'alayalink://start'; } catch (e) { addLog('Protocol launch failed: ' + e, 'log-err'); }
@@ -2436,6 +2446,7 @@ function testBackendConnection() {
     type: 'GET',
     success: function(r) {
       addLog('Backend healthy', 'log-ok');
+      try { localStorage.setItem('lsh-backend-seen', '1'); } catch (e) {}
       $('#backend-badge').removeClass('badge-waiting badge-fail').addClass('badge-received').text('Backend: online');
     },
     error: function(xhr) {
