@@ -148,7 +148,7 @@
     <div class="hero-icon"><img src="https://irs-jin.github.io/alaya-ar-plugin-demo/alaya-sql-logo.png" alt="Alaya to SQL Account"></div>
     <div>
       <h1>Link to SQL Hybrid</h1>
-      <div class="sub">Transfer data from Alaya to SQL Account - SDK Live (COM) or Restful API</div>
+      <div class="sub">Transfer data from Alaya to SQL Accounting - Offline (SDK / COM) or Online (Restful API)</div>
       <div class="sub" style="margin-bottom:0;color:#9ca3af;font-size:0.7rem;">build: <span id="build-tag">…</span></div>
     </div>
   </div>
@@ -207,8 +207,8 @@
     <div class="form-group" style="margin-bottom:16px;">
       <label>Transfer Method</label>
       <select id="transfer-method">
-        <option value="summary">Summary</option>
-        <option value="itemize">By Item</option>
+        <option value="summary">Total Daily Sales</option>
+        <option value="itemize">Itemize</option>
       </select>
     </div>
 
@@ -285,7 +285,7 @@
       </div>
     </div>
     <div style="font-size:0.75rem;color:#6b7280;margin-bottom:10px;">Tick rows to transfer; unticked rows are skipped.</div>
-    <div id="adv-summary-note" style="display:none;font-size:0.75rem;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:6px 10px;margin-bottom:10px;">Note: Cash Sales Summary mode ignores row ticks - the whole date range is aggregated (same as the desktop tool, whose grid is disabled for this mode).</div>
+    <div id="adv-summary-note" style="display:none;font-size:0.75rem;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:6px 10px;margin-bottom:10px;">Total Daily Sales combines every cash sale in the date range into one daily total, so individual documents cannot be selected.</div>
     <div id="adv-doc-grid" style="margin-bottom:16px;">
       <p style="color:#6b7280;font-size:0.85rem;">Click "Reload Data" to load documents.</p>
     </div>
@@ -357,8 +357,8 @@
       <div class="form-group">
         <label>Connect Method</label>
         <select id="d-mode">
-          <option value="sdk">SDK Live (local SQL Account, COM)</option>
-          <option value="rest">Restful API (api.sql.my)</option>
+          <option value="sdk">SQL Accounting Offline (SDK / COM)</option>
+          <option value="rest">SQL Accounting Online (Restful API)</option>
         </select>
       </div>
     </div>
@@ -366,7 +366,7 @@
       <div class="form-row">
         <div class="form-group">
           <label>AWSv4 Access Key</label>
-          <input type="text" id="d-access" autocomplete="off" />
+          <input type="password" id="d-access" autocomplete="new-password" placeholder="" />
         </div>
         <div class="form-group">
           <label>AWSv4 Secret Key</label>
@@ -387,12 +387,11 @@
         <button id="d-test" class="btn-secondary">Test Connection</button>
         <span id="d-result" style="font-weight:600;"></span>
       </div>
-      <div class="sub">Keys are stored only in the backend's <code>config.json</code> (never in the Alaya settings table).
-        All transfer types run over Restful API (same rules as SDK Live).</div>
+      <div class="sub">Keys are saved on this PC only and shown hidden. Every document type is supported, with the same rules as Offline (SDK / COM).</div>
     </div>
 
     <div id="sdk-only">
-    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">SQL Account Connection (SDK Live only)</h3>
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">SQL Accounting Offline connection (SDK / COM)</h3>
     <div class="sub" style="margin-top:-4px;">
       Saved on <b>this PC only</b> (the backend's <code>config.json</code>) - not in the shared Alaya
       settings table - so every PC can point at its own SQL Account (e.g. a network PC using
@@ -405,7 +404,7 @@
           <select id="s-sql-company" style="flex:1;min-width:0;">
             <option value="">Loading companies...</option>
           </select>
-          <button id="btn-browse-db" class="btn-secondary" style="flex-shrink:0;" title="Pick the company database (.FDB) like the desktop tool">Browse...</button>
+          <button id="btn-browse-db" class="btn-secondary" style="flex-shrink:0;" title="Pick the company database (.FDB)">Browse...</button>
         </div>
       </div>
       <div class="form-group">
@@ -455,13 +454,13 @@
       <div class="form-group">
         <label>Cash Sales Method</label>
         <select id="s-cashsales-method">
-          <option value="summary">Summary</option>
+          <option value="summary">Total Daily Sales</option>
           <option value="itemize">Itemize</option>
         </select>
       </div>
       <div class="form-group">
         <label>Cash Sales Doc No. Prefix</label>
-        <input type="text" id="s-cashsales-prefix" placeholder="CS" />
+        <input type="text" id="s-cashsales-prefix" placeholder="" />
       </div>
     </div>
 
@@ -646,6 +645,7 @@
   <div id="tab-log" class="tab-panel">
     <div class="btn-row" style="margin-bottom:12px;">
       <button id="btn-clear-log" class="btn-secondary">Clear Log</button>
+      <button id="btn-export-log" class="btn-secondary" title="Save a diagnostic file (no passwords or keys) to send to the developer">Export Log File</button>
     </div>
     <div id="log-panel" class="log-panel">
       <div class="log-entry"><span class="log-time">[--:--:--]</span> <span class="log-info">Plugin loaded. Waiting for ALAYA_INIT...</span></div>
@@ -1145,7 +1145,7 @@ function showDest(d) {
   window.DEST_REST = d.mode === 'rest';   // API key is bound to one SQL company: no company picker
   $('#s-sql-company').closest('.form-group').toggle(!window.DEST_REST);   // the Transfer-tab copy stays hidden
   $('#sdk-only').toggle(!window.DEST_REST);   // Firebird / DCF / eStream login are COM-only
-  $('#d-access').val(d.accessKey || '');
+  $('#d-access').val('').attr('placeholder', d.accessKeySet ? '****************' + (d.accessKeyHint || '') + '  (unchanged)' : '');
   $('#d-secret').attr('placeholder', d.secretKeySet ? '(unchanged)' : '');
   $('#d-host').val(d.host || '');
   $('#d-regsvc').val((d.region || '') + ' / ' + (d.service || ''));
@@ -1161,6 +1161,7 @@ function destBody() {
 $('#d-mode').on('change', function() {
   destPost('/api/settings/destination', { mode: $(this).val() }, function(r) {
     if (r.success) { showDest(r.data); addLog('Destination: ' + r.data.mode, 'log-ok'); }
+    else showInstallPrompt();     // backend unreachable: the helper is not running / not installed
   });
 });
 $('#d-test').on('click', function() {
@@ -1897,17 +1898,39 @@ function tryAutoStartBackend() {
       error: function() {
         if (n >= 15) {
           clearInterval(iv);
-          addLog('Backend still offline after 30s - run start.bat manually (or allow the browser protocol prompt)', 'log-err');
+          addLog('Backend still offline after 30s - the Link to SQL Hybrid helper is probably not installed on this PC', 'log-err');
           $('#backend-badge').removeClass('badge-waiting').addClass('badge-fail').text('Backend: offline');
+          showInstallPrompt();
         }
       }
     });
   }, 2000);
 }
-$('#backend-badge').css('cursor', 'pointer').attr('title', 'Click to start backend (start.bat)').on('click', function() {
+$('#backend-badge').css('cursor', 'pointer').attr('title', 'Click to start the backend').on('click', function() {
   _backendStartAsked = false;
   tryAutoStartBackend();
 });
+// The helper program (backend) is installed per PC. Hosted next to this page, so a new PC just downloads it here.
+var INSTALLER_URL = 'https://github.com/Irs-Jin/alaya-ar-plugin-demo/releases/latest/download/LinkSqlHybrid-Setup.exe';
+function showInstallPrompt() {
+  if ($('#install-prompt-overlay').length) return;
+  var ov = $('<div id="install-prompt-overlay">').css({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(0,0,0,0.45)', 'z-index': 10001, display: 'flex', 'align-items': 'center', 'justify-content': 'center' });
+  var box = $('<div>').css({ background: '#fff', 'border-radius': '12px', padding: '22px 24px', width: '460px',
+    'max-width': '92vw', 'box-shadow': '0 8px 30px rgba(0,0,0,0.25)' });
+  box.append('<h2 style="margin-bottom:6px;">Install Link to SQL Hybrid on this PC</h2>');
+  box.append('<div class="sub" style="margin-bottom:12px;">This PC has no helper program running. It is needed for SQL Accounting Offline (SDK / COM) and keeps your keys on this PC.</div>');
+  box.append('<ol style="margin:0 0 14px 18px;font-size:0.85rem;line-height:1.7;"><li>Click <b>Download installer</b> and run it (no administrator needed).</li>' +
+             '<li>Come back to this page and press <b>I installed it - retry</b>.</li></ol>');
+  var row = $('<div class="btn-row">').css({ 'justify-content': 'flex-end', gap: '8px' });
+  row.append('<a class="btn-primary" style="text-decoration:none;display:inline-block;padding:8px 16px;" href="' + INSTALLER_URL + '" target="_blank" rel="noopener">Download installer</a>');
+  row.append('<button id="install-retry" class="btn-secondary">I installed it - retry</button>');
+  row.append('<button id="install-close" class="btn-secondary">Close</button>');
+  box.append(row);
+  ov.append(box).appendTo('body');
+  $('#install-close').on('click', function() { ov.remove(); });
+  $('#install-retry').on('click', function() { ov.remove(); _backendStartAsked = false; tryAutoStartBackend(); });
+}
 function testBackendConnection() {
   backendAjax({
     url: BACKEND_URL + '/api/health',
@@ -2825,7 +2848,7 @@ function loadAdvDocs() {
   settings.advPreviewDoc = $('#adv-preview-doctype').val() || 'CASH SALES';
   if (settings.advType === 'customer' && settings.advPreviewDoc === 'CASH SALES' &&
       (($('#transfer-method').val() || $('#s-cashsales-method').val() || 'summary') === 'summary')) {
-    showToast('Grid disabled for Cash Sales Summary mode (same as the desktop tool)', true);
+    showToast('Total Daily Sales has no document list - it transfers one daily total per day.', true);
     return;
   }
   addLog('Advanced reload: ' + type + ' ' + from + ' ~ ' + to + ' company ' + cid, 'log-info');
@@ -2895,7 +2918,7 @@ function updateAdvSummaryNote() {
   $('#btn-adv-transfer').prop('disabled', show);
   if (show) {
     window._advGrid = { key: '', type: 'cashsales', docs: [] };
-    $('#adv-doc-grid').html('<p style="color:#6b7280;font-size:0.85rem;">Grid disabled for Cash Sales Summary mode (same as the desktop tool - the daily total needs no row selection).</p>');
+    $('#adv-doc-grid').html('<p style="color:#6b7280;font-size:0.85rem;">No document list for Total Daily Sales - use Itemize to pick individual cash sales.</p>');
   }
 }
 $('input[name="adv-type"]').on('change', function() {
@@ -3698,6 +3721,7 @@ $('#results-list').on('click', '#btn-show-less', function() {
 
 // ── Show transfer results ──
 function showTransferResults(results) {
+  window._lastResults = results;
   var html = '';
   (results || []).forEach(function(r) {
     // 明细里一个都没成功 (全 error) 也算失败, 不能显示绿色 OK 误导人
@@ -3905,6 +3929,35 @@ $('#sql-company, #s-sql-company').on('change', function() {
 });
 
 // ΓöÇΓöÇ Clear log ΓöÇΓöÇ
+// ── Export Log File: page log + backend diagnostics in one text file for the developer (no passwords / keys) ──
+$('#btn-export-log').on('click', function() {
+  function finish(diag, diagErr) {
+    var m = (document.body.innerText || '').match(/build: [^\[]+\[[^\]]+\]/);
+    var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+    var d = new Date();
+    var stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+    var out = {
+      exportedAt: d.toISOString(),
+      page: { build: m ? m[0] : '', userAgent: navigator.userAgent, backendUrl: BACKEND_URL },
+      alayaCompany: (typeof currentAlayaCompanyCode === 'function' ? currentAlayaCompanyCode() : '') || '',
+      settings: backupOf(settings),
+      pageLog: $('#log-panel .log-entry').map(function() { return $(this).text(); }).get(),
+      lastTransferResults: window._lastResults || null,
+      backend: diag || ('unavailable: ' + diagErr)
+    };
+    var blob = new Blob([JSON.stringify(out, null, 2)], { type: 'text/plain' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'LinkSqlHybrid-log-' + stamp + '.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+    addLog('Log file exported: ' + a.download, 'log-ok');
+    showToast('Log file saved: ' + a.download);
+  }
+  fetch(BACKEND_URL + '/api/diagnostics').then(function(r) { return r.json(); })
+    .then(function(r) { finish(r.success ? r.data : null, r.error); })
+    .catch(function(e) { finish(null, String(e)); });
+});
+
 $('#btn-clear-log').on('click', function() {
   $('#log-panel').empty();
   addLog('Log cleared', 'log-info');
