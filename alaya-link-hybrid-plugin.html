@@ -919,7 +919,7 @@ function unpackRows(rowArr) {
 }
 
 // ΓöÇΓöÇ Load/Save Settings (UDF table, localStorage backup) ΓöÇΓöÇ
-function loadSettings() {
+function loadSettingsLegacy() {
   var sql = "SELECT ZZC_Code, ZZC_Description FROM " + SETTINGS_TABLE;
   // row cap must exceed the UDF row count - default 100 silently dropped the
   // newest mapping rows (save re-inserts them at the end of the table)
@@ -949,6 +949,482 @@ function loadSettings() {
     } catch(e) { settings = {}; }
     window._currentCompanyId = settings.alayaCompanyId || 0;
     applySettings();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Settings store v3 - one JSON row per setting group; the Alaya company is its own column
+// (ZZC_HybridCompanyID), the JSON is in ZZC_HybridJson. Company-bound groups: ACCOUNTS, TRANSFER, PAYMODES,
+// BRANCHES, DIVISIONS, SQLCO (+ DESTKEY: this company's encrypted API keys). Company 0: GENERAL, SECRETS
+// (recovery check + encrypted passwords), MACHINE@<id> (this PC's SQL connection).
+// A table without those columns keeps working in the old format (window._v3on stays false).
+// ═══════════════════════════════════════════════════════════════════════════
+var V3_CHUNK = 3800;                       // ZZC_HybridJson is NVARCHAR(4000)
+window._v3on = false;
+window._v3map = {};                        // 'cid|CODE' -> json text (chunks joined)
+window._v3ids = {};                        // 'cid|CODE' -> [ZZC_ID...] as last read from the table
+var V3_PC_KEYS = ['acCashsales', 'acCashrounding', 'acCreditsales', 'acCreditrounding', 'acServicecharge',
+  'descCashsales', 'descCreditsales', 'acCreditnote', 'descCreditnote', 'acPurchase', 'acPurchRounding',
+  'descPurchase', 'projPurchase', 'acDebitnote', 'descDebitnote', 'cashsalesMethod', 'cashsalesPrefix',
+  'transferMethod', 'pmByBranch', 'tCustomer', 'tVendor', 'tCashsales', 'tCashpayment', 'tInvoice', 'tCn',
+  'tCashpurch', 'tCashpurchpay', 'tVendorinv', 'paymodes', 'branches', 'divisions', 'sqlCompanyCode'];
+
+function v3Sql(v) { return "N'" + String(v).replace(/'/g, "''") + "'"; }
+function v3Now() {
+  var d = new Date();
+  function p(n) { return n < 10 ? '0' + n : '' + n; }
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+function v3Rows(msg) {
+  var r = JSON.parse(msg.result);
+  return (r.success && r.results && r.results[0] && r.results[0].rows) ? r.results[0].rows : [];
+}
+function v3Exec(sql, maxRows) {
+  return executeSqlViaHost(sql, 30000, maxRows).then(function(msg) {
+    if (msg.error) throw new Error(msg.error);
+    return msg;
+  });
+}
+
+// the Alaya user who is saving (ZZC_CreatedBy / ZZC_ModifiedBy hold US_ID, the *_RFT_* columns the name)
+function v3User() {
+  if (window._v3user) return Promise.resolve(window._v3user);
+  var sql = "SELECT TOP 1 US_ID, US_Name FROM Users WHERE US_UserID = " + v3Sql(username || '');
+  return v3Exec(sql).then(function(msg) {
+    var r = v3Rows(msg)[0];
+    window._v3user = r ? { id: parseInt(r[0], 10) || null, name: String(r[1] || username || '') } : { id: null, name: username || '' };
+    return window._v3user;
+  }).catch(function() { return { id: null, name: username || '' }; });
+}
+
+// ── settings object <-> groups ──
+function v3Groups(s, cid) {
+  function B(v) { return v ? 1 : 0; }
+  var out = [{ cid: 0, code: 'GENERAL', json: {
+    ac: s.alayaCompany, aid: s.alayaCompanyId, at: s.advType, apd: s.advPreviewDoc,
+    lc: s.alayaLoginClient, lu: s.alayaLoginUser, pg: s.alayaProgram, gg: s.alayaGuid, au: s.alayaApiUrl } }];
+  if (cid > 0) {
+    out.push({ cid: cid, code: 'ACCOUNTS', json: {
+      c: { cs: s.acCashsales, cr: s.acCashrounding, is: s.acCreditsales, ir: s.acCreditrounding, sc: s.acServicecharge,
+           dc: s.descCashsales, di: s.descCreditsales, cn: s.acCreditnote, cnd: s.descCreditnote },
+      v: { p: s.acPurchase, pr: s.acPurchRounding, dp: s.descPurchase, pj: s.projPurchase, dn: s.acDebitnote, dnd: s.descDebitnote } } });
+    out.push({ cid: cid, code: 'TRANSFER', json: {
+      cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod, pb: B(s.pmByBranch),
+      o: { c: B(s.tCustomer), v: B(s.tVendor), cs: B(s.tCashsales), cp: B(s.tCashpayment), i: B(s.tInvoice), n: B(s.tCn),
+           cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv) } } });
+    out.push({ cid: cid, code: 'PAYMODES', json: (s.paymodes || []).filter(function(p) { return p && p.code; })
+      .map(function(p) { return [p.branch || '', p.code, p.acct || '']; }) });
+    out.push({ cid: cid, code: 'BRANCHES', json: (s.branches || []).filter(function(b) { return b && b.code; })
+      .map(function(b) { return { c: b.code, x: b.cashAcct || '', a: b.acct || '', ig: B(b.itemGroup) }; }) });
+    out.push({ cid: cid, code: 'DIVISIONS', json: (s.divisions || []).filter(function(d) { return d && d.code; })
+      .map(function(d) { return { c: d.code, ig: B(d.itemGroup) }; }) });
+    if (s.sqlCompanyCode) out.push({ cid: cid, code: 'SQLCO', json: { code: String(s.sqlCompanyCode) } });
+  }
+  return out.map(function(g) { return { cid: g.cid, code: g.code, text: JSON.stringify(g.json) }; });
+}
+
+function v3Get(map, cid, code) {
+  var t = map[cid + '|' + code];
+  if (t == null) return null;
+  try { return JSON.parse(t); } catch (e) { return null; }
+}
+// this company's part of the settings; keys with nothing saved are left out (the UI then shows the defaults)
+function v3PerCompany(map, cid) {
+  function flag(v) { return v === 1 || v === '1' || v === true; }
+  var s = {}, a = v3Get(map, cid, 'ACCOUNTS'), t = v3Get(map, cid, 'TRANSFER');
+  if (a) {
+    var c = a.c || {}, v = a.v || {};
+    s.acCashsales = c.cs; s.acCashrounding = c.cr; s.acCreditsales = c.is; s.acCreditrounding = c.ir; s.acServicecharge = c.sc;
+    s.descCashsales = c.dc; s.descCreditsales = c.di; s.acCreditnote = c.cn; s.descCreditnote = c.cnd;
+    s.acPurchase = v.p; s.acPurchRounding = v.pr; s.descPurchase = v.dp; s.projPurchase = v.pj; s.acDebitnote = v.dn; s.descDebitnote = v.dnd;
+  }
+  if (t) {
+    var o = t.o || {};
+    s.cashsalesMethod = t.cm; s.cashsalesPrefix = t.cp; s.transferMethod = t.tm; s.pmByBranch = flag(t.pb);
+    s.tCustomer = flag(o.c); s.tVendor = flag(o.v); s.tCashsales = flag(o.cs); s.tCashpayment = flag(o.cp); s.tInvoice = flag(o.i);
+    s.tCn = flag(o.n); s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi);
+  }
+  var pm = v3Get(map, cid, 'PAYMODES'), br = v3Get(map, cid, 'BRANCHES'), dv = v3Get(map, cid, 'DIVISIONS'), sq = v3Get(map, cid, 'SQLCO');
+  s.paymodes = (pm || []).map(function(r) { return { branch: r[0], code: r[1], acct: r[2] }; });
+  s.branches = (br || []).map(function(b) { return { code: b.c, cashAcct: b.x, acct: b.a, itemGroup: flag(b.ig) }; });
+  s.divisions = (dv || []).map(function(d) { return { code: d.c, itemGroup: flag(d.ig) }; });
+  if (sq && sq.code) s.sqlCompanyCode = sq.code;
+  return s;
+}
+function v3General(map) {
+  var g = v3Get(map, 0, 'GENERAL'), s = {};
+  if (g) {
+    s.alayaCompany = g.ac; s.alayaCompanyId = g.aid; s.advType = g.at; s.advPreviewDoc = g.apd;
+    s.alayaLoginClient = g.lc; s.alayaLoginUser = g.lu; s.alayaProgram = g.pg; s.alayaGuid = g.gg; s.alayaApiUrl = g.au;
+  }
+  return s;
+}
+
+// ── table rows <-> map (rows: ZZC_ID, ZZC_HybridCompanyID, ZZC_Code, ZZC_HybridJson) ──
+function v3Index(rows) {
+  var parts = {}, ids = {};
+  rows.forEach(function(r) {
+    if (r[1] === null || r[1] === undefined) return;               // old-format row
+    var cid = parseInt(r[1], 10) || 0, code = String(r[2] || ''), m = /#(\d+)$/.exec(code);
+    var base = m ? code.slice(0, code.length - m[0].length) : code, k = cid + '|' + base;
+    (parts[k] = parts[k] || []).push({ n: m ? parseInt(m[1], 10) : 0, t: r[3] == null ? '' : String(r[3]) });
+    (ids[k] = ids[k] || []).push({ id: r[0], code: code });
+  });
+  var map = {};
+  Object.keys(parts).forEach(function(k) {
+    map[k] = parts[k].sort(function(a, b) { return a.n - b.n; }).map(function(x) { return x.t; }).join('');
+  });
+  window._v3ids = ids;
+  return map;
+}
+function v3Chunks(code, text) {
+  if (text.length <= V3_CHUNK) return [{ code: code, text: text }];
+  var out = [];
+  for (var i = 0, n = 1; i < text.length; i += V3_CHUNK, n++) out.push({ code: code + '#' + n, text: text.slice(i, i + V3_CHUNK) });
+  return out;
+}
+
+// ── write: UPDATE rows that exist, INSERT the rest, DELETE chunks that are no longer needed ──
+function v3Write(groups) {
+  var now = v3Now(), user;
+  return v3User().then(function(u) {
+    user = u;
+    return v3Exec("SELECT ZZC_ID, ZZC_HybridCompanyID, ZZC_Code, ZZC_HybridJson FROM " + SETTINGS_TABLE +
+                  " WHERE ZZC_HybridCompanyID IS NOT NULL", 5000);
+  }).then(function(msg) {
+    var existing = {};                                               // 'cid|code(with #n)' -> ZZC_ID
+    v3Rows(msg).forEach(function(r) { existing[(parseInt(r[1], 10) || 0) + '|' + r[2]] = r[0]; });
+    var stmts = [], keep = {};
+    var uid = user.id == null ? 'NULL' : user.id, uname = v3Sql(user.name);
+    groups.forEach(function(g) {
+      v3Chunks(g.code, g.text).forEach(function(ch) {
+        var k = g.cid + '|' + ch.code;
+        keep[k] = true;
+        if (existing[k] != null) {
+          stmts.push("UPDATE " + SETTINGS_TABLE + " SET ZZC_HybridJson = " + v3Sql(ch.text) + ", ZZC_DateModified = '" + now +
+                     "', ZZC_ModifiedBy = " + uid + ", ZZC_RFT_ModifiedBy = " + uname + " WHERE ZZC_ID = " + existing[k]);
+        } else {
+          stmts.push("INSERT INTO " + SETTINGS_TABLE + " (ZZC_Code, ZZC_Description, ZZC_HybridCompanyID, ZZC_HybridJson, " +
+                     "ZZC_DateCreated, ZZC_CreatedBy, ZZC_RFT_CreatedBy, ZZC_DateModified, ZZC_ModifiedBy, ZZC_RFT_ModifiedBy) VALUES (" +
+                     v3Sql(ch.code) + ", " + v3Sql('Link to SQL Hybrid') + ", " + g.cid + ", " + v3Sql(ch.text) + ", '" + now + "', " +
+                     uid + ", " + uname + ", '" + now + "', " + uid + ", " + uname + ")");
+        }
+      });
+      // chunks of this group that exist in the table but are no longer produced
+      Object.keys(existing).forEach(function(k) {
+        var p = k.indexOf('|'), cidK = k.slice(0, p), codeK = k.slice(p + 1);
+        var base = codeK.replace(/#[0-9]+$/, '');
+        if (parseInt(cidK, 10) === g.cid && base === g.code && !keep[k]) {
+          stmts.push("DELETE FROM " + SETTINGS_TABLE + " WHERE ZZC_ID = " + existing[k]);
+        }
+      });
+    });
+    var chain = Promise.resolve();
+    stmts.forEach(function(st) { chain = chain.then(function() { return v3Exec(st); }); });
+    return chain.then(function() { return stmts.length; });
+  });
+}
+
+// keep the in-memory map + the copy on this PC in step with what was just saved
+function v3Remember(groups) {
+  groups.forEach(function(g) { window._v3map[g.cid + '|' + g.code] = g.text; });
+  v3CachePost();
+}
+function v3CachePost() {
+  try {
+    fetch(BACKEND_URL + '/api/settings/cache', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ savedAt: v3Now(), map: window._v3map }) }).catch(function() {});
+  } catch (e) {}
+}
+
+// ── per-company swap on Alaya company change ──
+function v3ApplyCompany(cid) {
+  V3_PC_KEYS.forEach(function(k) { delete settings[k]; });
+  $.extend(settings, v3PerCompany(window._v3map, cid));
+  settings.sqlCompanyCode = settings.sqlCompanyCode || '';
+  fillCompanyFields($.extend({}, defaultSettings, settings));
+  loadDestination();
+  addLog('Settings for company ID ' + cid + ' loaded (' + (window._v3map[cid + '|ACCOUNTS'] ? 'saved' : 'new - nothing saved yet') + ')', 'log-info');
+}
+// Account codes, Transfer Settings/Options, mappings, SQL company: everything that belongs to one Alaya company
+function fillCompanyFields(s) {
+  var m = s.transferMethod || s.cashsalesMethod || 'summary';
+  $('#transfer-method').val(m);
+  $('#s-cashsales-method').val(m);
+  $('#s-cashsales-prefix').val(s.cashsalesPrefix || '');
+  $('#s-ac-cashsales').val(s.acCashsales || '');
+  $('#s-ac-cashrounding').val(s.acCashrounding || '');
+  $('#s-ac-creditsales').val(s.acCreditsales || '');
+  $('#s-ac-creditrounding').val(s.acCreditrounding || '');
+  $('#s-ac-servicecharge').val(s.acServicecharge || '');
+  $('#s-desc-cashsales').val(s.descCashsales || '');
+  $('#s-desc-creditsales').val(s.descCreditsales || '');
+  $('#s-ac-purchase').val(s.acPurchase || '');
+  $('#s-ac-purchrounding').val(s.acPurchRounding || '');
+  $('#s-desc-purchase').val(s.descPurchase || '');
+  $('#s-proj-purchase').val(s.projPurchase || '');
+  $('#s-ac-creditnote').val(s.acCreditnote || '');
+  $('#s-desc-creditnote').val(s.descCreditnote || '');
+  $('#s-ac-debitnote').val(s.acDebitnote || '');
+  $('#s-desc-debitnote').val(s.descDebitnote || '');
+  $('#s-pm-bybranch').prop('checked', !!s.pmByBranch);
+  $('#s-t-customer').prop('checked', !!s.tCustomer);
+  $('#s-t-cashpayment').prop('checked', s.tCashpayment !== false);
+  $('#s-t-vendor').prop('checked', !!s.tVendor);
+  $('#s-t-cashsales').prop('checked', !!s.tCashsales);
+  $('#s-t-invoice').prop('checked', !!s.tInvoice);
+  $('#s-t-cn').prop('checked', !!s.tCn);
+  $('#s-t-cashpurch').prop('checked', !!s.tCashpurch);
+  $('#s-t-cashpurchpay').prop('checked', !!s.tCashpurchpay);
+  $('#s-t-vendorinv').prop('checked', !!s.tVendorinv);
+  renderPaymodeView(); renderBranchTable(s.branches || []); renderDivisionTable(s.divisions || []);
+  var sq = s.sqlCompanyCode || '';
+  if (sq && $('#sql-company option[value="' + sq + '"]').length) $('#sql-company, #s-sql-company').val(sq);
+}
+
+// ── old format -> v3 (once): every company found in the old rows gets its own groups ──
+function v3FromLegacy(rows) {
+  var pairs = rows.filter(function(r) { return r[1] === null || r[1] === undefined; }).map(function(r) { return [r[2], r[4] == null ? '' : String(r[4])]; });
+  var cids = {}, owner = 0;
+  pairs.forEach(function(r) {
+    var p = parseScopedKey(r[0]);
+    if (p) cids[p.cid] = true;
+    if (r[0] === 'GENERAL') { try { owner = parseInt(JSON.parse(r[1] || '{}').aid, 10) || 0; } catch (e) {} }
+  });
+  if (owner) cids[owner] = true;
+  var groups = [], general = null;
+  Object.keys(cids).forEach(function(k) {
+    var cid = parseInt(k, 10);
+    var forCid = pairs.map(function(r) {
+      if (r[0] !== 'GENERAL') return r;
+      var g = {}; try { g = JSON.parse(r[1] || '{}'); } catch (e) {}
+      g.aid = cid; return [r[0], JSON.stringify(g)];
+    });
+    var s = unpackRows(forCid);
+    s.alayaCompanyId = cid;
+    s.sqlCompanyCode = (s.sqlCompanyByCid || {})[cid] || '';
+    v3Groups(s, cid).forEach(function(g) { if (g.code === 'GENERAL') { if (cid === owner || !general) general = g; } else groups.push(g); });
+  });
+  if (general) groups.push(general);
+  return groups;
+}
+
+// ── encrypted secrets in the database (recovery password; WebCrypto PBKDF2 + AES-GCM) ──
+function v3B64(buf) { var a = new Uint8Array(buf), s = ''; for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); }
+function v3Unb64(t) { var s = atob(t), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+function v3Key(pass, saltB64) {
+  var enc = new TextEncoder();
+  return crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']).then(function(base) {
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: v3Unb64(saltB64), iterations: 200000, hash: 'SHA-256' }, base,
+      { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  });
+}
+function v3Enc(key, plain) {
+  if (!plain) return Promise.resolve('');
+  var iv = crypto.getRandomValues(new Uint8Array(12));
+  return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(plain)).then(function(ct) { return v3B64(iv) + '.' + v3B64(ct); });
+}
+function v3Dec(key, packed) {
+  if (!packed) return Promise.resolve('');
+  var p = packed.split('.');
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: v3Unb64(p[0]) }, key, v3Unb64(p[1])).then(function(pt) { return new TextDecoder().decode(pt); });
+}
+function v3AskText(title, hint, two) {
+  return new Promise(function(resolve) {
+    $('#v3-ask-overlay').remove();
+    var ov = $('<div id="v3-ask-overlay">').css({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)',
+      'z-index': 100001, display: 'flex', 'align-items': 'center', 'justify-content': 'center' });
+    var box = $('<div>').css({ background: '#fff', 'border-radius': '12px', padding: '20px 24px', width: '420px', 'max-width': '92vw' });
+    box.append($('<h2 style="margin-bottom:6px;">').text(title)).append($('<div class="sub" style="margin-bottom:10px;">').text(hint));
+    var i1 = $('<input type="password" autocomplete="new-password" style="width:100%;margin-bottom:8px;" placeholder="Recovery password">');
+    var i2 = $('<input type="password" autocomplete="new-password" style="width:100%;margin-bottom:8px;" placeholder="Type it again">');
+    var err = $('<div style="color:#b91c1c;font-size:0.8rem;min-height:1em;margin-bottom:6px;">');
+    box.append(i1); if (two) box.append(i2); box.append(err);
+    var ok = $('<button class="btn-primary">OK</button>'), no = $('<button class="btn-secondary">Skip</button>');
+    box.append($('<div class="btn-row" style="justify-content:flex-end;gap:8px;">').append(no).append(ok));
+    ov.append(box).appendTo('body'); i1.focus();
+    ok.on('click', function() {
+      var v = i1.val();
+      if (v.length < 6) { err.text('At least 6 characters.'); return; }
+      if (two && v !== i2.val()) { err.text('The two passwords are not the same.'); return; }
+      ov.remove(); resolve(v);
+    });
+    no.on('click', function() { ov.remove(); resolve(null); });
+  });
+}
+function v3Secrets(path, opts) {
+  opts = opts || {};
+  opts.headers = { 'Content-Type': 'application/json' };
+  return fetch(BACKEND_URL + path, opts).then(function(r) { return r.json(); });
+}
+// the recovery password is kept by the local backend (Windows-encrypted); asked for once, when the first backup is made
+function v3Recovery(create) {
+  return v3Secrets('/api/settings/secrets').then(function(r) {
+    var have = r && r.success && r.data && r.data.recovery;
+    if (have) return have;
+    if (!create) return null;
+    return v3AskText('Set a recovery password',
+      'It protects the copy of your keys that is kept in the Alaya database. If this PC breaks, type it once on the new PC and everything comes back. Write it down - it cannot be recovered.', true)
+      .then(function(pw) {
+        if (!pw) return null;
+        return v3Secrets('/api/settings/secrets', { method: 'POST', body: JSON.stringify({ recovery: pw }) }).then(function() { return pw; });
+      });
+  });
+}
+// backup: this PC's secrets -> encrypted rows in the database
+function v3BackupSecrets() {
+  return v3Secrets('/api/settings/secrets/export').then(function(ex) {
+    if (!ex.success) return;
+    var d = ex.data;
+    if (!d.alayaLoginPass && !d.fbPassword && !d.estreamPassword && !Object.keys(d.dest || {}).length) return;   // nothing secret on this PC
+    return v3Recovery(true).then(function(pass) {
+      if (!pass) { addLog('Keys/passwords NOT backed up (no recovery password set) - they stay on this PC only', 'log-warn'); return; }
+      var old = v3Get(window._v3map, 0, 'SECRETS'), salt = old && old.salt ? old.salt : v3B64(crypto.getRandomValues(new Uint8Array(16)));
+      return v3Key(pass, salt).then(function(key) {
+        return Promise.all([v3Enc(key, 'LSH-OK'), v3Enc(key, d.alayaLoginPass), v3Enc(key, d.fbPassword), v3Enc(key, d.estreamPassword)]).then(function(e) {
+          var groups = [{ cid: 0, code: 'SECRETS', text: JSON.stringify({ salt: salt, check: e[0], a: e[1], f: e[2], e: e[3] }) }];
+          var cids = Object.keys(d.dest || {});
+          return Promise.all(cids.map(function(c) { return Promise.all([v3Enc(key, d.dest[c].ak), v3Enc(key, d.dest[c].sk)]); })).then(function(pairs) {
+            cids.forEach(function(c, i) { groups.push({ cid: parseInt(c, 10), code: 'DESTKEY', text: JSON.stringify({ a: pairs[i][0], s: pairs[i][1] }) }); });
+            return v3Write(groups).then(function() { v3Remember(groups); addLog('Keys and passwords backed up (encrypted) to the Alaya database', 'log-ok'); });
+          });
+        });
+      });
+    });
+  }).catch(function(e) { addLog('Secrets backup failed: ' + (e && e.message || e), 'log-err'); });
+}
+// restore on a PC that has none of the keys but the database has an encrypted copy
+function v3RestoreSecrets() {
+  var sec = v3Get(window._v3map, 0, 'SECRETS');
+  if (!sec || !sec.check) return Promise.resolve();
+  return v3Secrets('/api/settings/secrets/export').then(function(ex) {
+    if (!ex.success) return;
+    var d = ex.data, hasDest = Object.keys(d.dest || {}).length > 0;
+    if (d.alayaLoginPass || d.fbPassword || hasDest) return;                // this PC already has its keys
+    return v3AskText('Restore keys from the Alaya database',
+      'This PC has no keys yet, but a backup exists in the Alaya database. Enter the recovery password to restore them.', false).then(function(pw) {
+      if (!pw) return;
+      return v3Key(pw, sec.salt).then(function(key) {
+        return v3Dec(key, sec.check).then(function(chk) {
+          if (chk !== 'LSH-OK') throw new Error('bad');
+          var body = { dest: {} };
+          var jobs = [v3Dec(key, sec.a), v3Dec(key, sec.f), v3Dec(key, sec.e)];
+          Object.keys(window._v3map).forEach(function(k) {
+            var p = k.indexOf('|'), cid = k.slice(0, p);
+            if (k.slice(p + 1) !== 'DESTKEY') return;
+            var g = v3Get(window._v3map, cid, 'DESTKEY') || {};
+            jobs.push(Promise.all([v3Dec(key, g.a), v3Dec(key, g.s)]).then(function(x) { body.dest[cid] = { ak: x[0], sk: x[1] }; }));
+          });
+          return Promise.all(jobs).then(function(v) {
+            body.alayaLoginPass = v[0]; body.fbPassword = v[1]; body.estreamPassword = v[2];
+            return v3Secrets('/api/settings/secrets/import', { method: 'POST', body: JSON.stringify(body) })
+              .then(function() { return v3Secrets('/api/settings/secrets', { method: 'POST', body: JSON.stringify({ recovery: pw }) }); })
+              .then(function() { showToast('Keys restored from the Alaya database'); addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination(); });
+          });
+        });
+      }).catch(function() { showToast('Wrong recovery password', true); addLog('Restore failed: wrong recovery password', 'log-err'); });
+    });
+  }).catch(function() {});
+}
+
+// ── this PC's SQL connection: one MACHINE@<id> row per PC; a new PC can copy another PC's ──
+function v3MachineGroup(s, id, name) {
+  return { cid: 0, code: 'MACHINE@' + id, text: JSON.stringify({ n: name, d: s.dcfPath, h: s.fbHost, p: s.fbPort, u: s.fbUser, e: s.estreamUser, t: v3Now() }) };
+}
+function v3OfferMachineCopy(machine) {
+  var mine = window._v3map['0|MACHINE@' + machine.id];
+  if (mine) return;
+  var others = Object.keys(window._v3map).filter(function(k) { return k.indexOf('0|MACHINE@') === 0; }).map(function(k) {
+    var o = v3Get(window._v3map, 0, k.slice(2)); o.id = k.slice(10); return o;
+  });
+  if (!others.length) return;
+  $('#v3-copy-overlay').remove();
+  var ov = $('<div id="v3-copy-overlay">').css({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)',
+    'z-index': 100001, display: 'flex', 'align-items': 'center', 'justify-content': 'center' });
+  var box = $('<div>').css({ background: '#fff', 'border-radius': '12px', padding: '20px 24px', width: '520px', 'max-width': '92vw' });
+  box.append('<h2 style="margin-bottom:6px;">Copy the SQL connection from another PC?</h2>');
+  box.append('<div class="sub" style="margin-bottom:10px;">This PC (' + escHtml(machine.name) + ') has no saved SQL connection yet. Pick the PC it should copy from (DCF path, Firebird, eStream user), or skip and set it here.</div>');
+  others.forEach(function(o) {
+    var b = $('<button class="btn-secondary" style="display:block;width:100%;text-align:left;margin-bottom:6px;">')
+      .text((o.n || o.id) + '  -  ' + (o.d || '') + '  (saved ' + (o.t || '') + ')');
+    b.on('click', function() {
+      settings.dcfPath = o.d || settings.dcfPath; settings.fbHost = o.h || settings.fbHost; settings.fbPort = o.p || settings.fbPort;
+      settings.fbUser = o.u || settings.fbUser; settings.estreamUser = o.e || settings.estreamUser;
+      $('#s-dcf-path').val(settings.dcfPath); $('#s-fb-host').val(settings.fbHost); $('#s-fb-port').val(settings.fbPort);
+      $('#s-fb-user').val(settings.fbUser); $('#s-estream-user').val(settings.estreamUser);
+      pushConnectionSettingsToBackend(settings);
+      ov.remove(); addLog('SQL connection copied from ' + (o.n || o.id) + ' - press Save to keep it', 'log-ok'); showToast('Copied - press Save');
+    });
+    box.append(b);
+  });
+  var skip = $('<button class="btn-secondary" style="margin-top:6px;">Skip</button>'); skip.on('click', function() { ov.remove(); });
+  box.append(skip); ov.append(box).appendTo('body');
+}
+
+// v3 boot: rows -> map -> settings for the default company. The old format is migrated once.
+function v3Finish() {
+  window._currentCompanyId = settings.alayaCompanyId || 0;
+  settings.sqlCompanyByCid = v3SqlByCid(window._v3map);
+  applySettings();
+  v3Secrets('/api/settings/machine').then(function(r) {
+    if (!r || !r.success) return;
+    window._machine = r.data;
+    v3OfferMachineCopy(r.data);
+  }).catch(function() {});
+  v3RestoreSecrets();
+}
+function v3SqlByCid(map) {
+  var out = {};
+  Object.keys(map).forEach(function(k) {
+    var p = k.indexOf('|');
+    if (k.slice(p + 1) === 'SQLCO') { var g = v3Get(map, k.slice(0, p), 'SQLCO'); if (g && g.code) out[parseInt(k.slice(0, p), 10)] = g.code; }
+  });
+  return out;
+}
+function v3Boot(rows, fromCache) {
+  var map = fromCache || v3Index(rows);
+  window._v3map = map;
+  window._v3on = true;
+  var hasV3 = Object.keys(map).length > 0;
+  function useMap() {
+    settings = v3General(window._v3map);
+    $.extend(settings, v3PerCompany(window._v3map, settings.alayaCompanyId || 0));
+    v3Finish();
+  }
+  var hasLegacy = !fromCache && rows.some(function(r) { return r[1] === null || r[1] === undefined; });
+  if (!hasV3 && hasLegacy) {
+    addLog('Moving the old settings to the company-bound format (one time)...', 'log-info');
+    var groups = v3FromLegacy(rows);
+    return v3Write(groups).then(function() {
+      v3Remember(groups);
+      addLog('Old settings moved: ' + groups.length + ' groups (the old rows are kept)', 'log-ok');
+      useMap();
+    });
+  }
+  if (!hasV3) { addLog('No saved settings yet, using defaults', 'log-info'); settings = {}; v3Finish(); return Promise.resolve(); }
+  addLog('Settings loaded from the Alaya database', 'log-ok');
+  if (!fromCache) v3CachePost();                 // keep this PC's copy (AppData) in step with the database
+  useMap();
+  return Promise.resolve();
+}
+function loadSettings() {
+  var sql = "SELECT ZZC_ID, ZZC_HybridCompanyID, ZZC_Code, ZZC_HybridJson, ZZC_Description FROM " + SETTINGS_TABLE;
+  executeSqlViaHost(sql, 30000, 5000).then(function(msg) {
+    if (msg.error) throw new Error(msg.error);
+    return v3Boot(v3Rows(msg));
+  }).catch(function(err) {
+    var m = String(err && err.message || err);
+    if (/invalid column|ZZC_Hybrid/i.test(m)) {
+      window._v3on = false;
+      addLog('The settings table has no CompanyID column - using the old format (add the fields in Module Editor to switch)', 'log-warn');
+      return loadSettingsLegacy();
+    }
+    // database not reachable: the copy kept on this PC (AppData), then the old browser backup
+    addLog('Alaya database not reachable (' + m + ') - trying the copy on this PC', 'log-warn');
+    return v3Secrets('/api/settings/cache').then(function(r) {
+      if (r && r.success && r.data && r.data.map) { addLog('Settings loaded from the copy on this PC (read-only until the database is back)', 'log-info'); return v3Boot(null, r.data.map); }
+      return loadSettingsLegacy();
+    }).catch(function() { return loadSettingsLegacy(); });
   });
 }
 
@@ -1151,15 +1627,15 @@ function showDest(d) {
   $('#d-regsvc').val((d.region || '') + ' / ' + (d.service || ''));
 }
 function loadDestination() {
-  backendAjax({ url: BACKEND_URL + '/api/settings/destination', type: 'GET',
+  backendAjax({ url: BACKEND_URL + '/api/settings/destination?companyId=' + (currentAlayaCompanyID() || 0), type: 'GET',
     success: function(r) { if (r.success) showDest(r.data); } });
 }
 function destBody() {
   return { mode: $('#d-mode').val(), accessKey: $('#d-access').val(), secretKey: $('#d-secret').val(),
-           host: $('#d-host').val() };
+           host: $('#d-host').val(), companyId: currentAlayaCompanyID() || 0 };
 }
 $('#d-mode').on('change', function() {
-  destPost('/api/settings/destination', { mode: $(this).val() }, function(r) {
+  destPost('/api/settings/destination', { mode: $(this).val(), companyId: currentAlayaCompanyID() || 0 }, function(r) {
     if (r.success) { showDest(r.data); addLog('Destination: ' + r.data.mode, 'log-ok'); }
     else showInstallPrompt();     // backend unreachable: the helper is not running / not installed
   });
@@ -1169,7 +1645,7 @@ $('#d-test').on('click', function() {
   destPost('/api/settings/destination', destBody(), function(s) {
     if (!s.success) { $('#d-result').css('color', '#b91c1c').text(s.error || 'Save failed'); return; }
     $('#d-secret').val('');
-    destPost('/api/settings/destination/test', {}, function(r) {
+    destPost('/api/settings/destination/test', { companyId: currentAlayaCompanyID() || 0 }, function(r) {
       $('#d-result').css('color', r.success ? '#15803d' : '#b91c1c').text(r.success ? r.message : (r.error || 'Failed'));
       addLog('REST Test Connection: ' + (r.message || r.error), r.success ? 'log-ok' : 'log-err');
       loadDestination();
@@ -1266,8 +1742,9 @@ function saveSettings(mappingCid) {
   if (settings.alayaLoginPass || window._passLoaded) secretsPost(settings.alayaLoginPass);
   // Destination (mode / Access+Secret key / host) is saved by the main Save too, not only by Test Connection;
   // a blank Secret Key field keeps the stored one.
-  destPost('/api/settings/destination', destBody(), function(r) {
-    if (r && r.success) { $('#d-secret').val(''); showDest(r.data); }
+  var _db = destBody(); _db.companyId = (typeof mappingCid === 'number') ? mappingCid : (settings.alayaCompanyId || 0);   // the company being saved
+  destPost('/api/settings/destination', _db, function(r) {
+    if (r && r.success && _db.companyId === (currentAlayaCompanyID() || 0)) { $('#d-secret').val(''); showDest(r.data); }
     else addLog('Destination NOT saved: ' + ((r && r.error) || 'backend unreachable'), 'log-err');
   });
 
@@ -1284,6 +1761,7 @@ function saveSettings(mappingCid) {
   if (settings.sqlCompanyCode && saveCid > 0) {
     settings.sqlCompanyByCid[saveCid] = settings.sqlCompanyCode;
   }
+  if (window._v3on) { v3SaveFlow(saveCid, typedPass, identityChanged); return; }
   var rows = packRows(settings, saveCid);
   // Over-long rows are dropped BEFORE the DELETE is built (the previous
   // revision deleted first and then skipped the insert, permanently losing
@@ -1361,6 +1839,27 @@ function saveSettings(mappingCid) {
     setSaving(false);
     showToast('UDF save failed, kept local backup: ' + err.message, true);
     addLog('Save to UDF failed (' + err.message + '). Local backup kept. To enable server storage, create a UDF module with code LINKSQLHYB in Module Editor.', 'log-err');
+  });
+}
+
+
+function v3SaveFlow(saveCid, typedPass, identityChanged) {
+  var groups = v3Groups(settings, saveCid);
+  if (window._machine) groups.push(v3MachineGroup(settings, window._machine.id, window._machine.name));
+  v3Remember(groups);                                   // this PC (memory + AppData copy) first ...
+  v3Write(groups).then(function() { return v3BackupSecrets(); }).then(function() {   // ... then the Alaya database
+    showToast('Settings saved to the Alaya database (company ID ' + saveCid + ')');
+    addLog('Settings saved: ' + groups.length + ' groups for company ID ' + saveCid + ' in the Alaya database; copy kept on this PC', 'log-ok');
+    testBackendConnection();
+    if (typedPass) window._alayaPass = typedPass;
+    if (typedPass || identityChanged || (settings.alayaApiUrl && String(settings.alayaApiUrl).replace(/\/+$/, '') + '/' !== apiUrl)) {
+      requestToken(typedPass ? { pass: typedPass } : {});
+    }
+    setSaving(false);
+  }).catch(function(err) {
+    setSaving(false);
+    showToast('Could not save to the Alaya database: ' + err.message + ' - the settings are kept on this PC', true);
+    addLog('Save to the Alaya database failed (' + err.message + '). The copy on this PC is up to date.', 'log-err');
   });
 }
 
@@ -1979,6 +2478,7 @@ function currentAlayaCompanyCode() {
 // Same scoped-wins dedupe as unpackRows: a legacy row and a scoped row for
 // the same code show the scoped value once, never as duplicates.
 function applyCompanyMappings(cid) {
+  if (window._v3on) { settings.sqlCompanyByCid = v3SqlByCid(window._v3map); v3ApplyCompany(cid); return; }
   if (!window._allSettingRows) return; // UDF never loaded: keep current UI
   var pm = [], br = [], dv = [];
   var seen = {};
