@@ -2429,16 +2429,38 @@ function showInstallPrompt() {
     'max-width': '92vw', 'box-shadow': '0 8px 30px rgba(0,0,0,0.25)' });
   box.append('<h2 style="margin-bottom:6px;">Install Link to SQL Hybrid on this PC</h2>');
   box.append('<div class="sub" style="margin-bottom:12px;">This PC has no helper program running. It is needed for SQL Accounting Offline (SDK / COM) and keeps your keys on this PC.</div>');
-  box.append('<ol style="margin:0 0 14px 18px;font-size:0.85rem;line-height:1.7;"><li>Click <b>Download installer</b> and run it (no administrator needed).</li>' +
-             '<li>Come back to this page and press <b>I installed it - retry</b>.</li></ol>');
+  box.append('<ol style="margin:0 0 14px 18px;font-size:0.85rem;line-height:1.7;"><li>Click <b>Download installer</b>.</li>' +
+             '<li>Double-click the downloaded file (no administrator needed). It installs and starts by itself - this page continues automatically.</li></ol>');
+  box.append('<div id="install-watch" style="font-size:0.8rem;color:#6b7280;min-height:1.2em;margin-bottom:8px;"></div>');
   var row = $('<div class="btn-row">').css({ 'justify-content': 'flex-end', gap: '8px' });
   row.append('<a class="btn-primary" style="text-decoration:none;display:inline-block;padding:8px 16px;" href="' + INSTALLER_URL + '" target="_blank" rel="noopener">Download installer</a>');
   row.append('<button id="install-retry" class="btn-secondary">I installed it - retry</button>');
   row.append('<button id="install-close" class="btn-secondary">Close</button>');
   box.append(row);
   ov.append(box).appendTo('body');
-  $('#install-close').on('click', function() { ov.remove(); });
-  $('#install-retry').on('click', function() { ov.remove(); _backendStartAsked = false; tryAutoStartBackend(); });
+  row.find('a').on('click', function() { startInstallWatch(); });
+  $('#install-close').on('click', function() { stopInstallWatch(); ov.remove(); });
+  $('#install-retry').on('click', function() { stopInstallWatch(); ov.remove(); _backendStartAsked = false; tryAutoStartBackend(); });
+}
+// after Download: wait for the helper to come online, then carry on without any more clicks
+var _installWatch = null;
+function stopInstallWatch() { if (_installWatch) { clearInterval(_installWatch); _installWatch = null; } }
+function startInstallWatch() {
+  stopInstallWatch();
+  var n = 0;
+  $('#install-watch').text('Waiting for the installer to finish...');
+  _installWatch = setInterval(function() {
+    n++;
+    backendAjax({ url: BACKEND_URL + '/api/health', type: 'GET', success: function() {
+      stopInstallWatch();
+      try { localStorage.setItem('lsh-backend-seen', '1'); } catch (e) {}
+      $('#install-prompt-overlay').remove();
+      showToast('Link to SQL Hybrid helper is running');
+      addLog('Helper installed and online', 'log-ok');
+      testBackendConnection(); loadSettings(); loadSqlCompanies();
+    }, error: function() {} });
+    if (n > 150) { stopInstallWatch(); $('#install-watch').text('Still waiting - after the installer finishes press "I installed it - retry".'); }
+  }, 2000);
 }
 function testBackendConnection() {
   backendAjax({
