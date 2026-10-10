@@ -465,7 +465,7 @@
       </div>
       <div class="form-group">
         <label>Cash Sales Doc No. Prefix</label>
-        <input type="text" id="s-cashsales-prefix" placeholder="" />
+        <input type="text" id="s-cashsales-prefix" placeholder="" maxlength="3" />
       </div>
     </div>
 
@@ -494,12 +494,12 @@
           <input type="text" id="s-ac-servicecharge" placeholder="500-000" />
         </div>
         <div class="form-group">
-          <label>Cash Sales Description</label>
-          <input type="text" id="s-desc-cashsales" placeholder="CASH SALES - BY ITEMIZED" />
+          <label>Cash Sales Description (Max 70 Char.)</label>
+          <input type="text" id="s-desc-cashsales" placeholder="CASH SALES - BY ITEMIZED" maxlength="70" />
         </div>
         <div class="form-group">
-          <label>Credit Sales Description</label>
-          <input type="text" id="s-desc-creditsales" placeholder="INVOICE" />
+          <label>Credit Sales Description (Max 70 Char.)</label>
+          <input type="text" id="s-desc-creditsales" placeholder="INVOICE" maxlength="70" />
         </div>
         <div class="form-group">
           <label>Credit Note A/C</label>
@@ -2806,6 +2806,7 @@ function syncSalesBranchProj() {
   if (!summary) $('#s-sales-branch-proj').prop('checked', false);
 }
 $(document).on('change', '#s-cashsales-method', syncSalesBranchProj);
+$(document).on('change', '#transfer-method', function() { $('#s-cashsales-method').val($(this).val()); syncSalesBranchProj(); });
 setInterval(syncSalesBranchProj, 1000);   // settings are filled with .val(): keep in step
 function warnItemGroupOnce() {
   if (_itemGroupWarned) return;
@@ -4065,22 +4066,47 @@ $('#btn-transfer').on('click', function() {
   var company = $('#sql-company').val();
 
   if (!from || !to) { showToast('Please select date range', true); return; }
+  if (from > to) { showToast('[To Date] must be greater than or equal to [From Date]', true); return; }
   if (!company && !window.DEST_REST) { showToast('Please select SQL Account company', true); return; }
   var alayaCid = currentAlayaCompanyID();
   if (!alayaCid) { showToast('Please select an Alaya company', true); return; }
 
   // Auto-load master data (customers + CompanyCustomer CC merge) before
   // transferring: one click = load + transfer. Manual Load button removed.
-  if (alayaData._masterCid === alayaCid && alayaData.customerRaw && alayaData.customerRaw.length) {
-    runTransferMaster(from, to, company, alayaCid);
-  } else {
-    addLog('Auto-loading Alaya data for company ' + alayaCid + ' (' + currentAlayaCompanyCode() + ')...', 'log-info');
-    loadMasterData(function() {
-      alayaData._masterCid = alayaCid;
+  function go() {
+    if (alayaData._masterCid === alayaCid && alayaData.customerRaw && alayaData.customerRaw.length) {
       runTransferMaster(from, to, company, alayaCid);
-    });
+    } else {
+      addLog('Auto-loading Alaya data for company ' + alayaCid + ' (' + currentAlayaCompanyCode() + ')...', 'log-info');
+      loadMasterData(function() {
+        alayaData._masterCid = alayaCid;
+        runTransferMaster(from, to, company, alayaCid);
+      });
+    }
   }
+  // same warnings as the original Form1 when documents are transferred without their master data
+  var warns = [];
+  if (!window._advOnly) {
+    if ($('#s-t-cashsales').is(':checked') && !$('#s-t-customer').is(':checked')) warns.push('You have not selected to transfer Customer data. Cash Sales data might be inconsistent while transfering.');
+    if ($('#s-t-invoice').is(':checked') && !$('#s-t-customer').is(':checked')) warns.push('You have not selected to transfer Customer data. Credit Sales data might be inconsistent while transfering.');
+    if ($('#s-t-vendorinv').is(':checked') && !$('#s-t-vendor').is(':checked')) warns.push('You have not selected to transfer Vendor data. Purchase Invoice data might be inconsistent while transfering.');
+  }
+  (function ask(i) {
+    if (i >= warns.length) { go(); return; }
+    askYesNo('Warning', warns[i] + ' Are you sure want to continue?', function(yes) { if (yes) ask(i + 1); });
+  })(0);
 });
+// in-page Yes / No (browser confirm() can be blocked inside the Alaya frame)
+function askYesNo(title, msg, cb) {
+  $('#yn-overlay').remove();
+  var ov = $('<div id="yn-overlay">').css({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)',
+    'z-index': 100003, display: 'flex', 'align-items': 'center', 'justify-content': 'center' });
+  var box = $('<div>').css({ background: '#fff', 'border-radius': '10px', padding: '18px 22px', width: '460px', 'max-width': '92vw' });
+  box.append($('<h3 style="margin-bottom:8px;">').text('⚠ ' + title), $('<div style="margin-bottom:14px;line-height:1.5;">').text(msg));
+  var yes = $('<button class="btn-primary">Yes</button>'), no = $('<button class="btn-secondary" style="margin-right:8px;">No</button>');
+  yes.on('click', function() { ov.remove(); cb(true); }); no.on('click', function() { ov.remove(); cb(false); });
+  box.append($('<div style="text-align:right;">').append(no, yes)); ov.append(box).appendTo('body');
+}
 
 function runTransferMaster(from, to, company, alayaCid) {
   addLog('Starting transfer: ' + from + ' ~ ' + to + ' to ' + company, 'log-info');
