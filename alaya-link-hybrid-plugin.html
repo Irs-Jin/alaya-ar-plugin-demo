@@ -1368,6 +1368,12 @@ function v3MachineGroup(s, id, name) {
   return { cid: 0, code: 'MACHINE@' + id, text: JSON.stringify({ n: name, d: s.dcfPath, h: s.fbHost, p: s.fbPort, u: s.fbUser, e: s.estreamUser, t: v3Now() }) };
 }
 function v3OfferMachineCopy(machine) {
+  // the DCF / Firebird / eStream connection is only for Offline (SDK / COM); Online (Restful API) needs nothing from another PC
+  backendAjax({ url: BACKEND_URL + '/api/settings/destination?companyId=' + (currentAlayaCompanyID() || 0), type: 'GET',
+    success: function(r) { if (!(r && r.success && r.data && r.data.mode === 'rest')) v3OfferMachineCopyNow(machine); },
+    error: function() { v3OfferMachineCopyNow(machine); } });
+}
+function v3OfferMachineCopyNow(machine) {
   var mine = window._v3map['0|MACHINE@' + machine.id];
   if (mine) return;
   var others = Object.keys(window._v3map).filter(function(k) { return k.indexOf('0|MACHINE@') === 0; }).map(function(k) {
