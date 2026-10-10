@@ -1311,7 +1311,8 @@ function v3RestoreSecrets() {
   return v3Secrets('/api/settings/secrets/export').then(function(ex) {
     if (!ex.success) return;
     var d = ex.data, hasDest = Object.keys(d.dest || {}).length > 0;
-    if (d.alayaLoginPass || d.fbPassword || hasDest) return;                // this PC already has its keys
+    // fbPassword is not a signal: a fresh helper ships a default Firebird password
+    if (d.alayaLoginPass || d.estreamPassword || hasDest) return;          // this PC already has its keys
     return v3AskText('Restore keys from the Alaya database',
       'This PC has no keys yet, but a backup exists in the Alaya database. Enter the recovery password to restore them.', false).then(function(pw) {
       if (!pw) return;
@@ -1377,12 +1378,12 @@ function v3Finish() {
   window._currentCompanyId = settings.alayaCompanyId || 0;
   settings.sqlCompanyByCid = v3SqlByCid(window._v3map);
   applySettings();
-  v3Secrets('/api/settings/machine').then(function(r) {
+  // restore the keys first (asks the recovery password), then offer to copy the SQL connection of another PC
+  v3RestoreSecrets().then(function() { return v3Secrets('/api/settings/machine'); }).then(function(r) {
     if (!r || !r.success) return;
     window._machine = r.data;
     v3OfferMachineCopy(r.data);
   }).catch(function() {});
-  v3RestoreSecrets();
 }
 function v3SqlByCid(map) {
   var out = {};
