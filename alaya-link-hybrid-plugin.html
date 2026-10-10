@@ -2559,7 +2559,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.15';
+var HELPER_LATEST = '1.5.16';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
@@ -4460,7 +4460,7 @@ function showTransferResults(results) {
     var groupId = 'subgrp-' + escHtml(String(r.type)) + '-' + Math.random().toString(36).slice(2, 8);
     var startCollapsed = rowCount > 0;
     html += '<div class="transfer-item transfer-group-header" data-toggle="' + groupId + '" style="cursor:' + (rowCount ? 'pointer' : 'default') + ';">';
-    html += '<div class="info"><div class="name">' + (rowCount ? '<span class="subgroup-arrow">' + (startCollapsed ? '&#9656;' : '&#9662;') + '</span> ' : '') + escHtml(r.type) + '</div>';
+    html += '<div class="info"><div class="name">' + (rowCount ? '<span class="subgroup-arrow">' + (startCollapsed ? '&#9656;' : '&#9662;') + '</span> ' : '') + escHtml(({creditnote: 'credit note (customer - Sales Return)', vendorcn: 'credit note (vendor - Purchase Return)'})[r.type] || r.type) + '</div>';
     html += '<div class="detail">' + escHtml(det) + '</div></div>';
     html += '<div class="status ' + statusClass + '">' + statusText + '</div>';
     html += '</div>';
