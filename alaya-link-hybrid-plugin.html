@@ -1855,7 +1855,7 @@ function v3SaveFlow(saveCid, typedPass, identityChanged) {
   if (window._machine) groups.push(v3MachineGroup(settings, window._machine.id, window._machine.name));
   v3Remember(groups);                                   // this PC (memory + AppData copy) first ...
   v3Write(groups).then(function() { return v3BackupSecrets(); }).then(function() {   // ... then the Alaya database
-    showToast('Settings saved to the Alaya database (company ID ' + saveCid + ')');
+    showToast('Settings saved for ' + ($.trim($('#alaya-company-select option:selected').text()) || 'company ID ' + saveCid));
     addLog('Settings saved: ' + groups.length + ' groups for company ID ' + saveCid + ' in the Alaya database; copy kept on this PC', 'log-ok');
     testBackendConnection();
     if (typedPass) window._alayaPass = typedPass;
