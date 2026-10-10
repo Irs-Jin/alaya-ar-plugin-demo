@@ -1324,7 +1324,9 @@ function v3PickCompanies(cids) {
     });
     var ok = $('<button class="btn-success" style="margin-top:12px;">Restore selected</button>');
     ok.on('click', function() { var keep = box.find('input:checked').map(function() { return String($(this).val()); }).get(); ov.remove(); resolve(keep); });
-    box.append(ok); ov.append(box).appendTo('body');
+    var cancel = $('<button class="btn-secondary" style="margin-top:12px;margin-left:8px;">Cancel</button>');
+    cancel.on('click', function() { ov.remove(); resolve(null); });
+    box.append(ok, cancel); ov.append(box).appendTo('body');
   });
 }
 function v3RestoreSecrets(force) {
@@ -1350,6 +1352,7 @@ function v3RestoreSecrets(force) {
             jobs.push(Promise.all([v3Dec(key, g.a), v3Dec(key, g.s)]).then(function(x) { body.dest[cid] = { ak: x[0], sk: x[1] }; }));
           });
           return Promise.all(jobs).then(function(v) { return v3PickCompanies(Object.keys(body.dest)).then(function(keep) {
+            if (!keep) throw { cancel: true };                          // Cancel in the company window: restore nothing
             Object.keys(body.dest).forEach(function(c) { if (keep.indexOf(c) < 0) delete body.dest[c]; });
             return v;
           }); }).then(function(v) {
@@ -1359,7 +1362,7 @@ function v3RestoreSecrets(force) {
               .then(function() { addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination(); });
           });
         });
-      }).catch(function() { showToast('Wrong recovery password', true); addLog('Restore failed: wrong recovery password', 'log-err'); return ask(true); });
+      }).catch(function(e) { if (e && e.cancel) return; showToast('Wrong recovery password', true); addLog('Restore failed: wrong recovery password', 'log-err'); return ask(true); });
     }); };
     return ask(false);
   }).catch(function() {});
