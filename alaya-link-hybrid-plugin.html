@@ -584,6 +584,9 @@
           <label>
             <input type="checkbox" id="s-t-vendorinv" /> <span>Transfer Vendor Invoice</span>
           </label>
+          <label>
+            <input type="checkbox" id="s-t-dn" /> <span>Transfer Credit Note</span>
+          </label>
         </div>
       </div>
     </div>
@@ -711,6 +714,7 @@ var defaultSettings = {
   tCashpurch: false,
   tCashpurchpay: false,
   tVendorinv: false,
+  tDn: false,
   pmByBranch: false,
   salesBranchProj: false,
   paymodes: [],
@@ -808,7 +812,7 @@ function packRows(s, cid) {
   rows.push(['OPTS', JSON.stringify({
     c: B(s.tCustomer), v: B(s.tVendor), cs: B(s.tCashsales),
     cp: B(s.tCashpayment), i: B(s.tInvoice), n: B(s.tCn),
-    cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv)
+    cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv), dn: B(s.tDn)
   })]);
   // Per-Alaya-company SQL company pairing (SC_<cid>_SQL) - switching Alaya
   // company auto-switches the SQL company so transfers never write into the
@@ -868,7 +872,7 @@ function unpackRows(rowArr) {
         var o = JSON.parse(val);
         s.tCustomer = flag(o.c); s.tVendor = flag(o.v); s.tCashsales = flag(o.cs);
         s.tCashpayment = flag(o.cp); s.tInvoice = flag(o.i); s.tCn = flag(o.n);
-        s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi);
+        s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi); s.tDn = flag(o.dn);
       } else if (code === 'CONN') {
         // legacy shared row: connection settings are per PC now (backend config.json) - ignored
       } else if (code.indexOf('SC_') === 0) {
@@ -973,7 +977,7 @@ var V3_PC_KEYS = ['acCashsales', 'acCashrounding', 'acCreditsales', 'acCreditrou
   'descCashsales', 'descCreditsales', 'acCreditnote', 'descCreditnote', 'acPurchase', 'acPurchRounding',
   'descPurchase', 'projPurchase', 'acDebitnote', 'descDebitnote', 'cashsalesMethod', 'cashsalesPrefix',
   'transferMethod', 'pmByBranch', 'salesBranchProj', 'tCustomer', 'tVendor', 'tCashsales', 'tCashpayment', 'tInvoice', 'tCn',
-  'tCashpurch', 'tCashpurchpay', 'tVendorinv', 'paymodes', 'branches', 'divisions', 'sqlCompanyCode'];
+  'tCashpurch', 'tCashpurchpay', 'tVendorinv', 'tDn', 'paymodes', 'branches', 'divisions', 'sqlCompanyCode'];
 
 function v3Sql(v) { return "N'" + String(v).replace(/'/g, "''") + "'"; }
 function v3Now() {
@@ -1017,7 +1021,7 @@ function v3Groups(s, cid) {
     out.push({ cid: cid, code: 'TRANSFER', json: {
       cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod, pb: B(s.pmByBranch), sp: B(s.salesBranchProj),
       o: { c: B(s.tCustomer), v: B(s.tVendor), cs: B(s.tCashsales), cp: B(s.tCashpayment), i: B(s.tInvoice), n: B(s.tCn),
-           cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv) } } });
+           cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv), dn: B(s.tDn) } } });
     out.push({ cid: cid, code: 'PAYMODES', json: (s.paymodes || []).filter(function(p) { return p && p.code; })
       .map(function(p) { return [p.branch || '', p.code, p.acct || '']; }) });
     out.push({ cid: cid, code: 'BRANCHES', json: (s.branches || []).filter(function(b) { return b && b.code; })
@@ -1048,7 +1052,7 @@ function v3PerCompany(map, cid) {
     var o = t.o || {};
     s.cashsalesMethod = t.cm; s.cashsalesPrefix = t.cp; s.transferMethod = t.tm; s.pmByBranch = flag(t.pb); s.salesBranchProj = flag(t.sp);
     s.tCustomer = flag(o.c); s.tVendor = flag(o.v); s.tCashsales = flag(o.cs); s.tCashpayment = flag(o.cp); s.tInvoice = flag(o.i);
-    s.tCn = flag(o.n); s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi);
+    s.tCn = flag(o.n); s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi); s.tDn = flag(o.dn);
   }
   var pm = v3Get(map, cid, 'PAYMODES'), br = v3Get(map, cid, 'BRANCHES'), dv = v3Get(map, cid, 'DIVISIONS'), sq = v3Get(map, cid, 'SQLCO');
   s.paymodes = (pm || []).map(function(r) { return { branch: r[0], code: r[1], acct: r[2] }; });
@@ -1184,6 +1188,7 @@ function fillCompanyFields(s) {
   $('#s-t-cashpurch').prop('checked', !!s.tCashpurch);
   $('#s-t-cashpurchpay').prop('checked', !!s.tCashpurchpay);
   $('#s-t-vendorinv').prop('checked', !!s.tVendorinv);
+  $('#s-t-dn').prop('checked', !!s.tDn);
   renderPaymodeView(); renderBranchTable(s.branches || []); renderDivisionTable(s.divisions || []);
   var sq = s.sqlCompanyCode || '';
   if (sq && $('#sql-company option[value="' + sq + '"]').length) $('#sql-company, #s-sql-company').val(sq);
@@ -1576,6 +1581,7 @@ function applySettings() {
   $('#s-t-cashpurch').prop('checked', s.tCashpurch);
   $('#s-t-cashpurchpay').prop('checked', s.tCashpurchpay);
   $('#s-t-vendorinv').prop('checked', s.tVendorinv);
+  $('#s-t-dn').prop('checked', !!s.tDn);
   $('input[name="adv-type"][value="' + (s.advType || 'customer') + '"]').prop('checked', true);
   updateAdvDocTypeOptions();
   if (s.advPreviewDoc && ADV_DOCTYPES_BY_PARTY[s.advType || 'customer'].indexOf(s.advPreviewDoc) >= 0) {
@@ -1798,6 +1804,7 @@ function saveSettings(mappingCid) {
     tCashpurch: $('#s-t-cashpurch').is(':checked'),
     tCashpurchpay: $('#s-t-cashpurchpay').is(':checked'),
     tVendorinv: $('#s-t-vendorinv').is(':checked'),
+    tDn: $('#s-t-dn').is(':checked'),
     paymodes: maps.paymodes,
     branches: maps.branches,
     divisions: maps.divisions,
@@ -2555,7 +2562,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.5';
+var HELPER_LATEST = '1.5.6';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
@@ -2791,7 +2798,8 @@ function syncSalesBranchProj() {
   // same enable/disable rules as the original Setting window (frmSetting.cs)
   $('#s-cashsales-prefix').prop('disabled', !summary);                              // Doc No. Prefix: Total Daily Sales only
   $('#s-t-cashpurchpay').prop('disabled', !$('#s-t-cashpurch').is(':checked'));     // Cash Purchases Payment needs Cash Purchases
-  $('#s-desc-creditnote').prop('disabled', !$('#s-t-cn').is(':checked'));           // Credit Note description needs Credit Note
+  $('#s-desc-creditnote').prop('disabled', !$('#s-t-cn').is(':checked'));
+  $('#s-desc-debitnote').prop('disabled', !$('#s-t-dn').is(':checked'));           // Debit/Credit Note description needs the vendor Credit Note           // Credit Note description needs Credit Note
   $('#sbp-group').toggle(summary);
   if (!summary) $('#s-sales-branch-proj').prop('checked', false);
 }
@@ -3836,7 +3844,7 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
   // response "MaxID" key, c_Account.cs:9420-9422; Form1.cs:1297/1388
   // while-loops with Thread.Sleep(1000) between pages).
   var POSTED_TYPES = ['cashsales', 'invoice', 'creditnote', 'cashpurchases',
-                      'vendorinvoice', 'purchasereturn'];
+                      'vendorinvoice', 'purchasereturn', 'vendorcn'];
   var usePosted = POSTED_TYPES.indexOf(type) >= 0;
   var acc = [];
   function bodyFor(maxID) {
@@ -3863,7 +3871,7 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
     // c_Account.cs:9424); accept both cases.
     var arr = (resp && (resp.data || resp.Data)) || resp.Obj || resp.Result || [];
     if (!Array.isArray(arr)) arr = arr ? [arr] : [];
-    var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice' || type === 'purchasereturn');
+    var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice' || type === 'purchasereturn' || type === 'vendorcn');
     acc = acc.concat(arr);
     // Paginate on the returned MaxID until it comes back 0/missing.
     // Guard: server echoing the same non-zero MaxID must not loop forever.
@@ -4003,9 +4011,12 @@ function fetchAllSourceDocs(transfers, from, to, cid, done) {
   if (transfers.indexOf('cashsales') >= 0) steps.push({ kind: 'rest', type: 'cashsales', ep: DOC_ENDPOINTS.cashsales });
   if (transfers.indexOf('invoice') >= 0) steps.push({ kind: 'rest', type: 'invoice', ep: DOC_ENDPOINTS.invoice });
   if (transfers.indexOf('creditnote') >= 0) {
-    var advVendor = ($('input[name="adv-type"]:checked').val() === 'vendor');
+    // Transfer button: 'creditnote' is the customer (Sales Return) one; the vendor one is 'vendorcn'.
+    // Only an Advanced-tab run follows the Customer/Vendor radio.
+    var advVendor = (window._advRun && $('input[name="adv-type"]:checked').val() === 'vendor');
     steps.push({ kind: 'rest', type: 'creditnote', ep: advVendor ? DOC_ENDPOINTS.purchasereturn : DOC_ENDPOINTS.salesreturn });
   }
+  if (transfers.indexOf('vendorcn') >= 0) steps.push({ kind: 'rest', type: 'vendorcn', ep: DOC_ENDPOINTS.purchasereturn });
   if (transfers.indexOf('cashpurchases') >= 0) steps.push({ kind: 'rest', type: 'cashpurchases', ep: DOC_ENDPOINTS.cashpurchases });
   if (transfers.indexOf('vendorinvoice') >= 0) steps.push({ kind: 'rest', type: 'vendorinvoice', ep: DOC_ENDPOINTS.vendorinvoice });
   if (transfers.indexOf('payment') >= 0) steps.push({ kind: 'pay', vendor: false });
@@ -4105,6 +4116,7 @@ function runTransferMaster(from, to, company, alayaCid) {
   if ($('#s-t-customer').is(':checked')) transfers.push('customer');
   if ($('#s-t-vendor').is(':checked')) transfers.push('vendor');
   if ($('#s-t-cn').is(':checked')) transfers.push('creditnote');
+  if ($('#s-t-dn').is(':checked')) transfers.push('vendorcn');
   if ($('#s-t-cashpayment').is(':checked')) transfers.push('payment');
   if ($('#s-t-cashpurch').is(':checked')) transfers.push('cashpurchases');
   if ($('#s-t-vendorinv').is(':checked')) transfers.push('vendorinvoice');
@@ -4227,7 +4239,7 @@ function runTransferMaster(from, to, company, alayaCid) {
       branches: maps.branches,
       divisions: maps.divisions,
       docs: $.extend({ customer: custDocs, vendor: vendDocs,
-        creditnoteSide: $('input[name="adv-type"]:checked').val() || 'customer' }, srcDocs)
+        creditnoteSide: (window._advRun && $('input[name="adv-type"]:checked').val()) || 'customer' }, srcDocs)
     }),
     success: function(r) {
       stopProgressPoll();
