@@ -2797,6 +2797,7 @@ function syncSalesBranchProj() {
   var summary = $('#s-cashsales-method').val() === 'summary';
   // same enable/disable rules as the original Setting window (frmSetting.cs)
   $('#s-cashsales-prefix').prop('disabled', !summary);                              // Doc No. Prefix: Total Daily Sales only
+  $('#s-t-cashpayment').prop('disabled', !$('#s-t-cashsales').is(':checked'));      // Cash Sales Payment needs Cash Sales (greyed, tick kept - like the original)
   $('#s-t-cashpurchpay').prop('disabled', !$('#s-t-cashpurch').is(':checked'));     // Cash Purchases Payment needs Cash Purchases
   $('#s-desc-creditnote').prop('disabled', !$('#s-t-cn').is(':checked'));
   $('#s-desc-debitnote').prop('disabled', !$('#s-t-dn').is(':checked'));           // Debit/Credit Note description needs the vendor Credit Note           // Credit Note description needs Credit Note
