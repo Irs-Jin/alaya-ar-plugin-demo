@@ -361,6 +361,10 @@
           <option value="rest">SQL Accounting Online (Restful API)</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>These settings are saved for company</label>
+        <div id="d-company-badge" style="padding:9px 12px;border:1px solid #1565c0;border-radius:6px;background:#e3f2fd;color:#0d47a1;font-weight:700;font-size:0.9rem;">-</div>
+      </div>
     </div>
     <div id="d-rest" style="display:none;">
       <div class="form-row">
@@ -1616,6 +1620,7 @@ function destPost(path, body, cb) {
     error: function() { cb({ success: false, error: 'Backend unreachable' }); } });
 }
 function showDest(d) {
+  showCompanyBadge();
   $('#d-mode').val(d.mode);
   $('#d-rest').toggle(d.mode === 'rest');
   window.DEST_REST = d.mode === 'rest';   // API key is bound to one SQL company: no company picker
@@ -1626,6 +1631,11 @@ function showDest(d) {
   $('#d-host').val(d.host || '');
   $('#d-regsvc').val((d.region || '') + ' / ' + (d.service || ''));
 }
+function showCompanyBadge() {
+  var t = $.trim($('#alaya-company-select').find('option:selected').text());
+  $('#d-company-badge').text(t ? t + '  (ID ' + (currentAlayaCompanyID() || 0) + ')' : 'Company ID ' + (currentAlayaCompanyID() || 0));
+}
+$(document).on('change', '#alaya-company-select', function() { showCompanyBadge(); loadDestination(); });
 function loadDestination() {
   backendAjax({ url: BACKEND_URL + '/api/settings/destination?companyId=' + (currentAlayaCompanyID() || 0), type: 'GET',
     success: function(r) { if (r.success) showDest(r.data); } });
@@ -1744,7 +1754,7 @@ function saveSettings(mappingCid) {
   // a blank Secret Key field keeps the stored one.
   var _db = destBody(); _db.companyId = (typeof mappingCid === 'number') ? mappingCid : (settings.alayaCompanyId || 0);   // the company being saved
   destPost('/api/settings/destination', _db, function(r) {
-    if (r && r.success && _db.companyId === (currentAlayaCompanyID() || 0)) { $('#d-secret').val(''); showDest(r.data); }
+    if (r && r.success) { $('#d-secret').val(''); loadDestination(); }   // re-read the current company's view (keys never echoed)
     else addLog('Destination NOT saved: ' + ((r && r.error) || 'backend unreachable'), 'log-err');
   });
 
