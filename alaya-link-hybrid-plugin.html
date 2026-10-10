@@ -295,6 +295,7 @@
   <div id="tab-settings" class="tab-panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h2 id="settings-heading" style="cursor:default;" title="Ctrl+click to toggle API License">Settings</h2>
+      <span id="company-chip" title="Settings below belong to this company - switch company at the top of the page" style="margin-left:auto;margin-right:14px;display:inline-flex;align-items:center;gap:8px;padding:5px 14px 5px 6px;border-radius:999px;background:#e3f2fd;color:#0d47a1;font-size:0.85rem;"><span style="background:#1565c0;color:#fff;border-radius:999px;padding:2px 9px;font-size:0.7rem;font-weight:700;letter-spacing:.04em;">COMPANY</span><b id="d-company-badge">-</b></span>
       <button id="btn-save-settings" class="btn-success">Save</button>
     </div>
 
@@ -360,10 +361,6 @@
           <option value="sdk">SQL Accounting Offline (SDK / COM)</option>
           <option value="rest">SQL Accounting Online (Restful API)</option>
         </select>
-      </div>
-      <div class="form-group">
-        <label>These settings are saved for company</label>
-        <div id="d-company-badge" style="padding:9px 12px;border:1px solid #1565c0;border-radius:6px;background:#e3f2fd;color:#0d47a1;font-weight:700;font-size:0.9rem;">-</div>
       </div>
     </div>
     <div id="d-rest" style="display:none;">
@@ -1633,7 +1630,7 @@ function showDest(d) {
 }
 function showCompanyBadge() {
   var t = $.trim($('#alaya-company-select').find('option:selected').text());
-  $('#d-company-badge').text(t ? t + '  (ID ' + (currentAlayaCompanyID() || 0) + ')' : 'Company ID ' + (currentAlayaCompanyID() || 0));
+  $('#d-company-badge').text(t ? t.replace(/\s*-\s*/, ' · ') : 'ID ' + (currentAlayaCompanyID() || 0));
 }
 $(document).on('change', '#alaya-company-select', function() { showCompanyBadge(); loadDestination(); });
 function loadDestination() {
