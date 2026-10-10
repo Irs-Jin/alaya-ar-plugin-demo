@@ -1305,6 +1305,26 @@ function v3BackupSecrets() {
   }).catch(function(e) { addLog('Secrets backup failed: ' + (e && e.message || e), 'log-err'); });
 }
 // restore on a PC that has none of the keys but the database has an encrypted copy
+// several companies have keys in the backup: let the user tick which ones to bring back (all ticked by default)
+function v3PickCompanies(cids) {
+  if (cids.length < 2) return Promise.resolve(cids);
+  return new Promise(function(resolve) {
+    $('#v3-pick-overlay').remove();
+    var ov = $('<div id="v3-pick-overlay">').css({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)',
+      'z-index': 100002, display: 'flex', 'align-items': 'center', 'justify-content': 'center' });
+    var box = $('<div>').css({ background: '#fff', 'border-radius': '12px', padding: '20px 24px', width: '520px', 'max-width': '92vw', 'max-height': '80vh', 'overflow-y': 'auto' });
+    box.append('<h2 style="margin-bottom:6px;">Restore keys for which companies?</h2>');
+    box.append('<div class="sub" style="margin-bottom:10px;">The backup has keys for ' + cids.length + ' companies. Untick the ones you do not need on this PC.</div>');
+    cids.forEach(function(c) {
+      var name = $.trim($('#alaya-company-select option[value="' + c + '"]').text()) || ('Company ID ' + c);
+      box.append($('<label style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid #eee;cursor:pointer;">')
+        .append($('<input type="checkbox" checked style="width:auto;">').val(c), $('<span>').text(name + '  (ID ' + c + ')')));
+    });
+    var ok = $('<button class="btn-success" style="margin-top:12px;">Restore selected</button>');
+    ok.on('click', function() { var keep = box.find('input:checked').map(function() { return String($(this).val()); }).get(); ov.remove(); resolve(keep); });
+    box.append(ok); ov.append(box).appendTo('body');
+  });
+}
 function v3RestoreSecrets() {
   var sec = v3Get(window._v3map, 0, 'SECRETS');
   if (!sec || !sec.check) return Promise.resolve();
@@ -1327,7 +1347,10 @@ function v3RestoreSecrets() {
             var g = v3Get(window._v3map, cid, 'DESTKEY') || {};
             jobs.push(Promise.all([v3Dec(key, g.a), v3Dec(key, g.s)]).then(function(x) { body.dest[cid] = { ak: x[0], sk: x[1] }; }));
           });
-          return Promise.all(jobs).then(function(v) {
+          return Promise.all(jobs).then(function(v) { return v3PickCompanies(Object.keys(body.dest)).then(function(keep) {
+            Object.keys(body.dest).forEach(function(c) { if (keep.indexOf(c) < 0) delete body.dest[c]; });
+            return v;
+          }); }).then(function(v) {
             body.alayaLoginPass = v[0]; body.fbPassword = v[1]; body.estreamPassword = v[2];
             return v3Secrets('/api/settings/secrets/import', { method: 'POST', body: JSON.stringify(body) })
               .then(function() { return v3Secrets('/api/settings/secrets', { method: 'POST', body: JSON.stringify({ recovery: pw }) }); })
