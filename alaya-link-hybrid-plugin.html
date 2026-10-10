@@ -509,11 +509,6 @@
           <label>Credit Note Description (Max 150 Char.)</label>
           <input type="text" id="s-desc-creditnote" placeholder="RETURN" maxlength="150" />
         </div>
-        <div class="form-group" id="sbp-group">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;">
-            <input type="checkbox" id="s-sales-branch-proj" style="width:auto;" /> Transfer Sales Branch Code as Project Code
-          </label>
-        </div>
       </div>
       <div class="acct-col">
         <h4>Vendor</h4>
@@ -554,6 +549,9 @@
         <div class="opt-list">
           <label>
             <input type="checkbox" id="s-t-customer" /> <span>Transfer Customer Data</span>
+          </label>
+          <label id="sbp-group">
+            <input type="checkbox" id="s-sales-branch-proj" /> <span>Transfer Sales Branch Code as Project Code</span>
           </label>
           <label>
             <input type="checkbox" id="s-t-cashsales" checked /> <span>Transfer Cash Sales</span>
