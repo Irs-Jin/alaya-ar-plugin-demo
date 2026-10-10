@@ -1276,6 +1276,13 @@ function v3Recovery(create) {
   });
 }
 // backup: this PC's secrets -> encrypted rows in the database
+// IRS support escrow: the recovery password is also wrapped with this PUBLIC key (RSA-OAEP), so only the holder of the
+// private key (support_recover_tool.py) can recover a customer's keys if they forget it. A public key cannot decrypt.
+var ESCROW_PUB = 'MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAxy1xEBniX5EieBImQx152TxAU+KYW78yoYeoblRkLRW4dV3LyWDh6KdzYM+TbPO3dY1Yq1DdmbZoM4gclMbktCUYccY+DhxKa2c+HdIu/5E7R14fa7AFeRPVvXxrSSfUDQTwJ7Tc5oOrTxEKdaidzGiKEIstcXSDncsMdwTCpx8k4zbANLPez8LhshsJCXg5zI/4v/rW0VK4xRRYgFc442PYUyyzml47kTQckj5RyT0FUqId7dH5qfQf5p0BSq2mPvhuZ2M3G2pPvlg6dG1XsqJr+wgxuBUB/zAN/O2OqYp6Zisq+AQLy6OKvWOdDYplxgXjOQgcgOEvU8E0Mdx2s7M/A4xM+JcD261j0YnpCJ2Cf0IJBbVPqiXtRZoWKTcUM908yE1sX+clthlDoczzXvYzcNEV670/TUA5WqD6NslfN1qgp7wznGlZT0WN0COoydynvIXGAPCHhyg6u7CJChIrTDytOxwr5I46RqSS+flHXct+CNqWNYhCXGJtrq95AgMBAAE=';
+function v3Escrow(pass) {
+  return crypto.subtle.importKey('spki', v3Unb64(ESCROW_PUB), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt'])
+    .then(function(k) { return crypto.subtle.encrypt({ name: 'RSA-OAEP' }, k, new TextEncoder().encode(pass)); }).then(v3B64);
+}
 function v3BackupSecrets() {
   return v3Secrets('/api/settings/secrets/export').then(function(ex) {
     if (!ex.success) return;
@@ -1285,8 +1292,8 @@ function v3BackupSecrets() {
       if (!pass) { addLog('Keys/passwords NOT backed up (no recovery password set) - they stay on this PC only', 'log-warn'); return; }
       var old = v3Get(window._v3map, 0, 'SECRETS'), salt = old && old.salt ? old.salt : v3B64(crypto.getRandomValues(new Uint8Array(16)));
       return v3Key(pass, salt).then(function(key) {
-        return Promise.all([v3Enc(key, 'LSH-OK'), v3Enc(key, d.alayaLoginPass), v3Enc(key, d.fbPassword), v3Enc(key, d.estreamPassword)]).then(function(e) {
-          var groups = [{ cid: 0, code: 'SECRETS', text: JSON.stringify({ salt: salt, check: e[0], a: e[1], f: e[2], e: e[3] }) }];
+        return Promise.all([v3Enc(key, 'LSH-OK'), v3Enc(key, d.alayaLoginPass), v3Enc(key, d.fbPassword), v3Enc(key, d.estreamPassword), v3Escrow(pass)]).then(function(e) {
+          var groups = [{ cid: 0, code: 'SECRETS', text: JSON.stringify({ salt: salt, check: e[0], a: e[1], f: e[2], e: e[3], esc: e[4] }) }];
           var cids = Object.keys(d.dest || {});
           return Promise.all(cids.map(function(c) { return Promise.all([v3Enc(key, d.dest[c].ak), v3Enc(key, d.dest[c].sk)]); })).then(function(pairs) {
             cids.forEach(function(c, i) { groups.push({ cid: parseInt(c, 10), code: 'DESTKEY', text: JSON.stringify({ a: pairs[i][0], s: pairs[i][1] }) }); });
