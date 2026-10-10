@@ -592,7 +592,6 @@
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Payment Mode Mapping</h3>
     <div class="map-toolbar">
       <div class="map-actions">
-        <button id="btn-refresh-paymodes" class="btn-secondary">Refresh Alaya Payment Mode</button>
         <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
           <input type="checkbox" id="s-pm-bybranch" /> Payment Mode by Sales Branch
         </label>
@@ -607,7 +606,7 @@
           <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Control Account in SQL Acct</th>
         </tr></thead>
         <tbody id="paymode-tbody">
-          <tr><td colspan="2" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Payment Mode" to load.</td></tr>
+          <tr><td colspan="2" style="padding:10px;color:#6b7280;">No payment modes for this company.</td></tr>
         </tbody>
       </table>
     </div>
@@ -625,7 +624,7 @@
           <th style="padding:8px;text-align:center;border-bottom:2px solid #e5e7eb;">Item Group A/C in Alaya</th>
         </tr></thead>
         <tbody id="branch-tbody">
-          <tr><td colspan="4" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Sales Branch Code" to load.</td></tr>
+          <tr><td colspan="4" style="padding:10px;color:#6b7280;">No sales branches for this company.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2701,7 +2700,7 @@ $('#alaya-company-select').on('change', function() {
 // ΓöÇΓöÇ Mapping tables render ΓöÇΓöÇ
 function renderPaymodeTable(list) {
   var tb = $('#paymode-tbody').empty();
-  if (!list.length) { tb.append('<tr><td colspan="2" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Payment Mode" to load.</td></tr>'); return; }
+  if (!list.length) { tb.append('<tr><td colspan="2" style="padding:10px;color:#6b7280;">No payment modes for this company.</td></tr>'); return; }
   list.forEach(function(pm) {
     var tr = $('<tr>').attr('data-pm-code', pm.code);
     tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').text(pm.code));
@@ -2736,7 +2735,7 @@ function renderPaymodeView() {
     if (cur && codes.indexOf(cur) >= 0) sel.val(cur);
     $('#pm-map-desc').text(codes.length
       ? 'Map each Alaya payment mode for the selected Sales Branch to its Control Account in SQL Acct'
-      : 'Refresh Alaya Sales Branch Code (Sales Branch Mapping below) first, then pick a branch here.');
+      : 'No sales branches loaded for this company yet.');
     if (!sel.val()) {
       $('#paymode-tbody').empty().append('<tr><td colspan="2" style="padding:10px;color:#6b7280;">Select a branch to edit its payment mode mapping.</td></tr>');
       return;
@@ -2746,12 +2745,14 @@ function renderPaymodeView() {
   }
   renderPaymodeTable(visiblePaymodes());
 }
-$('#pm-branch-select').on('change', renderPaymodeView);
-$('#s-pm-bybranch').on('change', renderPaymodeView);
+// the payment-mode list comes from Alaya by itself (no Refresh button): reload it when the view (branch / by-branch) changes
+function pullPaymodesNow() { var cid = currentAlayaCompanyID(); if (cid) refreshPaymodesForCompany(cid); }
+$('#pm-branch-select').on('change', function() { renderPaymodeView(); pullPaymodesNow(); });
+$('#s-pm-bybranch').on('change', function() { renderPaymodeView(); pullPaymodesNow(); });
 
 function renderBranchTable(list) {
   var tb = $('#branch-tbody').empty();
-  if (!list.length) { tb.append('<tr><td colspan="4" style="padding:10px;color:#6b7280;">Click "Refresh Alaya Sales Branch Code" to load.</td></tr>'); return; }
+  if (!list.length) { tb.append('<tr><td colspan="4" style="padding:10px;color:#6b7280;">No sales branches for this company.</td></tr>'); return; }
   list.forEach(function(b) {
     var tr = $('<tr>').attr('data-br-code', b.code);
     tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').text(b.code));
@@ -2824,9 +2825,9 @@ function showWarn(title, msg) {
 
 // ΓöÇΓöÇ Refresh mappings from Alaya API (callable: button or company-change) ΓöÇΓöÇ
 function refreshPaymodesForCompany(cid, btn) {
-  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
+  if (!apiUrl || !authToken) return;
   var viewBranch = pmBranchMode() ? ($('#pm-branch-select').val() || '') : '';
-  if (pmBranchMode() && !viewBranch) { showToast('Select a branch first', true); return; }
+  if (pmBranchMode() && !viewBranch) return;     // by-branch view: nothing to load until a branch is picked
   if (btn) btn.prop('disabled', true).text('Loading...');
   addLog('POST api/PaymentMode/GetAllPaymentMode (company ' + cid + ')');
   $.ajax({
@@ -2848,18 +2849,11 @@ function refreshPaymodesForCompany(cid, btn) {
         return { code: code, acct: saved[code] || '', branch: viewBranch };
       }).filter(function(r) { return r.code; }));
       addLog('Loading Done. ' + data.length + ' payment modes (remember to Save)', 'log-ok');
-      showToast('Loading Done. ' + data.length + ' payment modes');
     },
-    error: function(xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ')', 'log-err'); showToast('Refresh failed', true); },
+    error: function(xhr) { addLog('GetAllPaymentMode failed (' + xhr.status + ')', 'log-err'); showToast('Could not load the payment modes from Alaya', true); },
     complete: function() { if (btn) btn.prop('disabled', false).text('Refresh Alaya Payment Mode'); }
   });
 }
-
-$('#btn-refresh-paymodes').on('click', function() {
-  var cid = currentAlayaCompanyID();
-  if (!cid) { showToast('Select an Alaya company first', true); return; }
-  refreshPaymodesForCompany(cid, $(this));
-});
 
 function refreshBranchesForCompany(cid, btn) {
   if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
