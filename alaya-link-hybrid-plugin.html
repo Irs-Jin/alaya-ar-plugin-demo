@@ -421,8 +421,17 @@
         </div>
       </div>
     </div>
-    <details id="adv-firebird-host" style="margin:4px 0 8px;">
-      <summary style="cursor:pointer;font-size:0.82rem;color:#6b7280;">Advanced - Firebird / eStream login (usually leave as-is)</summary>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Estream Login Username</label>
+        <input type="text" id="s-estream-user" placeholder="ADMIN" />
+      </div>
+      <div class="form-group">
+        <label>Estream Login Password</label>
+        <input type="password" id="s-estream-password" placeholder="******" autocomplete="new-password" />
+      </div>
+    </div>
+    <div id="adv-firebird" style="display:none;">
       <div class="form-row" style="margin-top:8px;">
         <div class="form-group">
           <label>Firebird Host</label>
@@ -443,17 +452,7 @@
         <input type="password" id="s-fb-password" placeholder="(unchanged)" autocomplete="new-password" />
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Estream Login Username</label>
-        <input type="text" id="s-estream-user" placeholder="ADMIN" />
-      </div>
-      <div class="form-group">
-        <label>Estream Login Password</label>
-        <input type="password" id="s-estream-password" placeholder="(unchanged)" autocomplete="new-password" />
-      </div>
     </div>
-    </details>
     </div>
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Settings</h3>
     <div class="form-row">
@@ -1662,7 +1661,7 @@ function loadConnection(s) {
     $('#s-dcf-path').val(s.dcfPath); $('#s-fb-host').val(s.fbHost); $('#s-fb-port').val(s.fbPort);
     $('#s-fb-user').val(s.fbUser); $('#s-estream-user').val(s.estreamUser);
     $('#s-fb-password').attr('placeholder', d.passwordSet ? '(unchanged)' : '');
-    $('#s-estream-password').attr('placeholder', d.estreamPasswordSet ? '(unchanged)' : '');
+    $('#s-estream-password').attr('placeholder', d.estreamPasswordSet ? '(unchanged)' : '******');
     if (s.sqlCompanyCode) selectActiveCompany(s.sqlCompanyCode);
   }, error: function() {} });
 }
@@ -1817,7 +1816,8 @@ function saveSettings(mappingCid) {
     fbUser: $('#s-fb-user').val() || defaultSettings.fbUser,
     fbPassword: $('#s-fb-password').val(),
     estreamUser: $('#s-estream-user').val() || defaultSettings.estreamUser,
-    estreamPassword: $('#s-estream-password').val(),
+    // eStream's default login password is ADMIN: a PC that has none yet gets it on the first Save
+    estreamPassword: $('#s-estream-password').val() || ($('#s-estream-password').attr('placeholder') === '******' ? 'ADMIN' : ''),
     alayaLoginClient: $('#s-alaya-client').val().trim(),
     alayaLoginUser: $('#s-alaya-user').val().trim(),
     alayaLoginPass: $('#s-alaya-pass').val(),
@@ -4743,8 +4743,8 @@ $('#btn-save-settings').on('click', function() {
 // Hidden API License section - Ctrl+click the Settings heading to toggle.
 $('#settings-heading').on('click', function(e) {
   if (!e.ctrlKey) return;
-  $('#api-license, #backend-conn').toggle();
-  addLog('Hidden settings (API License, Backend URL) ' + ($('#api-license').is(':visible') ? 'shown' : 'hidden'), 'log-info');
+  $('#api-license, #backend-conn, #adv-firebird').toggle();
+  addLog('Hidden settings (API License, Backend URL, Firebird) ' + ($('#api-license').is(':visible') ? 'shown' : 'hidden'), 'log-info');
 });
 $('#btn-save-default-company').on('click', function() {
   var id = currentAlayaCompanyID();
