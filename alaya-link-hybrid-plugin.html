@@ -613,9 +613,6 @@
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Sales Branch Mapping</h3>
     <div class="map-toolbar">
-      <div class="map-actions">
-        <button id="btn-refresh-branches" class="btn-secondary">Refresh Alaya Sales Branch Code</button>
-      </div>
       <div class="map-desc">Per-branch Cash Sales A/C, Acct Code, and Item-Group A/C flag</div>
     </div>
     <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
@@ -634,9 +631,6 @@
 
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Purchase Division Mapping</h3>
     <div class="map-toolbar">
-      <div class="map-actions">
-        <button id="btn-refresh-divisions" class="btn-secondary">Refresh Alaya Purchase Division Code</button>
-      </div>
       <div class="map-desc">Tick = use Purchase A/C Code (Item Group) in Alaya</div>
     </div>
     <div style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
@@ -646,7 +640,7 @@
           <th style="padding:8px;text-align:center;border-bottom:2px solid #e5e7eb;">Item Group A/C in Alaya</th>
         </tr></thead>
         <tbody id="division-tbody">
-          <tr><td colspan="2" style="padding:10px;color:#6b7280;">No divisions yet. Click Refresh Alaya Purchase Division Code.</td></tr>
+          <tr><td colspan="2" style="padding:10px;color:#6b7280;">No divisions for this company.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2561,7 +2555,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.3';
+var HELPER_LATEST = '1.5.4';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
@@ -2692,8 +2686,7 @@ $('#alaya-company-select').on('change', function() {
   }
   // Functional: auto-reload this company's mappings + preview data
   if (id && apiUrl && authToken) {
-    refreshPaymodesForCompany(id);
-    refreshBranchesForCompany(id);
+    autoRefreshMappings(id, true);
   }
   if (id && hostOrigin) {
     loadMasterData();
@@ -2773,7 +2766,7 @@ function renderBranchTable(list) {
 
 function renderDivisionTable(list) {
   var tb = $('#division-tbody').empty();
-  if (!list.length) { tb.append('<tr class="dv-empty"><td colspan="2" style="padding:10px;color:#6b7280;">No divisions yet. Click Refresh Alaya Purchase Division Code.</td></tr>'); }
+  if (!list.length) { tb.append('<tr class="dv-empty"><td colspan="2" style="padding:10px;color:#6b7280;">No divisions for this company.</td></tr>'); }
   list.forEach(function(d) { appendDivisionRow(d.code, d.itemGroup); });
 }
 
@@ -2869,24 +2862,27 @@ function refreshBranchesForCompany(cid, btn) {
         return { code: code, cashAcct: prev.cashAcct || '', acct: prev.acct || '', itemGroup: !!prev.itemGroup };
       }).filter(function(r) { return r.code; }));
       addLog('Refresh Done. ' + data.length + ' sales branches (remember to Save)', 'log-ok');
-      showToast('Refresh Done. ' + data.length + ' sales branches');
     },
-    error: function(xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ')', 'log-err'); showToast('Refresh failed', true); },
+    error: function(xhr) { addLog('GetAllSalesBranch failed (' + xhr.status + ')', 'log-err'); showToast('Could not load the sales branches from Alaya', true); },
     complete: function() { if (btn) btn.prop('disabled', false).text('Refresh Alaya Sales Branch Code'); }
   });
 }
 
-$('#btn-refresh-branches').on('click', function() {
-  var cid = currentAlayaCompanyID();
-  if (!cid) { showToast('Select an Alaya company first', true); return; }
-  refreshBranchesForCompany(cid, $(this));
-});
-
-$('#btn-refresh-divisions').on('click', function() {
-  var cid = currentAlayaCompanyID();
-  if (!cid) { showToast('Select an Alaya company first', true); return; }
-  if (!apiUrl || !authToken) { showToast('Not authenticated yet (ALAYA_INIT pending)', true); return; }
-  var btn = $(this).prop('disabled', true).text('Loading...');
+// payment modes / sales branches / purchase divisions are pulled from Alaya by themselves whenever the company
+// changes (event or a plain .val() set), once the saved settings are loaded - no Refresh buttons
+var _lastMapCid = 0;
+function autoRefreshMappings(cid, force) {
+  if (!cid || !apiUrl || !authToken) return;
+  if (!force && (cid === _lastMapCid || !(window._v3map || window._allSettingRows))) return;
+  _lastMapCid = cid;
+  refreshPaymodesForCompany(cid);
+  refreshBranchesForCompany(cid);
+  refreshDivisionsForCompany(cid);
+}
+setInterval(function() { autoRefreshMappings(currentAlayaCompanyID()); }, 1500);
+function refreshDivisionsForCompany(cid) {
+  if (!cid || !apiUrl || !authToken) return;
+  var btn = $();
   // Ground truth (decompiled Link_Alaya_To_SQL/c_Account.cs GetAllPurchaseDivision):
   // POST api/SyncData/SyncByTable with Table:'PurchaseGroup' (NOT 'PurchaseDivision')
   // plus ClientID/CompName/BranchID/UserID/Password. The plugin never holds the user's
@@ -2908,9 +2904,8 @@ $('#btn-refresh-divisions').on('click', function() {
       if (!Array.isArray(data)) data = data ? [data] : [];
       try { addLog('Division raw sample: ' + JSON.stringify(data[0]).slice(0, 300), 'log-info'); } catch(e) {}
       if (!data.length) {
-        addLog('SyncByTable/PurchaseGroup returned no rows - add divisions manually', 'log-warn');
-        showToast('No divisions returned, add manually', true);
-        btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+        addLog('SyncByTable/PurchaseGroup returned no rows', 'log-warn');
+        renderDivisionTable([]);
         return;
       }
       var saved = {};
@@ -2920,16 +2915,13 @@ $('#btn-refresh-divisions').on('click', function() {
         return { code: code, itemGroup: !!saved[code] };
       }).filter(function(r) { return r.code; }));
       addLog('Refresh Done. ' + data.length + ' purchase divisions (remember to Save)', 'log-ok');
-      showToast('Refresh Done.');
-      btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
     },
     error: function(xhr) {
-      addLog('SyncByTable/PurchaseGroup failed (' + xhr.status + ') - add divisions manually', 'log-warn');
-      showToast('API not available, add manually', true);
-      btn.prop('disabled', false).text('Refresh Alaya Purchase Division Code');
+      addLog('SyncByTable/PurchaseGroup failed (' + xhr.status + ')', 'log-warn');
+      showToast('Could not load the purchase divisions from Alaya', true);
     }
   });
-});
+}
 
 
 // ΓöÇΓöÇ Execute SQL via host eval bridge ΓöÇΓöÇ
