@@ -1368,7 +1368,19 @@ function v3OfferMachineCopy(machine) {
       pushConnectionSettingsToBackend(settings);
       ov.remove(); addLog('SQL connection copied from ' + (o.n || o.id) + ' - press Save to keep it', 'log-ok'); showToast('Copied - press Save');
     });
-    box.append(b);
+    var del = $('<button class="btn-secondary" title="Delete this saved PC entry" style="flex-shrink:0;margin-bottom:6px;color:#b91c1c;">&#10005;</button>');
+    del.on('click', function() {
+      var ids = ((window._v3ids || {})['0|MACHINE@' + o.id] || []).map(function(x) { return parseInt(x.id, 10); }).filter(Boolean);
+      if (!ids.length || !confirm('Delete this saved PC entry:  ' + (o.n || o.id) + ' - ' + (o.d || '') + ' (' + (o.t || '') + ')')) return;
+      v3Exec('DELETE FROM ' + SETTINGS_TABLE + ' WHERE ZZC_ID IN (' + ids.join(',') + ')', 5000).then(function() {
+        delete window._v3map['0|MACHINE@' + o.id]; row.remove(); v3CachePost();
+        addLog('Deleted saved PC entry ' + (o.n || o.id), 'log-ok');
+        if (!box.find('.v3-pc-row').length) ov.remove();
+      }).catch(function(e) { showToast('Could not delete: ' + (e && e.message || e), true); });
+    });
+    b.css({ flex: 1, 'margin-right': '6px' });
+    var row = $('<div class="v3-pc-row" style="display:flex;align-items:flex-start;">').append(b, del);
+    box.append(row);
   });
   var skip = $('<button class="btn-secondary" style="margin-top:6px;">Skip</button>'); skip.on('click', function() { ov.remove(); });
   box.append(skip); ov.append(box).appendTo('body');
