@@ -4020,7 +4020,7 @@ function fetchAllSourceDocs(transfers, from, to, cid, done) {
   if (transfers.indexOf('cashpurchases') >= 0) steps.push({ kind: 'rest', type: 'cashpurchases', ep: DOC_ENDPOINTS.cashpurchases });
   if (transfers.indexOf('vendorinvoice') >= 0) steps.push({ kind: 'rest', type: 'vendorinvoice', ep: DOC_ENDPOINTS.vendorinvoice });
   if (transfers.indexOf('payment') >= 0) steps.push({ kind: 'pay', vendor: false });
-  if (settings.tCashpurchpay && !window._advRun) steps.push({ kind: 'pay', vendor: true });
+  // (original: "Cash Purchases Payment" only gates the payment posted with each cash purchase - no separate vendor-payment run)
   var i = 0;
   function next() {
     if (i >= steps.length) { done(out); return; }
@@ -4161,7 +4161,6 @@ function runTransferMaster(from, to, company, alayaCid) {
     return { code: code, name: v[1] || '', creditterm: v[2] || '', creditlimit: v[3] || 0,
              _raw: rawByCode(alayaData.vendorRaw, code, ['VE_AccountCode', 'VE_Code']) };
   }).filter(function(d) { return d.code; });
-  if (settings.tCashpurchpay && !advOnly && transfers.indexOf('vendorpayment') < 0) transfers.push('vendorpayment');
   var noCust = transfers.indexOf('customer') >= 0 && !custDocs.length;
   var noVend = transfers.indexOf('vendor') >= 0 && !vendDocs.length;
   if (noCust || noVend) {
