@@ -4117,7 +4117,7 @@ function runTransferMaster(from, to, company, alayaCid) {
   if ($('#s-t-vendor').is(':checked')) transfers.push('vendor');
   if ($('#s-t-cn').is(':checked')) transfers.push('creditnote');
   if ($('#s-t-dn').is(':checked')) transfers.push('vendorcn');
-  if ($('#s-t-cashpayment').is(':checked')) transfers.push('payment');
+  // (original: "Cash Sales Payment" only gates the receipts posted with the cash sales - tCashpayment below; no separate customer-payment run)
   if ($('#s-t-cashpurch').is(':checked')) transfers.push('cashpurchases');
   if ($('#s-t-vendorinv').is(':checked')) transfers.push('vendorinvoice');
 
