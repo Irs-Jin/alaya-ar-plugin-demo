@@ -509,7 +509,7 @@
           <label>Credit Note Description (Max 150 Char.)</label>
           <input type="text" id="s-desc-creditnote" placeholder="RETURN" maxlength="150" />
         </div>
-        <div class="form-group">
+        <div class="form-group" id="sbp-group">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;">
             <input type="checkbox" id="s-sales-branch-proj" style="width:auto;" /> Transfer Sales Branch Code as Project Code
           </label>
@@ -2555,7 +2555,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.4';
+var HELPER_LATEST = '1.5.5';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
@@ -2785,6 +2785,14 @@ function appendDivisionRow(code, itemGroup) {
 }
 // the Item Group warning is shown once per page load (not for every ticked row)
 var _itemGroupWarned = false;
+// original: this option exists only for "Total Daily Sales"; with Itemize it is hidden and off
+function syncSalesBranchProj() {
+  var summary = $('#s-cashsales-method').val() === 'summary';
+  $('#sbp-group').toggle(summary);
+  if (!summary) $('#s-sales-branch-proj').prop('checked', false);
+}
+$(document).on('change', '#s-cashsales-method', syncSalesBranchProj);
+setInterval(syncSalesBranchProj, 1000);   // settings are filled with .val(): keep in step
 function warnItemGroupOnce() {
   if (_itemGroupWarned) return;
   _itemGroupWarned = true;
@@ -4725,6 +4733,8 @@ $('#btn-browse-dcf').on('click', function() {
 // ΓöÇΓöÇ Save settings ΓöÇΓöÇ
 $('#btn-save-settings').on('click', function() {
   try {
+    // same reminder as the original Setting window
+    if ($('#s-cashsales-method').val() === 'summary' && $('#s-sales-branch-proj').is(':checked')) showWarn('Info', 'Reminder to check Sales Branch List is updated!');
     saveSettings();
   } catch (e) {
     setSaving(false);
