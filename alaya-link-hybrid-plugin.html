@@ -532,11 +532,11 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Debit Note A/C</label>
+          <label>Credit Note A/C</label>
           <input type="text" id="s-ac-debitnote" placeholder="610-000" />
         </div>
         <div class="form-group">
-          <label>Debit Note Description (Max 150 Char.)</label>
+          <label>Credit Note Description (Max 150 Char.)</label>
           <input type="text" id="s-desc-debitnote" placeholder="RETURN" maxlength="150" />
         </div>
       </div>
@@ -2559,7 +2559,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.20';
+var HELPER_LATEST = '1.5.21';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
