@@ -1620,6 +1620,7 @@ function destPost(path, body, cb) {
 }
 function showDest(d) {
   showCompanyBadge();
+  if (d.accessKeySet === undefined) { d.accessKeySet = !!d.accessKey; d.accessKeyHint = String(d.accessKey || '').slice(-4); }   // older helper builds return the key itself
   $('#d-mode').val(d.mode);
   $('#d-rest').toggle(d.mode === 'rest');
   window.DEST_REST = d.mode === 'rest';   // API key is bound to one SQL company: no company picker
