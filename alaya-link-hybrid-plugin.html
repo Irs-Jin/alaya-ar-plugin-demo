@@ -2788,6 +2788,10 @@ var _itemGroupWarned = false;
 // original: this option exists only for "Total Daily Sales"; with Itemize it is hidden and off
 function syncSalesBranchProj() {
   var summary = $('#s-cashsales-method').val() === 'summary';
+  // same enable/disable rules as the original Setting window (frmSetting.cs)
+  $('#s-cashsales-prefix').prop('disabled', !summary);                              // Doc No. Prefix: Total Daily Sales only
+  $('#s-t-cashpurchpay').prop('disabled', !$('#s-t-cashpurch').is(':checked'));     // Cash Purchases Payment needs Cash Purchases
+  $('#s-desc-creditnote').prop('disabled', !$('#s-t-cn').is(':checked'));           // Credit Note description needs Credit Note
   $('#sbp-group').toggle(summary);
   if (!summary) $('#s-sales-branch-proj').prop('checked', false);
 }
@@ -4215,7 +4219,9 @@ function runTransferMaster(from, to, company, alayaCid) {
         salesBranchProj: $('#s-sales-branch-proj').is(':checked'),
         // Gates cash-sales receipt (OR) posting - backend mirror of the
         // desktop's TRANSFER_CS_PAYMENT / p_bTransferCSPayment option.
-        tCashpayment: $('#s-t-cashpayment').is(':checked')
+        tCashpayment: $('#s-t-cashpayment').is(':checked'),
+        // original p_bTransferVendorCPayment: post the cash-purchase payment (needs Cash Purchases ticked)
+        tVendorCpayment: $('#s-t-cashpurchpay').is(':checked')
       },
       paymodes: maps.paymodes,
       branches: maps.branches,
