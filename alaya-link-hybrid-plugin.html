@@ -2795,8 +2795,9 @@ function syncSalesBranchProj() {
   var summary = $('#s-cashsales-method').val() === 'summary';
   // same enable/disable rules as the original Setting window (frmSetting.cs)
   $('#s-cashsales-prefix').prop('disabled', !summary);                              // Doc No. Prefix: Total Daily Sales only
-  $('#s-t-cashpayment').prop('disabled', !$('#s-t-cashsales').is(':checked'));      // Cash Sales Payment needs Cash Sales (greyed, tick kept - like the original)
-  $('#s-t-cashpurchpay').prop('disabled', !$('#s-t-cashpurch').is(':checked'));     // Cash Purchases Payment needs Cash Purchases
+  var csOn = $('#s-t-cashsales').is(':checked'), cpOn = $('#s-t-cashpurch').is(':checked');
+  $('#s-t-cashpayment').prop('disabled', !csOn).closest('label').css('opacity', csOn ? 1 : 0.5);   // Cash Sales Payment needs Cash Sales: greyed with its label, tick kept (original)
+  $('#s-t-cashpurchpay').prop('disabled', !cpOn).closest('label').css('opacity', cpOn ? 1 : 0.5);   // Cash Purchases Payment needs Cash Purchases
   var cnOn = $('#s-t-cn').is(':checked'), dnOn = $('#s-t-dn').is(':checked');
   $('#s-desc-creditnote').prop('disabled', !cnOn).closest('.form-group').css('opacity', cnOn ? 1 : 0.5);   // label + box greyed, A/C stays enabled (original)
   $('#s-desc-debitnote').prop('disabled', !dnOn).closest('.form-group').css('opacity', dnOn ? 1 : 0.5);
