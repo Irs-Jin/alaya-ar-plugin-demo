@@ -3468,25 +3468,37 @@ function renderAdvGrid(docs, type, key) {
   var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice' || type === 'vendorcn');
   var html = '<div style="font-size:0.82rem;color:#374151;margin-bottom:8px;"><b>' + docs.length +
              '</b> ' + escHtml(type === 'vendorcn' ? 'credit note (vendor)' : type) + ' docs (ticked = transfer) | <a href="#" id="adv-tick-all">tick all</a> / <a href="#" id="adv-untick-all">untick all</a></div>';
-  html += '<div style="max-height:300px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px;">';
-  html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;white-space:nowrap;">';
-  html += '<thead><tr style="background:#f9fafb;position:sticky;top:0;">';
-  html += '<th style="padding:6px 8px;border-bottom:2px solid #e5e7eb;">Select</th>';
-  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">Doc No</th>';
-  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">Date</th>';
-  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">' + (isPurch ? 'Supplier' : 'Customer') + '</th>';
-  html += '<th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;">' + (isPurch ? 'Division' : 'Branch') + '</th>';
-  html += '<th style="padding:6px 8px;text-align:right;border-bottom:2px solid #e5e7eb;">Total</th></tr></thead><tbody>';
+  // every header field of the Alaya document, like the original Advanced grid (PRH_DocNo, PRH_VendorReferenceNo, ...)
+  var cols = [];
+  (docs || []).slice(0, 20).forEach(function(d) {
+    Object.keys(d._raw || {}).forEach(function(k) {
+      var v = d._raw[k];
+      if (v !== null && typeof v === 'object') return;            // nested lists (details, payments) are not columns
+      if (cols.indexOf(k) < 0) cols.push(k);
+    });
+  });
+  var th = 'padding:6px 8px;text-align:left;border-bottom:2px solid #e5e7eb;position:sticky;top:0;background:#f9fafb;';
+  var td = 'padding:5px 8px;border-bottom:1px solid #f3f4f6;max-width:260px;overflow:hidden;text-overflow:ellipsis;';
+  html += '<div style="max-height:340px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px;">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;white-space:nowrap;"><thead><tr>';
+  html += '<th style="' + th + 'text-align:center;">Select</th>';
+  if (cols.length) { cols.forEach(function(c) { html += '<th style="' + th + '">' + escHtml(c) + '</th>'; }); }
+  else {
+    html += '<th style="' + th + '">Doc No</th><th style="' + th + '">Date</th><th style="' + th + '">' + (isPurch ? 'Supplier' : 'Customer') +
+            '</th><th style="' + th + '">' + (isPurch ? 'Division' : 'Branch') + '</th><th style="' + th + 'text-align:right;">Total</th>';
+  }
+  html += '</tr></thead><tbody>';
   docs.forEach(function(d, i) {
-    var code = isPurch ? (d.suppcode || '') : (d.custcode || '');
-    var sub = isPurch ? (d.division || '') : (d.branch || '');
-    html += '<tr><td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">' +
-            '<input type="checkbox" class="adv-tick" data-i="' + i + '"' + (d._ticked ? ' checked' : '') + '></td>' +
-            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(d.docno || '') + '</td>' +
-            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(d.docdate || '') + '</td>' +
-            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(code) + '</td>' +
-            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">' + escHtml(sub) + '</td>' +
-            '<td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">' + escHtml(d.total) + '</td></tr>';
+    html += '<tr><td style="' + td + 'text-align:center;"><input type="checkbox" class="adv-tick" data-i="' + i + '"' + (d._ticked ? ' checked' : '') + '></td>';
+    if (cols.length) {
+      cols.forEach(function(c) { var v = (d._raw || {})[c]; v = (v === null || v === undefined) ? '' : String(v);
+        html += '<td style="' + td + '" title="' + escHtml(v) + '">' + escHtml(v) + '</td>'; });
+    } else {
+      html += '<td style="' + td + '">' + escHtml(d.docno || '') + '</td><td style="' + td + '">' + escHtml(d.docdate || '') + '</td><td style="' + td + '">' +
+              escHtml(isPurch ? (d.suppcode || '') : (d.custcode || '')) + '</td><td style="' + td + '">' + escHtml(isPurch ? (d.division || '') : (d.branch || '')) +
+              '</td><td style="' + td + 'text-align:right;">' + escHtml(d.total) + '</td>';
+    }
+    html += '</tr>';
   });
   html += '</tbody></table></div>';
   box.html(html);
