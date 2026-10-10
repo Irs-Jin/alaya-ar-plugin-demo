@@ -2760,7 +2760,7 @@ function renderBranchTable(list) {
       $('<input type="text" class="br-acct" placeholder="Acct Code">').val(b.acct || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
     ));
     var cb = $('<input type="checkbox" class="br-ig">').prop('checked', !!b.itemGroup).on('change', function() {
-      if ($(this).is(':checked')) showWarn('Warning', "Please ensure Alaya Item Group's Control Account exist in SQL ACCT's General Ledger.");
+      if ($(this).is(':checked')) warnItemGroupOnce();
     });
     tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(cb));
     tb.append(tr);
@@ -2781,10 +2781,17 @@ function appendDivisionRow(code, itemGroup) {
   ));
   tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(
     $('<input type="checkbox" class="dv-ig">').prop('checked', !!itemGroup).on('change', function() {
-      if ($(this).is(':checked')) showWarn('Warning', "Please ensure Alaya Item Group's Control Account exist in SQL ACCT's General Ledger.");
+      if ($(this).is(':checked')) warnItemGroupOnce();
     })
   ));
   $('#division-tbody').append(tr);
+}
+// the Item Group warning is shown once per page load (not for every ticked row)
+var _itemGroupWarned = false;
+function warnItemGroupOnce() {
+  if (_itemGroupWarned) return;
+  _itemGroupWarned = true;
+  showWarn('Warning', "Please ensure Alaya Item Group's Control Account exist in SQL ACCT's General Ledger.");
 }
 // in-page warning (browser alert() can be blocked inside the Alaya frame)
 function showWarn(title, msg) {
