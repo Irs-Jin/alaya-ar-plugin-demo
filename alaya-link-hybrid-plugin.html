@@ -510,6 +510,11 @@
           <label>Credit Note Description (Max 150 Char.)</label>
           <input type="text" id="s-desc-creditnote" placeholder="RETURN" maxlength="150" />
         </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;">
+            <input type="checkbox" id="s-sales-branch-proj" style="width:auto;" /> Transfer Sales Branch Code as Project Code
+          </label>
+        </div>
       </div>
       <div class="acct-col">
         <h4>Vendor</h4>
@@ -526,8 +531,11 @@
           <input type="text" id="s-desc-purchase" placeholder="INVOICE - BY ITEMIZE" maxlength="70" />
         </div>
         <div class="form-group">
-          <label>Purchase Project Code (max 20 char.)</label>
-          <input type="text" id="s-proj-purchase" placeholder="e.g. JIN6-PROJ" maxlength="20" />
+          <label>Purchase Project Code</label>
+          <select id="s-proj-purchase">
+            <option value="org">Purchase Organization</option>
+            <option value="division">Purchase Division</option>
+          </select>
         </div>
         <div class="form-group">
           <label>Debit Note A/C</label>
@@ -713,6 +721,7 @@ var defaultSettings = {
   tCashpurchpay: false,
   tVendorinv: false,
   pmByBranch: false,
+  salesBranchProj: false,
   paymodes: [],
   branches: [],
   divisions: [],
@@ -972,7 +981,7 @@ window._v3ids = {};                        // 'cid|CODE' -> [ZZC_ID...] as last 
 var V3_PC_KEYS = ['acCashsales', 'acCashrounding', 'acCreditsales', 'acCreditrounding', 'acServicecharge',
   'descCashsales', 'descCreditsales', 'acCreditnote', 'descCreditnote', 'acPurchase', 'acPurchRounding',
   'descPurchase', 'projPurchase', 'acDebitnote', 'descDebitnote', 'cashsalesMethod', 'cashsalesPrefix',
-  'transferMethod', 'pmByBranch', 'tCustomer', 'tVendor', 'tCashsales', 'tCashpayment', 'tInvoice', 'tCn',
+  'transferMethod', 'pmByBranch', 'salesBranchProj', 'tCustomer', 'tVendor', 'tCashsales', 'tCashpayment', 'tInvoice', 'tCn',
   'tCashpurch', 'tCashpurchpay', 'tVendorinv', 'paymodes', 'branches', 'divisions', 'sqlCompanyCode'];
 
 function v3Sql(v) { return "N'" + String(v).replace(/'/g, "''") + "'"; }
@@ -1015,7 +1024,7 @@ function v3Groups(s, cid) {
            dc: s.descCashsales, di: s.descCreditsales, cn: s.acCreditnote, cnd: s.descCreditnote },
       v: { p: s.acPurchase, pr: s.acPurchRounding, dp: s.descPurchase, pj: s.projPurchase, dn: s.acDebitnote, dnd: s.descDebitnote } } });
     out.push({ cid: cid, code: 'TRANSFER', json: {
-      cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod, pb: B(s.pmByBranch),
+      cm: s.cashsalesMethod, cp: s.cashsalesPrefix, tm: s.transferMethod, pb: B(s.pmByBranch), sp: B(s.salesBranchProj),
       o: { c: B(s.tCustomer), v: B(s.tVendor), cs: B(s.tCashsales), cp: B(s.tCashpayment), i: B(s.tInvoice), n: B(s.tCn),
            cpu: B(s.tCashpurch), cpp: B(s.tCashpurchpay), vi: B(s.tVendorinv) } } });
     out.push({ cid: cid, code: 'PAYMODES', json: (s.paymodes || []).filter(function(p) { return p && p.code; })
@@ -1046,7 +1055,7 @@ function v3PerCompany(map, cid) {
   }
   if (t) {
     var o = t.o || {};
-    s.cashsalesMethod = t.cm; s.cashsalesPrefix = t.cp; s.transferMethod = t.tm; s.pmByBranch = flag(t.pb);
+    s.cashsalesMethod = t.cm; s.cashsalesPrefix = t.cp; s.transferMethod = t.tm; s.pmByBranch = flag(t.pb); s.salesBranchProj = flag(t.sp);
     s.tCustomer = flag(o.c); s.tVendor = flag(o.v); s.tCashsales = flag(o.cs); s.tCashpayment = flag(o.cp); s.tInvoice = flag(o.i);
     s.tCn = flag(o.n); s.tCashpurch = flag(o.cpu); s.tCashpurchpay = flag(o.cpp); s.tVendorinv = flag(o.vi);
   }
@@ -1168,7 +1177,8 @@ function fillCompanyFields(s) {
   $('#s-ac-purchase').val(s.acPurchase || '');
   $('#s-ac-purchrounding').val(s.acPurchRounding || '');
   $('#s-desc-purchase').val(s.descPurchase || '');
-  $('#s-proj-purchase').val(s.projPurchase || '');
+  $('#s-proj-purchase').val(s.projPurchase === 'division' ? 'division' : 'org');
+  $('#s-sales-branch-proj').prop('checked', !!s.salesBranchProj);
   $('#s-ac-creditnote').val(s.acCreditnote || '');
   $('#s-desc-creditnote').val(s.descCreditnote || '');
   $('#s-ac-debitnote').val(s.acDebitnote || '');
@@ -1557,7 +1567,8 @@ function applySettings() {
   $('#s-ac-purchase').val(s.acPurchase);
   $('#s-ac-purchrounding').val(s.acPurchRounding);
   $('#s-desc-purchase').val(s.descPurchase);
-  $('#s-proj-purchase').val(s.projPurchase);
+  $('#s-proj-purchase').val(s.projPurchase === 'division' ? 'division' : 'org');
+  $('#s-sales-branch-proj').prop('checked', !!s.salesBranchProj);
   $('#s-ac-creditnote').val(s.acCreditnote);
   $('#s-desc-creditnote').val(s.descCreditnote);
   $('#s-ac-debitnote').val(s.acDebitnote);
@@ -1782,6 +1793,7 @@ function saveSettings(mappingCid) {
     acDebitnote: $('#s-ac-debitnote').val(),
     descDebitnote: $('#s-desc-debitnote').val(),
     pmByBranch: $('#s-pm-bybranch').is(':checked'),
+    salesBranchProj: $('#s-sales-branch-proj').is(':checked'),
     tCustomer: $('#s-t-customer').is(':checked'),
     tVendor: $('#s-t-vendor').is(':checked'),
     tCashsales: $('#s-t-cashsales').is(':checked'),
@@ -2547,7 +2559,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.1';
+var HELPER_LATEST = '1.5.2';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
@@ -4180,6 +4192,7 @@ function runTransferMaster(from, to, company, alayaCid) {
         acDebitnote: $('#s-ac-debitnote').val(),
         descDebitnote: $('#s-desc-debitnote').val(),
         pmByBranch: $('#s-pm-bybranch').is(':checked'),
+        salesBranchProj: $('#s-sales-branch-proj').is(':checked'),
         // Gates cash-sales receipt (OR) posting - backend mirror of the
         // desktop's TRANSFER_CS_PAYMENT / p_bTransferCSPayment option.
         tCashpayment: $('#s-t-cashpayment').is(':checked')
