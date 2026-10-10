@@ -1370,7 +1370,11 @@ function v3MachineGroup(s, id, name) {
 function v3OfferMachineCopy(machine) {
   // the DCF / Firebird / eStream connection is only for Offline (SDK / COM); Online (Restful API) needs nothing from another PC
   backendAjax({ url: BACKEND_URL + '/api/settings/destination?companyId=' + (currentAlayaCompanyID() || 0), type: 'GET',
-    success: function(r) { if (!(r && r.success && r.data && r.data.mode === 'rest')) v3OfferMachineCopyNow(machine); },
+    success: function(r) {
+      // Online companies keep a DESTKEY row in the database even when the keys were not restored on this PC (Skip)
+      var online = (r && r.success && r.data && r.data.mode === 'rest') || !!(window._v3map || {})[(currentAlayaCompanyID() || 0) + '|DESTKEY'];
+      if (!online) v3OfferMachineCopyNow(machine);
+    },
     error: function() { v3OfferMachineCopyNow(machine); } });
 }
 function v3OfferMachineCopyNow(machine) {
