@@ -491,11 +491,11 @@
         </div>
         <div class="form-group">
           <label>Service Charge A/C</label>
-          <input type="text" id="s-ac-servicecharge" placeholder="500-000" />
+          <input type="text" id="s-ac-servicecharge" placeholder="" />
         </div>
         <div class="form-group">
           <label>Cash Sales Description (Max 70 Char.)</label>
-          <input type="text" id="s-desc-cashsales" placeholder="CASH SALES - BY ITEMIZED" maxlength="70" />
+          <input type="text" id="s-desc-cashsales" placeholder="SALES" maxlength="70" />
         </div>
         <div class="form-group">
           <label>Credit Sales Description (Max 70 Char.)</label>
@@ -503,7 +503,7 @@
         </div>
         <div class="form-group">
           <label>Credit Note A/C</label>
-          <input type="text" id="s-ac-creditnote" placeholder="612-000" />
+          <input type="text" id="s-ac-creditnote" placeholder="500-000" />
         </div>
         <div class="form-group">
           <label>Credit Note Description (Max 150 Char.)</label>
@@ -522,7 +522,7 @@
         </div>
         <div class="form-group">
           <label>Purchase Description (Max 70 Char.)</label>
-          <input type="text" id="s-desc-purchase" placeholder="INVOICE - BY ITEMIZE" maxlength="70" />
+          <input type="text" id="s-desc-purchase" placeholder="PURCHASE" maxlength="70" />
         </div>
         <div class="form-group">
           <label>Purchase Project Code</label>
@@ -533,7 +533,7 @@
         </div>
         <div class="form-group">
           <label>Debit Note A/C</label>
-          <input type="text" id="s-ac-debitnote" placeholder="612-000" />
+          <input type="text" id="s-ac-debitnote" placeholder="610-000" />
         </div>
         <div class="form-group">
           <label>Debit Note Description (Max 150 Char.)</label>
@@ -548,22 +548,22 @@
         <h4>Customer</h4>
         <div class="opt-list">
           <label>
-            <input type="checkbox" id="s-t-customer" /> <span>Transfer Customer Data</span>
+            <input type="checkbox" id="s-t-customer" checked /> <span>Transfer Customer Data</span>
           </label>
           <label id="sbp-group">
             <input type="checkbox" id="s-sales-branch-proj" /> <span>Transfer Sales Branch Code as Project Code</span>
           </label>
           <label>
-            <input type="checkbox" id="s-t-cashsales" checked /> <span>Transfer Cash Sales</span>
+            <input type="checkbox" id="s-t-cashsales" /> <span>Transfer Cash Sales</span>
           </label>
           <label>
             <input type="checkbox" id="s-t-cashpayment" /> <span>Transfer Cash Sales Payment</span>
           </label>
           <label>
-            <input type="checkbox" id="s-t-invoice" checked /> <span>Transfer Invoice</span>
+            <input type="checkbox" id="s-t-invoice" /> <span>Transfer Invoice</span>
           </label>
           <label>
-            <input type="checkbox" id="s-t-cn" /> <span>Transfer Credit Note</span>
+            <input type="checkbox" id="s-t-cn" checked /> <span>Transfer Credit Note</span>
           </label>
         </div>
       </div>
@@ -689,25 +689,25 @@ var defaultSettings = {
   acCashrounding: '500-000',
   acCreditsales: '500-000',
   acCreditrounding: '500-000',
-  acServicecharge: '500-000',
-  descCashsales: 'CASH SALES - BY ITEMIZED',
+  acServicecharge: '',
+  descCashsales: 'SALES',
   descCreditsales: 'INVOICE',
   acPurchase: '610-000',
   acPurchRounding: '610-000',
-  descPurchase: 'INVOICE - BY ITEMIZE',
+  descPurchase: 'PURCHASE',
   projPurchase: '',
-  acCreditnote: '612-000',
+  acCreditnote: '500-000',
   descCreditnote: 'RETURN',
-  acDebitnote: '612-000',
+  acDebitnote: '610-000',
   descDebitnote: 'RETURN',
-  tCustomer: false,
+  tCustomer: true,
   tVendor: false,
-  tCashsales: true,
+  tCashsales: false,
   // ON by default to match desktop (m_Common.p_bTransferCSPayment = true):
   // the backend posts cash-sales receipts unless explicitly unchecked.
   tCashpayment: true,
-  tInvoice: true,
-  tCn: false,
+  tInvoice: false,
+  tCn: true,
   tCashpurch: false,
   tCashpurchpay: false,
   tVendorinv: false,
