@@ -637,7 +637,6 @@
     <div class="map-toolbar">
       <div class="map-actions">
         <button id="btn-refresh-divisions" class="btn-secondary">Refresh Alaya Purchase Division Code</button>
-        <button id="btn-add-division" class="btn-secondary">+ Add Row</button>
       </div>
       <div class="map-desc">Tick = use Purchase A/C Code (Item Group) in Alaya</div>
     </div>
@@ -646,10 +645,9 @@
         <thead><tr style="background:#f9fafb;position:sticky;top:0;">
           <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Purchase Division in Alaya</th>
           <th style="padding:8px;text-align:center;border-bottom:2px solid #e5e7eb;">Item Group A/C in Alaya</th>
-          <th style="padding:8px;width:60px;border-bottom:2px solid #e5e7eb;"></th>
         </tr></thead>
         <tbody id="division-tbody">
-          <tr><td colspan="3" style="padding:10px;color:#6b7280;">No divisions yet. Refresh or add manually.</td></tr>
+          <tr><td colspan="2" style="padding:10px;color:#6b7280;">No divisions yet. Click Refresh Alaya Purchase Division Code.</td></tr>
         </tbody>
       </table>
     </div>
@@ -2769,7 +2767,7 @@ function renderBranchTable(list) {
 
 function renderDivisionTable(list) {
   var tb = $('#division-tbody').empty();
-  if (!list.length) { tb.append('<tr class="dv-empty"><td colspan="3" style="padding:10px;color:#6b7280;">No divisions yet. Refresh or add manually.</td></tr>'); }
+  if (!list.length) { tb.append('<tr class="dv-empty"><td colspan="2" style="padding:10px;color:#6b7280;">No divisions yet. Click Refresh Alaya Purchase Division Code.</td></tr>'); }
   list.forEach(function(d) { appendDivisionRow(d.code, d.itemGroup); });
 }
 
@@ -2777,14 +2775,24 @@ function appendDivisionRow(code, itemGroup) {
   $('#division-tbody .dv-empty').remove();
   var tr = $('<tr>');
   tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
-    $('<input type="text" class="dv-code" placeholder="Division code">').val(code || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
+    $('<input type="text" class="dv-code" placeholder="Division code" readonly>').val(code || '').css({border:'1px solid #e5e7eb','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem',background:'#f9fafb'})
   ));
   tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(
-    $('<input type="checkbox" class="dv-ig">').prop('checked', !!itemGroup)
+    $('<input type="checkbox" class="dv-ig">').prop('checked', !!itemGroup).on('change', function() {
+      if ($(this).is(':checked')) showWarn('Warning', "Please ensure Alaya Item Group's Control Account exist in SQL ACCT's General Ledger.");
+    })
   ));
-  var del = $('<button class="btn-secondary" style="padding:4px 10px;">Del</button>').on('click', function() { tr.remove(); });
-  tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(del));
   $('#division-tbody').append(tr);
+}
+// in-page warning (browser alert() can be blocked inside the Alaya frame)
+function showWarn(title, msg) {
+  $('#warn-overlay').remove();
+  var ov = $('<div id="warn-overlay">').css({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)',
+    'z-index': 100003, display: 'flex', 'align-items': 'center', 'justify-content': 'center' });
+  var box = $('<div>').css({ background: '#fff', 'border-radius': '10px', padding: '18px 22px', width: '440px', 'max-width': '92vw' });
+  box.append($('<h3 style="margin-bottom:8px;">').text('⚠ ' + title), $('<div style="margin-bottom:14px;line-height:1.5;">').text(msg));
+  var ok = $('<button class="btn-primary" style="float:right;">OK</button>'); ok.on('click', function() { ov.remove(); });
+  box.append(ok, '<div style="clear:both"></div>'); ov.append(box).appendTo('body');
 }
 
 // ΓöÇΓöÇ Refresh mappings from Alaya API (callable: button or company-change) ΓöÇΓöÇ
@@ -2910,7 +2918,6 @@ $('#btn-refresh-divisions').on('click', function() {
   });
 });
 
-$('#btn-add-division').on('click', function() { appendDivisionRow('', false); });
 
 // ΓöÇΓöÇ Execute SQL via host eval bridge ΓöÇΓöÇ
 // The host's memoQuery callback control can only have ONE WebForm_DoCallback in
