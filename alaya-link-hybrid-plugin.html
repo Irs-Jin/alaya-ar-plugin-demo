@@ -2481,6 +2481,14 @@ function startInstallWatch() {
     if (n > 150) { stopInstallWatch(); $('#install-watch').text('Still waiting - after the installer finishes press "I installed it - retry".'); }
   }, 2000);
 }
+// bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
+var HELPER_LATEST = '1.5.1';
+function checkHelperUpdate(v) {
+  $('#helper-update').remove();
+  if (!v || v === HELPER_LATEST) return;
+  $('#backend-badge').after(' <a id="helper-update" href="' + INSTALLER_URL + '" title="Download, double-click, done (about 30 seconds)" style="font-size:0.78rem;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #f59e0b;border-radius:999px;padding:3px 10px;text-decoration:none;">Helper update available &#8595;</a>');
+  addLog('A newer helper is available (this PC: ' + v + ', latest: ' + HELPER_LATEST + ')', 'log-warn');
+}
 function testBackendConnection() {
   backendAjax({
     url: BACKEND_URL + '/api/health',
@@ -2489,6 +2497,7 @@ function testBackendConnection() {
       addLog('Backend healthy', 'log-ok');
       try { localStorage.setItem('lsh-backend-seen', '1'); } catch (e) {}
       $('#backend-badge').removeClass('badge-waiting badge-fail').addClass('badge-received').text('Backend: online');
+      checkHelperUpdate(r && (r.version || r.backendVersion));
     },
     error: function(xhr) {
       addLog('Backend unreachable', 'log-err');
