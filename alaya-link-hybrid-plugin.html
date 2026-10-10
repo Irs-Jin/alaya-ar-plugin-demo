@@ -364,6 +364,8 @@
         </select>
       </div>
     </div>
+    <div style="margin:-4px 0 14px;"><button id="btn-restore-keys" class="btn-secondary" type="button">Restore keys from Alaya backup...</button>
+      <span class="sub" style="margin-left:8px;">Missed a company, or cancelled the restore window? Use this. Keys already on this PC are kept.</span></div>
     <div id="d-rest" style="display:none;">
       <div class="form-row">
         <div class="form-group">
@@ -1325,14 +1327,14 @@ function v3PickCompanies(cids) {
     box.append(ok); ov.append(box).appendTo('body');
   });
 }
-function v3RestoreSecrets() {
+function v3RestoreSecrets(force) {
   var sec = v3Get(window._v3map, 0, 'SECRETS');
-  if (!sec || !sec.check) return Promise.resolve();
+  if (!sec || !sec.check) { if (force) showToast('There is no key backup in the Alaya database yet', true); return Promise.resolve(); }
   return v3Secrets('/api/settings/secrets/export').then(function(ex) {
     if (!ex.success) return;
     var d = ex.data, hasDest = Object.keys(d.dest || {}).length > 0;
     // fbPassword is not a signal: a fresh helper ships a default Firebird password
-    if (d.alayaLoginPass || d.estreamPassword || hasDest) return;          // this PC already has its keys
+    if (!force && (d.alayaLoginPass || d.estreamPassword || hasDest)) return;   // this PC already has its keys (the button forces it)
     var ask = function(retry) { return v3AskText('Restore keys from the Alaya database',
       (retry ? 'Wrong recovery password - try again, or Skip. ' : '') + 'This PC has no keys yet, but a backup exists in the Alaya database. Enter the recovery password to restore them.', false).then(function(pw) {
       if (!pw) return;
@@ -1703,6 +1705,13 @@ function destBody() {
   return { mode: $('#d-mode').val(), accessKey: $('#d-access').val(), secretKey: $('#d-secret').val(),
            host: $('#d-host').val(), companyId: currentAlayaCompanyID() || 0 };
 }
+$('#btn-restore-keys').on('click', function() {
+  // re-read the backup first (another PC may have saved new keys since this page loaded)
+  executeSqlViaHost("SELECT ZZC_ID, ZZC_HybridCompanyID, ZZC_Code, ZZC_HybridJson, ZZC_Description FROM " + SETTINGS_TABLE, 30000, 5000).then(function(msg) {
+    if (!msg.error) window._v3map = v3Index(v3Rows(msg));
+    return v3RestoreSecrets(true);
+  }).catch(function(e) { showToast('Could not read the backup: ' + (e && e.message || e), true); });
+});
 $('#d-mode').on('change', function() {
   destPost('/api/settings/destination', { mode: $(this).val(), companyId: currentAlayaCompanyID() || 0 }, function(r) {
     if (r.success) { showDest(r.data); addLog('Destination: ' + r.data.mode, 'log-ok'); }
