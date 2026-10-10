@@ -1755,11 +1755,7 @@ function saveSettings(mappingCid) {
   if (settings.alayaLoginPass || window._passLoaded) secretsPost(settings.alayaLoginPass);
   // Destination (mode / Access+Secret key / host) is saved by the main Save too, not only by Test Connection;
   // a blank Secret Key field keeps the stored one.
-  var _db = destBody(); _db.companyId = (typeof mappingCid === 'number') ? mappingCid : (settings.alayaCompanyId || 0);   // the company being saved
-  destPost('/api/settings/destination', _db, function(r) {
-    if (r && r.success) { $('#d-secret').val(''); loadDestination(); }   // re-read the current company's view (keys never echoed)
-    else addLog('Destination NOT saved: ' + ((r && r.error) || 'backend unreachable'), 'log-err');
-  });
+  saveDestination((typeof mappingCid === 'number') ? mappingCid : (settings.alayaCompanyId || 0));
 
   // Always keep a local backup
   try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(backupOf(settings))); } catch(e) {}
@@ -1856,7 +1852,16 @@ function saveSettings(mappingCid) {
 }
 
 
+// Destination (mode / keys / host) goes to the local backend for the company being saved; blank key fields keep the stored ones
+function saveDestination(cid) {
+  var _db = destBody(); _db.companyId = cid;
+  destPost('/api/settings/destination', _db, function(r) {
+    if (r && r.success) { $('#d-secret').val(''); loadDestination(); }
+    else addLog('Destination NOT saved: ' + ((r && r.error) || 'backend unreachable'), 'log-err');
+  });
+}
 function v3SaveFlow(saveCid, typedPass, identityChanged) {
+  saveDestination(saveCid);
   var groups = v3Groups(settings, saveCid);
   if (window._machine) groups.push(v3MachineGroup(settings, window._machine.id, window._machine.name));
   v3Remember(groups);                                   // this PC (memory + AppData copy) first ...
