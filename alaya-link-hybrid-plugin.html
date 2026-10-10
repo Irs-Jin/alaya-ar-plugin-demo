@@ -3448,6 +3448,7 @@ function advDocTypeToTransfer() {
   var d = $('#adv-preview-doctype').val() || 'CASH SALES';
   var map = { 'CASH SALES': 'cashsales', 'INVOICE': 'invoice', 'CREDIT NOTE': 'creditnote',
               'PAYMENT': 'payment', 'CASH PURCHASES': 'cashpurchases', 'VENDOR INVOICE': 'vendorinvoice' };
+  if (d === 'CREDIT NOTE' && $('input[name="adv-type"]:checked').val() === 'vendor') return 'vendorcn';   // Purchase Return, not Sales Return
   return map[d] || 'cashsales';
 }
 function advGridKey(cid, from, to, type) { return cid + '|' + from + '|' + to + '|' + type; }
@@ -3458,15 +3459,15 @@ function renderAdvGrid(docs, type, key) {
   if (!docs || !docs.length) {
     var parts = String(key || '').split('|');
     var ctx = parts.length === 4 ? ' (company ' + parts[0] + ', ' + parts[1] + ' ~ ' + parts[2] + ')' : '';
-    box.html('<p style="color:#6b7280;font-size:0.85rem;">No ' + escHtml(type) + ' documents found for the selected dates' + escHtml(ctx) +
+    box.html('<p style="color:#6b7280;font-size:0.85rem;">No ' + escHtml(type === 'vendorcn' ? 'credit note (vendor)' : type) + ' documents found for the selected dates' + escHtml(ctx) +
              '.<br>Try a wider date range or another doc type, and check the Log tab for API errors.</p>');
     return;
   }
   // Fresh rows default to ticked (matches transfer logic: _ticked !== false counts as selected)
   (docs || []).forEach(function(d) { if (d._ticked === undefined) d._ticked = true; });
-  var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice');
+  var isPurch = (type === 'cashpurchases' || type === 'vendorinvoice' || type === 'vendorcn');
   var html = '<div style="font-size:0.82rem;color:#374151;margin-bottom:8px;"><b>' + docs.length +
-             '</b> ' + escHtml(type) + ' docs (ticked = transfer) | <a href="#" id="adv-tick-all">tick all</a> / <a href="#" id="adv-untick-all">untick all</a></div>';
+             '</b> ' + escHtml(type === 'vendorcn' ? 'credit note (vendor)' : type) + ' docs (ticked = transfer) | <a href="#" id="adv-tick-all">tick all</a> / <a href="#" id="adv-untick-all">untick all</a></div>';
   html += '<div style="max-height:300px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px;">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;white-space:nowrap;">';
   html += '<thead><tr style="background:#f9fafb;position:sticky;top:0;">';
@@ -4198,7 +4199,7 @@ function runTransferMaster(from, to, company, alayaCid) {
   $('#progress-text').text('fetching docs...');
   fetchAllSourceDocs(transfers, from, to, alayaCid, function(srcDocs) {
   // Show fetched docs in the Advanced grid (unless grid already matches = user ticks preserved)
-  var restTypes = ['cashsales', 'invoice', 'creditnote', 'cashpurchases', 'vendorinvoice'];
+  var restTypes = ['cashsales', 'invoice', 'creditnote', 'vendorcn', 'cashpurchases', 'vendorinvoice'];
   for (var gi = 0; gi < restTypes.length; gi++) {
     var gt = restTypes[gi];
     if (srcDocs[gt] && srcDocs[gt].length && transfers.indexOf(gt) >= 0) {
