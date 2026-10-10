@@ -1706,9 +1706,13 @@ function showDest(d) {
 }
 function showCompanyBadge() {
   var t = $.trim($('#alaya-company-select').find('option:selected').text());
-  $('#d-company-badge').text(t ? t.replace(/\s*-\s*/, ' · ') : 'ID ' + (currentAlayaCompanyID() || 0));
+  var shown = t ? t.replace(/\s*-\s*/, ' · ') : 'ID ' + (currentAlayaCompanyID() || 0);
+  if ($('#d-company-badge').text() !== shown) $('#d-company-badge').text(shown);
 }
 $(document).on('change', '#alaya-company-select', function() { showCompanyBadge(); loadDestination(); });
+// the company list loads after the settings and its selection is set with .val() (no change event): keep the chip in step
+// ponytail: 1 s poll of one DOM text; replace with an event if the list loader ever fires one
+setInterval(function() { if ($('#d-company-badge').length) showCompanyBadge(); }, 1000);
 function loadDestination() {
   backendAjax({ url: BACKEND_URL + '/api/settings/destination?companyId=' + (currentAlayaCompanyID() || 0), type: 'GET',
     success: function(r) { if (r.success) showDest(r.data); } });
