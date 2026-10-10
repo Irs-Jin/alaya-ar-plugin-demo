@@ -368,10 +368,12 @@
         <div class="form-group">
           <label>AWSv4 Access Key</label>
           <input type="password" id="d-access" autocomplete="new-password" placeholder="" />
+          <div id="d-access-st" class="hint"></div>
         </div>
         <div class="form-group">
           <label>AWSv4 Secret Key</label>
           <input type="password" id="d-secret" autocomplete="new-password" placeholder="" />
+          <div id="d-secret-st" class="hint"></div>
         </div>
       </div>
       <div class="form-row">
@@ -1625,6 +1627,10 @@ function showDest(d) {
   $('#sdk-only').toggle(!window.DEST_REST);   // Firebird / DCF / eStream login are COM-only
   $('#d-access').val('').attr('placeholder', d.accessKeySet ? '****************' + (d.accessKeyHint || '') + '  (unchanged)' : '');
   $('#d-secret').attr('placeholder', d.secretKeySet ? '(unchanged)' : '');
+  // placeholders can be hidden by the browser: say it in plain text too
+  function st(sel, on, tail) { $(sel).html(on ? '<span style="color:#2e7d32;font-weight:600;">&#10003; Saved on this PC' + tail + '</span> - leave blank to keep' : '<span style="color:#c62828;font-weight:600;">&#10007; Not set</span> - enter it and click Save'); }
+  st('#d-access-st', d.accessKeySet, d.accessKeyHint ? ' (ends with ' + d.accessKeyHint + ')' : '');
+  st('#d-secret-st', d.secretKeySet, '');
   $('#d-host').val(d.host || '');
   $('#d-regsvc').val((d.region || '') + ' / ' + (d.service || ''));
 }
