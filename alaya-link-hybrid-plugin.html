@@ -2759,7 +2759,9 @@ function renderBranchTable(list) {
     tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">').append(
       $('<input type="text" class="br-acct" placeholder="Acct Code">').val(b.acct || '').css({border:'1px solid #d1d5db','border-radius':'6px',padding:'6px 8px',width:'100%','font-size':'0.82rem'})
     ));
-    var cb = $('<input type="checkbox" class="br-ig">').prop('checked', !!b.itemGroup);
+    var cb = $('<input type="checkbox" class="br-ig">').prop('checked', !!b.itemGroup).on('change', function() {
+      if ($(this).is(':checked')) showWarn('Warning', "Please ensure Alaya Item Group's Control Account exist in SQL ACCT's General Ledger.");
+    });
     tr.append($('<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">').append(cb));
     tb.append(tr);
   });
