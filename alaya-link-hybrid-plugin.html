@@ -2768,6 +2768,14 @@ function renderPaymodeView() {
 }
 // the payment-mode list comes from Alaya by itself (no Refresh button): reload it when the view (branch / by-branch) changes
 function pullPaymodesNow() { var cid = currentAlayaCompanyID(); if (cid) refreshPaymodesForCompany(cid); }
+// keep what is typed in memory (not saved yet): the table is re-drawn from settings.paymodes when the branch changes
+$('#paymode-tbody').on('input', '.pm-acct', function() {
+  var code = $(this).closest('tr').data('pm-code'), br = pmBranchMode() ? ($('#pm-branch-select').val() || '') : '';
+  if (!code) return;
+  var list = settings.paymodes = settings.paymodes || [];
+  var hit = list.filter(function(p) { return p && p.code === code && (p.branch || '') === br; })[0];
+  if (hit) hit.acct = $(this).val(); else list.push({ code: code, acct: $(this).val(), branch: br });
+});
 $('#pm-branch-select').on('change', function() { renderPaymodeView(); pullPaymodesNow(); });
 $('#s-pm-bybranch').on('change', function() { renderPaymodeView(); pullPaymodesNow(); });
 
