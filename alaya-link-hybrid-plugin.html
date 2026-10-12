@@ -3127,8 +3127,8 @@ function loadScopedViaRest(cid, done) {
     var q = "SELECT COUNT(*) FROM " + t[1] + " WHERE " + t[2] + "CompanyID = " + (parseInt(cid, 10) || 1) +
             " AND (" + t[2] + "ReferenceNo IN ('', '[IGNORE]') OR " + t[2] + "ReferenceControlAcct IN ('', '[IGNORE]'))";
     executeSqlViaHost(q, 10000, 5000).then(function(msg) {
-      try { var rs = JSON.parse(msg.result).results[0]; alayaData.masterSkipped[t[0]] = parseInt(rs.rows[0][0], 10) || 0; } catch (e) {}
-    }).catch(function() {});
+      try { var rs = JSON.parse(msg.result).results[0]; alayaData.masterSkipped[t[0]] = parseInt(rs.rows[0][0], 10) || 0; addLog(t[0] + 's without Control A/C or Reference No in company ' + cid + ': ' + alayaData.masterSkipped[t[0]], 'log-info'); } catch (e) { addLog('Could not count ' + t[0] + 's without Control A/C: ' + e.message, 'log-warn'); }
+    }).catch(function(e) { addLog('Could not count ' + t[0] + 's without Control A/C: ' + (e && e.message || e), 'log-warn'); });
   });
   // Customer master source: authoritative list = CompanyCustomer JOIN Customer for
   // this company (exactly mirrors the desktop Link tool + the user's SQL). Includes
