@@ -1591,7 +1591,16 @@ function applySettings() {
   if (s.advPreviewDoc && ADV_DOCTYPES_BY_PARTY[s.advType || 'customer'].indexOf(s.advPreviewDoc) >= 0) {
     $('#adv-preview-doctype').val(s.advPreviewDoc);
   }
-  if (s.alayaCompanyId) $('#alaya-company-select').val(String(s.alayaCompanyId));
+  if (s.alayaCompanyId) {
+    // the company list may have loaded BEFORE these settings (it then picked another company): switch to the saved default now,
+    // through the normal change path but without saving (nothing was changed by the user)
+    var wantCo = String(s.alayaCompanyId);
+    if (String($('#alaya-company-select').val()) !== wantCo && $('#alaya-company-select option[value="' + wantCo + '"]').length) {
+      window._silentCompany = true;
+      $('#alaya-company-select').val(wantCo).trigger('change');
+      window._silentCompany = false;
+    }
+  }
   s.backendUrl = normalizeBackendUrl(s.backendUrl);
   // localStorage (this machine) beats the shared UDF row - see LOCAL_BU_KEY.
   try {
@@ -2682,10 +2691,12 @@ $('#alaya-company-select').on('change', function() {
   // old values; switching back overwrote the originals).
   var prevId = (typeof window._currentCompanyId === 'number') ? window._currentCompanyId : (settings.alayaCompanyId || 0);
   settings.alayaCompany = currentAlayaCompanyCode();
-  if (prevId && prevId !== id) {
-    saveSettings(prevId);
-  } else {
-    saveSettings(id);
+  if (!window._silentCompany) {
+    if (prevId && prevId !== id) {
+      saveSettings(prevId);
+    } else {
+      saveSettings(id);
+    }
   }
   applyCompanyMappings(id);
   window._currentCompanyId = id;
