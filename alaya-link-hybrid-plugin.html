@@ -1420,16 +1420,19 @@ function v3OfferMachineCopyNow(machine) {
     var o = v3Get(window._v3map, 0, k.slice(2)); o.id = k.slice(10); return o;
   });
   if (!others.length) return;
-  // no picker: the newest saved connection is applied right after the keys are restored (edit it, then Save)
+  // no picker: reuse this PC's own saved connection (same PC name = same DCF path); otherwise only the connection user/host settings
+  // of the newest one - the DCF path of another PC (local vs network) would be wrong here, so this PC keeps its own
   others.sort(function(a, b) { return String(b.t || '').localeCompare(String(a.t || '')); });
-  var o = others[0];
-  settings.dcfPath = o.d || settings.dcfPath; settings.fbHost = o.h || settings.fbHost; settings.fbPort = o.p || settings.fbPort;
+  var same = others.filter(function(x) { return x.n === machine.name; })[0], o = same || others[0];
+  if (same) settings.dcfPath = o.d || settings.dcfPath;
+  settings.fbHost = o.h || settings.fbHost; settings.fbPort = o.p || settings.fbPort;
   settings.fbUser = o.u || settings.fbUser; settings.estreamUser = o.e || settings.estreamUser;
   $('#s-dcf-path').val(settings.dcfPath); $('#s-fb-host').val(settings.fbHost); $('#s-fb-port').val(settings.fbPort);
   $('#s-fb-user').val(settings.fbUser); $('#s-estream-user').val(settings.estreamUser);
   pushConnectionSettingsToBackend(settings);
-  addLog('SQL connection copied from ' + (o.n || o.id) + ' (saved ' + (o.t || '') + ') - check the DCF path, then press Save', 'log-ok');
-  showToast('SQL connection restored from ' + (o.n || o.id) + ' - check the path, then Save', false, 8000);
+  var msg = same ? 'SQL connection restored (this PC, saved ' + (o.t || '') + ') - press Save'
+                 : 'Restored the connection users from ' + (o.n || o.id) + '. Set the Default.DCF path for THIS PC (local path or network path), then Save';
+  addLog(msg, 'log-ok'); showToast(msg, false, 10000);
 }
 
 // v3 boot: rows -> map -> settings for the default company. The old format is migrated once.
