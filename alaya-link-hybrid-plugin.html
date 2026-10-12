@@ -1493,6 +1493,7 @@ function loadSettings() {
     }
     // database not reachable: the copy kept on this PC (AppData), then the old browser backup
     addLog('Alaya database not reachable (' + m + ') - trying the copy on this PC', 'log-warn');
+    if (/memoQuery|timed out/i.test(m) && !window._noDbShown) { window._noDbShown = true; showWarn('No access to the Alaya database', NO_DB_MSG); }   // tell the user straight away, not only when saving
     return v3Secrets('/api/settings/cache').then(function(r) {
       if (r && r.success && r.data && r.data.map) { addLog('Settings loaded from the copy on this PC (read-only until the database is back)', 'log-info'); return v3Boot(null, r.data.map); }
       return loadSettingsLegacy();
