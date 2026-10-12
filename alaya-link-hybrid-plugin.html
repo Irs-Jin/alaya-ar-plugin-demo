@@ -4702,6 +4702,16 @@ $('#btn-export-log').on('click', function() {
       lastTransferResults: window._lastResults || null,
       backend: diag || ('unavailable: ' + diagErr)
     };
+    // the exported file is sent around: mask the API license GUID and keep only the tail of every access key
+    function tail(v) { return v ? '***' + String(v).slice(-4) : v; }
+    try {
+      if (out.settings && out.settings.alayaGuid) out.settings.alayaGuid = '***set***';
+      var dst = out.backend && out.backend.config && out.backend.config.destination;
+      if (dst) {
+        if (dst.rest) dst.rest.accessKey = tail(dst.rest.accessKey);
+        Object.keys(dst.byCompany || {}).forEach(function(c) { var r = dst.byCompany[c].rest; if (r) r.accessKey = tail(r.accessKey); });
+      }
+    } catch (e) {}
     var blob = new Blob([JSON.stringify(out, null, 2)], { type: 'text/plain' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
