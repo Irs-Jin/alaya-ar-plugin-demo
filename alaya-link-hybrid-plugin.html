@@ -1362,7 +1362,10 @@ function v3RestoreSecrets(force) {
             body.alayaLoginPass = v[0]; body.fbPassword = v[1]; body.estreamPassword = v[2];
             return v3Secrets('/api/settings/secrets/import', { method: 'POST', body: JSON.stringify(body) })
               .then(function() { return v3Secrets('/api/settings/secrets', { method: 'POST', body: JSON.stringify({ recovery: pw }) }); })
-              .then(function() { addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination(); });
+              .then(function() {
+                addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination();
+                if (body.alayaLoginPass) { settings.alayaLoginPass = body.alayaLoginPass; window._alayaPass = body.alayaLoginPass; $('#s-alaya-pass').val(body.alayaLoginPass); }   // the field was filled before the restore ran
+              });
           });
         });
       }).catch(function(e) { if (e && e.cancel) return; showToast('Wrong recovery password', true); addLog('Restore failed: wrong recovery password', 'log-err'); return ask(true); });
