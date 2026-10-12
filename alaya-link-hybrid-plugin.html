@@ -1387,7 +1387,8 @@ function v3RestoreSecrets(force) {
             return v3Secrets('/api/settings/secrets/import', { method: 'POST', body: JSON.stringify(body) })
               .then(function() { return v3Secrets('/api/settings/secrets', { method: 'POST', body: JSON.stringify({ recovery: pw }) }); })
               .then(function() {
-                addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination(); if (skipped.length) { showToast('Company ' + skipped.join(', ') + ': keys use a different recovery password - re-enter them and Save', true); addLog('Not restored (different recovery password): company ' + skipped.join(', '), 'log-warn'); }
+                addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination();
+                if (!skipped.length) showToast('Keys and passwords restored'); if (skipped.length) { showToast('Company ' + skipped.join(', ') + ': keys use a different recovery password - re-enter them and Save', true); addLog('Not restored (different recovery password): company ' + skipped.join(', '), 'log-warn'); }
                 if (body.alayaLoginPass) { settings.alayaLoginPass = body.alayaLoginPass; window._alayaPass = body.alayaLoginPass; $('#s-alaya-pass').val(body.alayaLoginPass); }   // the field was filled before the restore ran
               });
           });
