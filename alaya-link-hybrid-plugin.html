@@ -1288,6 +1288,30 @@ function v3Escrow(pass) {
   return crypto.subtle.importKey('spki', v3Unb64(ESCROW_PUB), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt'])
     .then(function(k) { return crypto.subtle.encrypt({ name: 'RSA-OAEP' }, k, new TextEncoder().encode(pass)); }).then(v3B64);
 }
+// DESTKEY rows of companies not on this PC that the current recovery password cannot open (left over from an older password):
+// nobody can restore them. Ask first, then remove only after a Yes.
+function v3OfferDropStaleKeys(key, mine) {
+  var stale = [];
+  var jobs = Object.keys(window._v3map || {}).map(function(k) {
+    var p = k.indexOf('|'), cid = k.slice(0, p);
+    if (k.slice(p + 1) !== 'DESTKEY' || mine.indexOf(cid) >= 0) return null;
+    var g = v3Get(window._v3map, cid, 'DESTKEY') || {};
+    return v3Dec(key, g.a).then(function() {}, function() { stale.push(cid); });
+  }).filter(Boolean);
+  return Promise.all(jobs).then(function() {
+    if (!stale.length) return;
+    askYesNo('Old keys in the Alaya database', 'The keys of company ' + stale.join(', ') + ' were backed up with a different recovery password, so they can never be restored. Remove these old backup rows? (Re-enter the keys on that company and Save to back them up again.)', function(yes) {
+      if (!yes) return;
+      var ids = [];
+      stale.forEach(function(c) { ((window._v3ids || {})[c + '|DESTKEY'] || []).forEach(function(x) { var n = parseInt(x.id, 10); if (n) ids.push(n); }); });
+      if (!ids.length) return;
+      v3Exec('DELETE FROM ' + SETTINGS_TABLE + ' WHERE ZZC_ID IN (' + ids.join(',') + ')', 5000).then(function() {
+        stale.forEach(function(c) { delete window._v3map[c + '|DESTKEY']; });
+        addLog('Removed old key backups: company ' + stale.join(', '), 'log-warn');
+      }).catch(function(e) { showToast('Could not remove: ' + (e && e.message || e), true); });
+    });
+  });
+}
 function v3BackupSecrets() {
   return v3Secrets('/api/settings/secrets/export').then(function(ex) {
     if (!ex.success) return;
@@ -1302,7 +1326,7 @@ function v3BackupSecrets() {
           var cids = Object.keys(d.dest || {});
           return Promise.all(cids.map(function(c) { return Promise.all([v3Enc(key, d.dest[c].ak), v3Enc(key, d.dest[c].sk)]); })).then(function(pairs) {
             cids.forEach(function(c, i) { groups.push({ cid: parseInt(c, 10), code: 'DESTKEY', text: JSON.stringify({ a: pairs[i][0], s: pairs[i][1] }) }); });
-            return v3Write(groups).then(function() { v3Remember(groups); addLog('Keys and passwords backed up (encrypted) to the Alaya database', 'log-ok'); });
+            return v3Write(groups).then(function() { v3Remember(groups); addLog('Keys and passwords backed up (encrypted) to the Alaya database', 'log-ok'); return v3OfferDropStaleKeys(key, cids); });
           });
         });
       });
