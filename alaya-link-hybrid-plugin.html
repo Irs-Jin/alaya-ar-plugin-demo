@@ -1368,7 +1368,7 @@ function v3RestoreSecrets(force) {
               });
           });
         });
-      }).catch(function(e) { if (e && e.cancel) return; showToast('Wrong recovery password', true); addLog('Restore failed: wrong recovery password', 'log-err'); return ask(true); });
+      }).catch(function(e) { if (e && e.cancel) return; if (!(e && (e.name === 'OperationError' || e.message === 'bad'))) { showToast('Restore failed: ' + (e && e.message || e), true); addLog('Restore failed after the password was accepted: ' + (e && e.message || e), 'log-err'); return; } showToast('Wrong recovery password', true); addLog('Restore failed: wrong recovery password', 'log-err'); return ask(true); });
     }); };
     return ask(false);
   }).catch(function() {});
