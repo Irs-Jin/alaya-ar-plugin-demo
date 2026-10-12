@@ -310,6 +310,7 @@
     </div>
     </div>
 
+    <div id="alaya-login-block" style="display:none;">  <!-- hidden: the page always logs in as the Alaya session user (no stored login/password) -->
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Alaya Login</h3>
     <div class="form-row">
       <div class="form-group">
@@ -330,6 +331,7 @@
       The password is kept on <b>this PC</b> (encrypted by Windows, in the local backend), so it is only typed once.
       An extra copy is saved in the Alaya database <b>encrypted with your recovery password</b> (never in plain text),
       so a new PC can restore it. Change it by typing a new one and clicking Save.
+    </div>
     </div>
 
     <div id="api-license" style="display:none;">
@@ -1389,7 +1391,7 @@ function v3RestoreSecrets(force) {
               .then(function() {
                 addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination();
                 if (!skipped.length) setTimeout(function() { showToast('Keys and passwords restored', false, 8000); }, 800);   // after the other toasts, which replace each other if (skipped.length) { showToast('Company ' + skipped.join(', ') + ': keys use a different recovery password - re-enter them and Save', true); addLog('Not restored (different recovery password): company ' + skipped.join(', '), 'log-warn'); }
-                if (body.alayaLoginPass) { settings.alayaLoginPass = body.alayaLoginPass; window._alayaPass = body.alayaLoginPass; $('#s-alaya-pass').val(body.alayaLoginPass); }   // the field was filled before the restore ran
+                if (body.alayaLoginPass) { settings.alayaLoginPass = body.alayaLoginPass; }   // the field was filled before the restore ran
               });
           });
         });
@@ -1615,6 +1617,7 @@ function applySettings() {
   else if (s.sqlCompanyCode) $('#sql-company, #s-sql-company').val(s.sqlCompanyCode);
   // Alaya login override + hidden API License. Stored password fills the
   // input and goes into memory so token mints use the real credential login.
+  s.alayaLoginClient = ''; s.alayaLoginUser = '';   // the Alaya Login override is gone: always the Alaya session user
   $('#s-alaya-client').val(s.alayaLoginClient || '');
   $('#s-alaya-user').val(s.alayaLoginUser || '');
   $('#s-alaya-pass').val('');
@@ -1634,15 +1637,7 @@ function applySettings() {
     remint = true;
   }
   if (remint && apiUrl && username) requestToken();
-  // password comes from the local backend (not the UDF table)
-  var _ap = apiUrl, _au = username, _rm = remint;
-  fetch(BACKEND_URL + '/api/settings/secrets').then(function(r) { return r.json(); }).then(function(r) {
-    window._passLoaded = true;
-    var pw = r && r.success && r.data && r.data.alayaLoginPass || '';
-    if (!pw) return;
-    s.alayaLoginPass = pw; window._alayaPass = pw; $('#s-alaya-pass').val(pw);
-    if (!_rm && _ap && _au) requestToken({ pass: pw });
-  }).catch(function() { window._passLoaded = true; });
+  // no stored Alaya password any more: tokens are minted for the Alaya session user (devkey login)
   loadConnection(s);
 }
 
