@@ -1388,7 +1388,7 @@ function v3RestoreSecrets(force) {
               .then(function() { return v3Secrets('/api/settings/secrets', { method: 'POST', body: JSON.stringify({ recovery: pw }) }); })
               .then(function() {
                 addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination();
-                if (!skipped.length) showToast('Keys and passwords restored'); if (skipped.length) { showToast('Company ' + skipped.join(', ') + ': keys use a different recovery password - re-enter them and Save', true); addLog('Not restored (different recovery password): company ' + skipped.join(', '), 'log-warn'); }
+                if (!skipped.length) setTimeout(function() { showToast('Keys and passwords restored', false, 8000); }, 800);   // after the other toasts, which replace each other if (skipped.length) { showToast('Company ' + skipped.join(', ') + ': keys use a different recovery password - re-enter them and Save', true); addLog('Not restored (different recovery password): company ' + skipped.join(', '), 'log-warn'); }
                 if (body.alayaLoginPass) { settings.alayaLoginPass = body.alayaLoginPass; window._alayaPass = body.alayaLoginPass; $('#s-alaya-pass').val(body.alayaLoginPass); }   // the field was filled before the restore ran
               });
           });
@@ -2001,13 +2001,13 @@ function addLog(msg, cls) {
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ΓöÇΓöÇ Toast ΓöÇΓöÇ
-function showToast(msg, isError) {
+function showToast(msg, isError, ms) {
   $('#toast-msg').remove();
   var bg = isError ? '#fee2e2' : '#dcfce7';
   var fg = isError ? '#991b1b' : '#166534';
   var html = '<div id="toast-msg" style="position:fixed;bottom:24px;right:24px;background:'+bg+';color:'+fg+';padding:12px 20px;border-radius:10px;font-size:0.82rem;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);">'+escHtml(msg)+'</div>';
   var $t = $(html).appendTo('body');
-  setTimeout(function(){ $t.remove(); }, 4000);
+  setTimeout(function(){ $t.remove(); }, ms || 4000);
 }
 
 // ΓöÇΓöÇ postMessage helpers ΓöÇΓöÇ
