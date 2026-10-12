@@ -4117,13 +4117,22 @@ $('#btn-transfer').on('click', function() {
   // Auto-load master data (customers + CompanyCustomer CC merge) before
   // transferring: one click = load + transfer. Manual Load button removed.
   function go() {
+    // desktop tool (c_Account.cs TransferCustomer): customers without Control A/C or Account are counted and confirmed before anything is transferred
+    function confirmThenRun() {
+      var n = (alayaData.masterSkipped || {}).customer || 0;
+      if (!n || window._advOnly || !$('#s-t-customer').is(':checked')) { runTransferMaster(from, to, company, alayaCid); return; }
+      askYesNo('Confirm', n < 2
+        ? n + ' member do not have Control A/C or Account. Member will be assumed as walk-in cash sale and his/ her detail will be filtered out.'
+        : n + ' member(s) do not have Control A/C or Account. Member(s) will be assumed as walk-in cash sale(s) and their details will be filtered out.',
+        function(yes) { if (yes) runTransferMaster(from, to, company, alayaCid); });
+    }
     if (alayaData._masterCid === alayaCid && alayaData.customerRaw && alayaData.customerRaw.length) {
-      runTransferMaster(from, to, company, alayaCid);
+      confirmThenRun();
     } else {
       addLog('Auto-loading Alaya data for company ' + alayaCid + ' (' + currentAlayaCompanyCode() + ')...', 'log-info');
       loadMasterData(function() {
         alayaData._masterCid = alayaCid;
-        runTransferMaster(from, to, company, alayaCid);
+        confirmThenRun();
       });
     }
   }
