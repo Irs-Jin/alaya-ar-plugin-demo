@@ -1346,13 +1346,13 @@ function v3RestoreSecrets(force) {
       return v3Key(pw, sec.salt).then(function(key) {
         return v3Dec(key, sec.check).then(function(chk) {
           if (chk !== 'LSH-OK') throw new Error('bad');
-          var body = { dest: {} };
+          var body = { dest: {} }, skipped = [];
           var jobs = [v3Dec(key, sec.a), v3Dec(key, sec.f), v3Dec(key, sec.e)];
           Object.keys(window._v3map).forEach(function(k) {
             var p = k.indexOf('|'), cid = k.slice(0, p);
             if (k.slice(p + 1) !== 'DESTKEY') return;
             var g = v3Get(window._v3map, cid, 'DESTKEY') || {};
-            jobs.push(Promise.all([v3Dec(key, g.a), v3Dec(key, g.s)]).then(function(x) { body.dest[cid] = { ak: x[0], sk: x[1] }; }));
+            jobs.push(Promise.all([v3Dec(key, g.a), v3Dec(key, g.s)]).then(function(x) { body.dest[cid] = { ak: x[0], sk: x[1] }; }, function() { skipped.push(cid); }));   // this company's keys were backed up under a different recovery password: skip it, restore the rest
           });
           return Promise.all(jobs).then(function(v) { return v3PickCompanies(Object.keys(body.dest)).then(function(keep) {
             if (!keep) throw { cancel: true };                          // Cancel in the company window: restore nothing
@@ -1363,7 +1363,7 @@ function v3RestoreSecrets(force) {
             return v3Secrets('/api/settings/secrets/import', { method: 'POST', body: JSON.stringify(body) })
               .then(function() { return v3Secrets('/api/settings/secrets', { method: 'POST', body: JSON.stringify({ recovery: pw }) }); })
               .then(function() {
-                addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination();
+                addLog('Keys and passwords restored from the Alaya database', 'log-ok'); loadDestination(); if (skipped.length) { showToast('Company ' + skipped.join(', ') + ': keys use a different recovery password - re-enter them and Save', true); addLog('Not restored (different recovery password): company ' + skipped.join(', '), 'log-warn'); }
                 if (body.alayaLoginPass) { settings.alayaLoginPass = body.alayaLoginPass; window._alayaPass = body.alayaLoginPass; $('#s-alaya-pass').val(body.alayaLoginPass); }   // the field was filled before the restore ran
               });
           });
