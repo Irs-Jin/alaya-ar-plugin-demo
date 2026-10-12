@@ -1754,6 +1754,7 @@ $('#d-test').on('click', function() {
 // newly selected company from the dropdown.
 // While a save runs nothing else is clickable: the host's SQL control handles one statement at a time, so a
 // second click (Save as default, Transfer...) made the save time out.
+var NO_DB_MSG = 'The Alaya database did not answer. This user probably has no Module Editor permission, so the settings are saved on this PC only (not shared with other PCs). Ask your administrator, or log in as a user with that permission.';
 function setSaving(on) {
   window._saving = on;
   var el = document.getElementById('save-lock');
@@ -1768,9 +1769,9 @@ function setSaving(on) {
   if (on) window._saveWatch = setTimeout(function() {      // a save that never finishes must not freeze the page
     if (!window._saving) return;
     setSaving(false);
-    addLog('Saving did not finish within 45 s (the Alaya database did not answer) - the copy on this PC is kept', 'log-err');
-    showToast('Saving did not finish - check the Log, then try again', true, 8000);
-  }, 45000);
+    addLog(NO_DB_MSG, 'log-err');
+    showToast(NO_DB_MSG, true, 10000);
+  }, 25000);
 }
 
 function saveSettings(mappingCid) {
@@ -1967,7 +1968,8 @@ function v3SaveFlow(saveCid, typedPass, identityChanged) {
     setSaving(false);
   }).catch(function(err) {
     setSaving(false);
-    showToast('Could not save to the Alaya database: ' + err.message + ' - the settings are kept on this PC', true);
+    var noDb = /memoQuery|timed out/i.test(String(err && err.message));
+    showToast(noDb ? NO_DB_MSG : 'Could not save to the Alaya database: ' + err.message + ' - the settings are kept on this PC', true, noDb ? 10000 : 4000);
     addLog('Save to the Alaya database failed (' + err.message + '). The copy on this PC is up to date.', 'log-err');
   });
 }
