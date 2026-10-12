@@ -3124,7 +3124,7 @@ function loadScopedViaRest(cid, done) {
   // Rows the JOIN below filters out (no Reference No / Control A/C): counted here so the transfer can report the total, like the desktop tool
   alayaData.masterSkipped = { customer: 0, vendor: 0 };
   [['customer', 'CompanyCustomer', 'CC_'], ['vendor', 'CompanyVendor', 'CV_']].forEach(function(t) {
-    var q = "SELECT COUNT(*) AS n FROM " + t[1] + " WHERE " + t[2] + "CompanyID = " + (parseInt(cid, 10) || 1) +
+    var q = "SELECT COUNT(1) AS n FROM " + t[1] + " WHERE " + t[2] + "CompanyID = " + (parseInt(cid, 10) || 1) +
             " AND (" + t[2] + "ReferenceNo IN ('', '[IGNORE]') OR " + t[2] + "ReferenceControlAcct IN ('', '[IGNORE]'))";
     executeSqlViaHost(q, 10000, 5000).then(function(msg) {
       try { var rs = JSON.parse(msg.result).results[0]; alayaData.masterSkipped[t[0]] = parseInt(rs.rows[0][0], 10) || 0; addLog(t[0] + 's without Control A/C or Reference No in company ' + cid + ': ' + alayaData.masterSkipped[t[0]], 'log-info'); } catch (e) { addLog('Could not count ' + t[0] + 's without Control A/C: ' + e.message + ' | reply: ' + String(msg && (msg.result || msg.error)).slice(0, 200), 'log-warn'); }
