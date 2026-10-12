@@ -1424,13 +1424,15 @@ function v3OfferMachineCopyNow(machine) {
   // of the newest one - the DCF path of another PC (local vs network) would be wrong here, so this PC keeps its own
   others.sort(function(a, b) { return String(b.t || '').localeCompare(String(a.t || '')); });
   var same = others.filter(function(x) { return x.n === machine.name; })[0], o = same || others[0];
-  if (same) settings.dcfPath = o.d || settings.dcfPath;
+  // a network path (\\server\...) works from any PC, a local C:\ path only on its own PC
+  var net = others.filter(function(x) { return String(x.d || '').indexOf('\\\\') === 0; })[0], pathFrom = same || net;
+  if (pathFrom) settings.dcfPath = pathFrom.d || settings.dcfPath;
   settings.fbHost = o.h || settings.fbHost; settings.fbPort = o.p || settings.fbPort;
   settings.fbUser = o.u || settings.fbUser; settings.estreamUser = o.e || settings.estreamUser;
   $('#s-dcf-path').val(settings.dcfPath); $('#s-fb-host').val(settings.fbHost); $('#s-fb-port').val(settings.fbPort);
   $('#s-fb-user').val(settings.fbUser); $('#s-estream-user').val(settings.estreamUser);
   pushConnectionSettingsToBackend(settings);
-  var msg = same ? 'SQL connection restored (this PC, saved ' + (o.t || '') + ') - press Save'
+  var msg = pathFrom ? 'SQL connection restored (saved ' + (pathFrom.t || '') + ') - check the Default.DCF path, then Save'
                  : 'Restored the connection users from ' + (o.n || o.id) + '. Set the Default.DCF path for THIS PC (local path or network path), then Save';
   addLog(msg, 'log-ok'); showToast(msg, false, 10000);
 }
