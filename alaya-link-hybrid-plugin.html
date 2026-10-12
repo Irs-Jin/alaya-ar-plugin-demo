@@ -2578,7 +2578,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.24';
+var HELPER_LATEST = '1.5.25';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
@@ -3121,6 +3121,15 @@ function loadScopedViaRest(cid, done) {
     if (sourceLabel) return; // caller already logged its own descriptive line
     addLog('Loaded ' + alayaData.vendors.length + ' vendors' + (scoped ? ' for company ' + cid + ' (REST, scoped)' : ' (REST, unscoped fallback)'), 'log-ok');
   }
+  // Rows the JOIN below filters out (no Reference No / Control A/C): counted here so the transfer can report the total, like the desktop tool
+  alayaData.masterSkipped = { customer: 0, vendor: 0 };
+  [['customer', 'CompanyCustomer', 'CC_'], ['vendor', 'CompanyVendor', 'CV_']].forEach(function(t) {
+    var q = "SELECT COUNT(*) FROM " + t[1] + " WHERE " + t[2] + "CompanyID = " + (parseInt(cid, 10) || 1) +
+            " AND (" + t[2] + "ReferenceNo IN ('', '[IGNORE]') OR " + t[2] + "ReferenceControlAcct IN ('', '[IGNORE]'))";
+    executeSqlViaHost(q, 10000, 5000).then(function(msg) {
+      try { var rs = JSON.parse(msg.result).results[0]; alayaData.masterSkipped[t[0]] = parseInt(rs.rows[0][0], 10) || 0; } catch (e) {}
+    }).catch(function() {});
+  });
   // Customer master source: authoritative list = CompanyCustomer JOIN Customer for
   // this company (exactly mirrors the desktop Link tool + the user's SQL). Includes
   // CC_ReferenceNo / CC_ReferenceControlAcct directly, already filtered like the
@@ -4292,7 +4301,7 @@ function runTransferMaster(from, to, company, alayaCid) {
       paymodes: maps.paymodes,
       branches: maps.branches,
       divisions: maps.divisions,
-      docs: $.extend({ customer: custDocs, vendor: vendDocs,
+      docs: $.extend({ customer: custDocs, vendor: vendDocs, masterSkipped: alayaData.masterSkipped || {},
         creditnoteSide: (window._advRun && $('input[name="adv-type"]:checked').val()) || 'customer' }, srcDocs)
     }),
     success: function(r) {
