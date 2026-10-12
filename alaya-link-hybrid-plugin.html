@@ -4810,6 +4810,7 @@ $('#settings-heading').on('click', function(e) {
   addLog('Hidden settings (API License, Backend URL, Firebird) ' + ($('#api-license').is(':visible') ? 'shown' : 'hidden'), 'log-info');
 });
 $('#btn-save-default-company').on('click', function() {
+  resolveCompanyFilterText();   // typed text is only applied on blur (120 ms later): apply it now, or the OLD company gets saved as default
   var id = currentAlayaCompanyID();
   var code = currentAlayaCompanyCode();
   if (!id) { showToast('No Alaya company selected in the dropdown yet', true); return; }
