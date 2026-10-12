@@ -1420,39 +1420,16 @@ function v3OfferMachineCopyNow(machine) {
     var o = v3Get(window._v3map, 0, k.slice(2)); o.id = k.slice(10); return o;
   });
   if (!others.length) return;
-  $('#v3-copy-overlay').remove();
-  var ov = $('<div id="v3-copy-overlay">').css({ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)',
-    'z-index': 100001, display: 'flex', 'align-items': 'center', 'justify-content': 'center' });
-  var box = $('<div>').css({ background: '#fff', 'border-radius': '12px', padding: '20px 24px', width: '520px', 'max-width': '92vw' });
-  box.append('<h2 style="margin-bottom:6px;">Copy the SQL connection from another PC?</h2>');
-  box.append('<div class="sub" style="margin-bottom:10px;">This PC (' + escHtml(machine.name) + ') has no saved SQL connection yet. Pick the PC it should copy from (DCF path, Firebird, eStream user), or skip and set it here.</div>');
-  others.forEach(function(o) {
-    var b = $('<button class="btn-secondary" style="display:block;width:100%;text-align:left;margin-bottom:6px;">')
-      .text((o.n || o.id) + '  -  ' + (o.d || '') + '  (saved ' + (o.t || '') + ')');
-    b.on('click', function() {
-      settings.dcfPath = o.d || settings.dcfPath; settings.fbHost = o.h || settings.fbHost; settings.fbPort = o.p || settings.fbPort;
-      settings.fbUser = o.u || settings.fbUser; settings.estreamUser = o.e || settings.estreamUser;
-      $('#s-dcf-path').val(settings.dcfPath); $('#s-fb-host').val(settings.fbHost); $('#s-fb-port').val(settings.fbPort);
-      $('#s-fb-user').val(settings.fbUser); $('#s-estream-user').val(settings.estreamUser);
-      pushConnectionSettingsToBackend(settings);
-      ov.remove(); addLog('SQL connection copied from ' + (o.n || o.id) + ' - press Save to keep it', 'log-ok'); showToast('Copied - press Save');
-    });
-    var del = $('<button class="btn-secondary" title="Delete this saved PC entry" style="flex-shrink:0;margin-bottom:6px;color:#b91c1c;">&#10005;</button>');
-    del.on('click', function() {
-      var ids = ((window._v3ids || {})['0|MACHINE@' + o.id] || []).map(function(x) { return parseInt(x.id, 10); }).filter(Boolean);
-      if (!ids.length || !confirm('Delete this saved PC entry:  ' + (o.n || o.id) + ' - ' + (o.d || '') + ' (' + (o.t || '') + ')')) return;
-      v3Exec('DELETE FROM ' + SETTINGS_TABLE + ' WHERE ZZC_ID IN (' + ids.join(',') + ')', 5000).then(function() {
-        delete window._v3map['0|MACHINE@' + o.id]; row.remove(); v3CachePost();
-        addLog('Deleted saved PC entry ' + (o.n || o.id), 'log-ok');
-        if (!box.find('.v3-pc-row').length) ov.remove();
-      }).catch(function(e) { showToast('Could not delete: ' + (e && e.message || e), true); });
-    });
-    b.css({ flex: 1, 'margin-right': '6px' });
-    var row = $('<div class="v3-pc-row" style="display:flex;align-items:flex-start;">').append(b, del);
-    box.append(row);
-  });
-  var skip = $('<button class="btn-secondary" style="margin-top:6px;">Skip</button>'); skip.on('click', function() { ov.remove(); });
-  box.append(skip); ov.append(box).appendTo('body');
+  // no picker: the newest saved connection is applied right after the keys are restored (edit it, then Save)
+  others.sort(function(a, b) { return String(b.t || '').localeCompare(String(a.t || '')); });
+  var o = others[0];
+  settings.dcfPath = o.d || settings.dcfPath; settings.fbHost = o.h || settings.fbHost; settings.fbPort = o.p || settings.fbPort;
+  settings.fbUser = o.u || settings.fbUser; settings.estreamUser = o.e || settings.estreamUser;
+  $('#s-dcf-path').val(settings.dcfPath); $('#s-fb-host').val(settings.fbHost); $('#s-fb-port').val(settings.fbPort);
+  $('#s-fb-user').val(settings.fbUser); $('#s-estream-user').val(settings.estreamUser);
+  pushConnectionSettingsToBackend(settings);
+  addLog('SQL connection copied from ' + (o.n || o.id) + ' (saved ' + (o.t || '') + ') - check the DCF path, then press Save', 'log-ok');
+  showToast('SQL connection restored from ' + (o.n || o.id) + ' - check the path, then Save', false, 8000);
 }
 
 // v3 boot: rows -> map -> settings for the default company. The old format is migrated once.
