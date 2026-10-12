@@ -2500,6 +2500,7 @@ function startHelperNow() {
         clearInterval(iv);
         addLog('Backend came online (start.bat launched from plugin)', 'log-ok');
         testBackendConnection();
+        loadSettings();  // the helper was offline at page load, so the key-restore prompt never ran
         loadSqlCompanies();
       },
       error: function() {
