@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Customer Expiry Listing - Alaya</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', -apple-system, 'Segoe UI', Arial, sans-serif; background:#f0f2f5; color:#1a1a1a; padding:24px 20px; line-height:1.5; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 1px 3px rgba(0,0,0,.06); padding:20px 24px; max-width:1200px; margin:0 auto 16px; }
+    h1 { font-size:1.3rem; font-weight:800; color:#111827; }
+    .sub { font-size:.82rem; color:#6b7280; margin:4px 0 12px; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:.72rem; font-weight:700; }
+    .badge-waiting { background:#fef3c7; color:#92400e; }
+    .badge-received { background:#dcfce7; color:#166534; }
+    .badge-fail { background:#fee2e2; color:#991b1b; }
+    .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+    .bar input, .bar select { border:1px solid #d1d5db; border-radius:8px; padding:7px 10px; font-size:.82rem; font-family:inherit; }
+    .bar input { flex:1; min-width:180px; }
+    button { background:#2563eb; color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:.82rem; font-weight:600; cursor:pointer; }
+    button:disabled { background:#9ca3af; cursor:not-allowed; }
+    .btn-secondary { background:#e5e7eb; color:#111827; }
+    table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    th { text-align:left; background:#f9fafb; padding:8px 10px; border-bottom:1px solid #e5e7eb; position:sticky; top:0; }
+    td { padding:8px 10px; border-bottom:1px solid #f3f4f6; }
+    .wrap { max-height:520px; overflow:auto; }
+    .pill { padding:2px 10px; border-radius:999px; font-size:.72rem; font-weight:700; }
+    .p-exp { background:#fee2e2; color:#991b1b; } .p-soon { background:#fef3c7; color:#92400e; } .p-ok { background:#dcfce7; color:#166534; }
+    #log { list-style:none; font-size:.74rem; color:#6b7280; max-height:140px; overflow:auto; }
+    #log .ts { color:#9ca3af; margin-right:8px; }
+    .empty { text-align:center; color:#9ca3af; padding:24px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Customer Expiry Listing</h1>
+  <div class="sub">Customers by <b>Date Expired</b> (Customer &gt; General). Read-only.
+    <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span></div>
+  <div class="bar">
+    <input id="q" placeholder="Search account code / name / phone / email..." />
+    <select id="win">
+      <option value="expired">Expired</option>
+      <option value="30">Expiring ≤ 30 days</option>
+      <option value="60">Expiring ≤ 60 days</option>
+      <option value="90" selected>Expiring ≤ 90 days</option>
+      <option value="all">All with expiry date</option>
+    </select>
+    <button id="btn-load" disabled>Refresh</button>
+    <button id="btn-csv" class="btn-secondary" disabled>Export CSV</button>
+    <span id="count" class="sub" style="margin:0"></span>
+  </div>
+  <div class="wrap">
+    <table>
+      <thead><tr><th>Account Code</th><th>Customer</th><th>Phone</th><th>Email</th><th>Status</th><th>Date Expired</th><th>Days Left</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">Waiting for host...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<div class="card"><ul id="log"></ul></div>
+
+<script>
+  var hostOrigin = '';
+  var pendingDcbCallbacks = {};
+  var all = [];
+  var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
+  var SQL = "SELECT TOP 5000 Cust_AccountCode, Cust_NAME, Cust_Phone1, Cust_Email, Cust_Status, " +
+            "CONVERT(varchar(10), Cust_ExpiryDate, 120) FROM Customer WHERE Cust_ExpiryDate IS NOT NULL ORDER BY Cust_ExpiryDate";
+
+  function addLog(m) { $('#log').prepend($('<li>').append($('<span class="ts">').text(new Date().toLocaleTimeString()), document.createTextNode(m))); }
+  function postToParent(type, data) { if (window.parent && window.parent !== window) window.parent.postMessage({ type: type, data: data }, '*'); }
+
+  /* ── ALAYA_INIT handshake (same as todo-list-plugin.html) ── */
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.type !== 'ALAYA_INIT') return;
+    hostOrigin = e.originalEvent.origin || '';
+    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
+    /* pre-load hidden memoQuery iframe in host for the SQL bridge */
+    window.top.postMessage({ target: hostOrigin, eval:
+      '(function(){if(document.getElementById("hidden-memo-frame"))return;var f=document.createElement("iframe");' +
+      'f.id="hidden-memo-frame";f.style.display="none";f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";document.body.appendChild(f);})();'
+    }, '*');
+    $('#btn-load').prop('disabled', false);
+    load();
+  });
+
+  /* ── host SQL bridge (verbatim from todo-list-plugin.html, Rowcount raised to 5000) ── */
+  $(window).on('message', function (e) {
+    var msg = e.originalEvent.data;
+    if (!msg || msg.source !== 'alaya-dcb-result' || !msg.requestId) return;
+    var cb = pendingDcbCallbacks[msg.requestId];
+    if (!cb) return;
+    delete pendingDcbCallbacks[msg.requestId];
+    clearTimeout(cb.timer);
+    cb.resolve(msg);
+  });
+
+  function executeSqlViaHost(sql) {
+    return new Promise(function (resolve, reject) {
+      if (!hostOrigin) { reject(new Error('ALAYA_INIT not received yet')); return; }
+      var requestId = 'dcb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      var timer = setTimeout(function () { delete pendingDcbCallbacks[requestId]; reject(new Error('Database callback timed out after 60s')); }, 60000);
+      pendingDcbCallbacks[requestId] = { resolve: resolve, reject: reject, timer: timer };
+      var evalScript =
+        '(function(){try{' +
+          'var sql=result.sql, reqId=result.requestId;' +
+          'function findMemoFrame(win){try{ if(typeof win.memoQuery==="object" && typeof win.WebForm_DoCallback==="function") return win; }catch(e){}' +
+            'try{ for(var i=0;i<win.frames.length;i++){ var f=findMemoFrame(win.frames[i]); if(f) return f; } }catch(e){} return null;}' +
+          'function bcast(m){function postAll(win){try{ win.postMessage(m,"*"); }catch(e){} try{ for(var i=0;i<win.frames.length;i++){ try{ postAll(win.frames[i]); }catch(e){} } }catch(e){}} postAll(window);}' +
+          'function runOnMemo(mf){var upd=""; try{ upd=mf.memoQuery.GetUpdatableTable(); }catch(e){}' +
+            'var hdr={Rowcount:5000,Timeout:0,Query:sql,UpdatableTable:(typeof upd==="string"?upd:JSON.stringify(upd))};' +
+            'var arg="RunQuery|"+JSON.stringify(hdr);' +
+            'var end=function(r){ bcast({source:"alaya-dcb-result",requestId:reqId,result:r}); };' +
+            'var err=function(ex,ctx){ bcast({source:"alaya-dcb-result",requestId:reqId,error:(ex||"").toString(),ctx:ctx}); };' +
+            'mf.WebForm_DoCallback(' + JSON.stringify(MEMOQUERY_CB_TARGET) + ', arg, end, null, err, false);}' +
+          'var mf=findMemoFrame(window); if(mf){ runOnMemo(mf); return; }' +
+          'var hidden=document.getElementById("hidden-memo-frame");' +
+          'if(!hidden){hidden=document.createElement("iframe");hidden.id="hidden-memo-frame";hidden.style.display="none";hidden.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";document.body.appendChild(hidden);}' +
+          'var attempts=0;function poll(){attempts++;' +
+            'try{ if(hidden.contentWindow && typeof hidden.contentWindow.memoQuery==="object" && typeof hidden.contentWindow.WebForm_DoCallback==="function"){ runOnMemo(hidden.contentWindow); return; } }catch(e){}' +
+            'if(attempts<40){ setTimeout(poll,500); } else { bcast({source:"alaya-dcb-result",requestId:reqId,error:"memoQuery not available after 20s"}); }}' +
+          'poll();' +
+        '}catch(e){ bcast({source:"alaya-dcb-result",requestId:result.requestId,error:e.message}); }})();';
+      window.top.postMessage({ target: hostOrigin, eval: evalScript, sql: sql, requestId: requestId }, '*');
+    });
+  }
+
+  /* ── load + render ── */
+  function load() {
+    $('#btn-load').prop('disabled', true);
+    $('#rows').html('<tr><td colspan="7" class="empty">Loading...</td></tr>');
+    executeSqlViaHost(SQL).then(function (msg) {
+      if (msg.error) throw new Error(msg.error);
+      var r = typeof msg.result === 'string' ? JSON.parse(msg.result) : msg.result;
+      if (!r || !r.success) throw new Error('Query failed: ' + JSON.stringify(r).slice(0, 200));
+      all = (r.results && r.results[0] && r.results[0].rows) || [];
+      addLog('Loaded ' + all.length + ' customers with expiry date');
+      render();
+    }).catch(function (err) {
+      addLog('Load failed: ' + err.message);
+      $('#rows').html('<tr><td colspan="7" class="empty">Load failed: ' + $('<i>').text(err.message).html() + '</td></tr>');
+    }).then(function () { $('#btn-load').prop('disabled', false); });
+  }
+
+  function daysLeft(s) {
+    var p = String(s).split('-');
+    var d = new Date(+p[0], +p[1] - 1, +p[2]), t = new Date(); t.setHours(0, 0, 0, 0);
+    return Math.round((d - t) / 86400000);
+  }
+
+  var view = [];
+  function render() {
+    var w = $('#win').val(), q = $('#q').val().toLowerCase();
+    view = all.filter(function (r) {
+      var d = daysLeft(r[5]);
+      if (w === 'expired' ? d >= 0 : (w !== 'all' && d > +w)) return false;
+      return !q || r.slice(0, 4).join(' ').toLowerCase().indexOf(q) >= 0;
+    }).map(function (r) { return r.concat([daysLeft(r[5])]); });
+    $('#count').text(view.length + ' of ' + all.length);
+    $('#btn-csv').prop('disabled', !view.length);
+    if (!view.length) { $('#rows').html('<tr><td colspan="7" class="empty">No customers match.</td></tr>'); return; }
+    $('#rows').empty().append(view.map(function (r) {
+      var d = r[6], cls = d < 0 ? 'p-exp' : d <= 30 ? 'p-soon' : 'p-ok';
+      var tr = $('<tr>');
+      [r[0], r[1], r[2], r[3], r[4], r[5]].forEach(function (v) { tr.append($('<td>').text(v == null ? '' : v)); });
+      return tr.append($('<td>').append($('<span class="pill ' + cls + '">').text(d < 0 ? 'Expired ' + (-d) + 'd' : d + 'd')));
+    }));
+  }
+
+  $('#q').on('input', render);
+  $('#win').on('change', render);
+  $('#btn-load').on('click', load);
+  $('#btn-csv').on('click', function () {
+    var esc = function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+    var csv = [['Account Code', 'Customer', 'Phone', 'Email', 'Status', 'Date Expired', 'Days Left']].concat(view)
+      .map(function (r) { return r.map(esc).join(','); }).join('\r\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+    a.download = 'customer_expiry_' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+  });
+  addLog('Page loaded - listening for ALAYA_INIT');
+</script>
+</body>
+</html>
