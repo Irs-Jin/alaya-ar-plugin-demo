@@ -22,7 +22,8 @@
     button { background:#2563eb; color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:.82rem; font-weight:600; cursor:pointer; }
     button:disabled { background:#9ca3af; cursor:not-allowed; }
     .btn-secondary { background:#e5e7eb; color:#111827; }
-    table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    table { width:100%; border-collapse:collapse; font-size:.82rem; table-layout:fixed; }
+    td, th { overflow-wrap:anywhere; }
     th { text-align:left; background:#f9fafb; padding:8px 10px; border-bottom:1px solid #e5e7eb; position:sticky; top:0; }
     td { padding:8px 10px; border-bottom:1px solid #f3f4f6; }
     .wrap { max-height:520px; overflow:auto; }
@@ -30,6 +31,16 @@
     .p-exp { background:#fee2e2; color:#991b1b; } .p-soon { background:#fef3c7; color:#92400e; } .p-ok { background:#dcfce7; color:#166534; }
     #log { list-style:none; font-size:.74rem; color:#6b7280; max-height:140px; overflow:auto; }
     #log .ts { color:#9ca3af; margin-right:8px; }
+    #print-hdr { display:none; }
+    @media print {
+      body { background:#fff; padding:0; }
+      .bar, #log, .badge, .sub, #btn-load, .log-card { display:none !important; }
+      #print-hdr { display:block; font-size:.9rem; margin-bottom:8px; }
+      .card { box-shadow:none; border:0; padding:0; }
+      .wrap { max-height:none; overflow:visible; }
+      th { position:static; }
+      tr { page-break-inside:avoid; }
+    }
     .empty { text-align:center; color:#9ca3af; padding:24px; }
   </style>
 </head>
@@ -40,33 +51,35 @@
     <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span></div>
   <div class="bar">
     <input id="q" placeholder="Search account code / name / phone / email..." />
-    <select id="win">
-      <option value="expired">Expired</option>
-      <option value="30">Expiring ≤ 30 days</option>
-      <option value="60">Expiring ≤ 60 days</option>
-      <option value="90" selected>Expiring ≤ 90 days</option>
-      <option value="all">All with expiry date</option>
-    </select>
+    <select id="co"><option value="0">All companies</option></select>
+    <label class="sub" style="margin:0">From <input type="date" id="d-from" style="flex:none;min-width:0"></label>
+    <label class="sub" style="margin:0">To <input type="date" id="d-to" style="flex:none;min-width:0"></label>
     <button id="btn-load" disabled>Refresh</button>
     <button id="btn-csv" class="btn-secondary" disabled>Export CSV</button>
+    <button id="btn-pdf" class="btn-secondary" disabled>Export PDF</button>
     <span id="count" class="sub" style="margin:0"></span>
   </div>
+  <div id="print-hdr"></div>
   <div class="wrap">
     <table>
-      <thead><tr><th>Account Code</th><th>Customer</th><th>Phone</th><th>Email</th><th>Status</th><th>Date Expired</th><th>Days Left</th></tr></thead>
+      <thead><tr><th style="width:11%">Account Code</th><th style="width:26%">Customer</th><th style="width:13%">Phone</th><th style="width:20%">Email</th><th style="width:8%">Status</th><th style="width:11%">Date Expired</th><th style="width:11%">Days Left</th></tr></thead>
       <tbody id="rows"><tr><td colspan="7" class="empty">Waiting for host...</td></tr></tbody>
     </table>
   </div>
 </div>
-<div class="card"><ul id="log"></ul></div>
+<div class="card log-card"><ul id="log"></ul></div>
 
 <script>
   var hostOrigin = '';
   var pendingDcbCallbacks = {};
   var all = [];
   var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
-  var SQL = "SELECT TOP 5000 Cust_AccountCode, Cust_NAME, Cust_Phone1, Cust_Email, Cust_Status, " +
-            "CONVERT(varchar(10), Cust_ExpiryDate, 120) FROM Customer WHERE Cust_ExpiryDate IS NOT NULL ORDER BY Cust_ExpiryDate";
+  function custSql(co) {
+    return "SELECT TOP 5000 Cust_AccountCode, Cust_NAME, Cust_Phone1, Cust_Email, Cust_Status, " +
+      "CONVERT(varchar(10), Cust_ExpiryDate, 120) FROM Customer c WHERE Cust_ExpiryDate IS NOT NULL" +
+      (+co ? " AND EXISTS (SELECT 1 FROM CompanyCustomer cc WHERE cc.CC_CustomerID = c.Cust_ID AND cc.CC_CompanyID = " + (+co) + ")" : "") +
+      " ORDER BY Cust_ExpiryDate";
+  }
 
   function addLog(m) { $('#log').prepend($('<li>').append($('<span class="ts">').text(new Date().toLocaleTimeString()), document.createTextNode(m))); }
   function postToParent(type, data) { if (window.parent && window.parent !== window) window.parent.postMessage({ type: type, data: data }, '*'); }
@@ -84,7 +97,7 @@
       'f.id="hidden-memo-frame";f.style.display="none";f.src="/Modules/Maintenance/m_UserDefinedFieldModuleEditor.aspx";document.body.appendChild(f);})();'
     }, '*');
     $('#btn-load').prop('disabled', false);
-    load();
+    loadCompanies().then(load);
   });
 
   /* ── host SQL bridge (verbatim from todo-list-plugin.html, Rowcount raised to 5000) ── */
@@ -128,15 +141,25 @@
     });
   }
 
+  function rowsOf(msg) {
+    if (msg.error) throw new Error(msg.error);
+    var r = typeof msg.result === 'string' ? JSON.parse(msg.result) : msg.result;
+    if (!r || !r.success) throw new Error('Query failed: ' + JSON.stringify(r).slice(0, 200));
+    return (r.results && r.results[0] && r.results[0].rows) || [];
+  }
+
+  function loadCompanies() {
+    return executeSqlViaHost('SELECT CO_ID, CO_Name FROM Company ORDER BY CO_Name').then(function (m) {
+      rowsOf(m).forEach(function (r) { $('#co').append($('<option>').val(r[0]).text(r[1])); });
+    }).catch(function (e) { addLog('Company list failed: ' + e.message); });
+  }
+
   /* ── load + render ── */
   function load() {
     $('#btn-load').prop('disabled', true);
     $('#rows').html('<tr><td colspan="7" class="empty">Loading...</td></tr>');
-    executeSqlViaHost(SQL).then(function (msg) {
-      if (msg.error) throw new Error(msg.error);
-      var r = typeof msg.result === 'string' ? JSON.parse(msg.result) : msg.result;
-      if (!r || !r.success) throw new Error('Query failed: ' + JSON.stringify(r).slice(0, 200));
-      all = (r.results && r.results[0] && r.results[0].rows) || [];
+    executeSqlViaHost(custSql($('#co').val())).then(function (msg) {
+      all = rowsOf(msg);
       addLog('Loaded ' + all.length + ' customers with expiry date');
       render();
     }).catch(function (err) {
@@ -153,14 +176,13 @@
 
   var view = [];
   function render() {
-    var w = $('#win').val(), q = $('#q').val().toLowerCase();
+    var from = $('#d-from').val(), to = $('#d-to').val(), q = $('#q').val().toLowerCase();
     view = all.filter(function (r) {
-      var d = daysLeft(r[5]);
-      if (w === 'expired' ? d >= 0 : (w !== 'all' && d > +w)) return false;
+      if ((from && r[5] < from) || (to && r[5] > to)) return false; // ISO yyyy-mm-dd compares as text
       return !q || r.slice(0, 4).join(' ').toLowerCase().indexOf(q) >= 0;
     }).map(function (r) { return r.concat([daysLeft(r[5])]); });
     $('#count').text(view.length + ' of ' + all.length);
-    $('#btn-csv').prop('disabled', !view.length);
+    $('#btn-csv, #btn-pdf').prop('disabled', !view.length);
     if (!view.length) { $('#rows').html('<tr><td colspan="7" class="empty">No customers match.</td></tr>'); return; }
     $('#rows').empty().append(view.map(function (r) {
       var d = r[6], cls = d < 0 ? 'p-exp' : d <= 30 ? 'p-soon' : 'p-ok';
@@ -171,8 +193,15 @@
   }
 
   $('#q').on('input', render);
-  $('#win').on('change', render);
+  $('#d-from, #d-to').on('change', render);
+  $('#co').on('change', load);
   $('#btn-load').on('click', load);
+  $('#btn-pdf').on('click', function () {
+    $('#print-hdr').text('Customer Expiry Listing — ' + $('#co option:selected').text() +
+      ' | From ' + ($('#d-from').val() || 'any') + ' To ' + ($('#d-to').val() || 'any') +
+      ' | ' + view.length + ' customers | Printed ' + new Date().toLocaleString());
+    window.print();
+  });
   $('#btn-csv').on('click', function () {
     var esc = function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
     var csv = [['Account Code', 'Customer', 'Phone', 'Email', 'Status', 'Date Expired', 'Days Left']].concat(view)
