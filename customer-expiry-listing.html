@@ -56,8 +56,8 @@
   <div class="bar">
     <input id="q" placeholder="Search account code / name / phone / email..." />
     <select id="co"><option value="0">All companies</option></select>
-    <label class="sub" style="margin:0">From <input type="date" id="d-from" style="flex:none;min-width:0"></label>
-    <label class="sub" style="margin:0">To <input type="date" id="d-to" style="flex:none;min-width:0"></label>
+    <label class="sub" style="margin:0;display:flex;gap:6px;align-items:center">From <input type="date" id="d-from" style="flex:none;min-width:0"></label>
+    <label class="sub" style="margin:0;display:flex;gap:6px;align-items:center">To <input type="date" id="d-to" style="flex:none;min-width:0"></label>
     <button id="btn-load" disabled>Refresh</button>
     <button id="btn-csv" class="btn-secondary" disabled>Export CSV</button>
     <button id="btn-pdf" class="btn-secondary" disabled>Export PDF</button>
@@ -231,6 +231,13 @@
     a.download = 'customer_expiry_' + new Date().toISOString().slice(0, 10) + '.csv';
     a.click();
   });
+  /* default range = this month (local dates, not toISOString which shifts by timezone) */
+  (function () {
+    var n = new Date(), pad = function (v) { return String(v).padStart(2, '0'); };
+    var ym = n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-';
+    $('#d-from').val(ym + '01');
+    $('#d-to').val(ym + pad(new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate()));
+  })();
   addLog('Page loaded - listening for ALAYA_INIT');
 </script>
 </body>
