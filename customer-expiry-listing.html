@@ -31,9 +31,13 @@
     .p-exp { background:#fee2e2; color:#991b1b; } .p-soon { background:#fef3c7; color:#92400e; } .p-ok { background:#dcfce7; color:#166534; }
     #log { list-style:none; font-size:.74rem; color:#6b7280; max-height:140px; overflow:auto; }
     #log .ts { color:#9ca3af; margin-right:8px; }
+    th { position:relative; }
+    .rz { position:absolute; right:0; top:0; bottom:0; width:6px; cursor:col-resize; user-select:none; }
+    .rz:hover, .rz.on { background:#93c5fd; }
     #print-hdr { display:none; }
     @media print {
       body { background:#fff; padding:0; }
+      .rz { display:none; }
       .bar, #log, .badge, .sub, #btn-load, .log-card { display:none !important; }
       #print-hdr { display:block; font-size:.9rem; margin-bottom:8px; }
       .card { box-shadow:none; border:0; padding:0; }
@@ -192,6 +196,22 @@
     }));
   }
 
+  /* drag a header edge to resize that column; table grows, wrapper scrolls sideways */
+  $('th').each(function () {
+    var th = $(this), h = $('<span class="rz">').appendTo(th);
+    h.on('mousedown', function (e) {
+      e.preventDefault();
+      var $t = $('table'), ths = $t.find('th');
+      ths.each(function () { $(this).css('width', $(this).outerWidth()); });
+      $t.css('width', ths.toArray().reduce(function (a, x) { return a + $(x).outerWidth(); }, 0));
+      var x0 = e.pageX, w0 = th.outerWidth(), t0 = $t.outerWidth();
+      h.addClass('on');
+      $(document).on('mousemove.rz', function (m) {
+        var w = Math.max(50, w0 + m.pageX - x0);
+        th.css('width', w); $t.css('width', t0 + w - w0);
+      }).on('mouseup.rz', function () { h.removeClass('on'); $(document).off('.rz'); });
+    });
+  });
   $('#q').on('input', render);
   $('#d-from, #d-to').on('change', render);
   $('#co').on('change', load);
