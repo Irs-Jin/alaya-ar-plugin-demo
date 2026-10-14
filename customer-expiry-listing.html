@@ -66,8 +66,8 @@
   <div id="print-hdr"></div>
   <div class="wrap">
     <table>
-      <thead><tr><th style="width:11%">Account Code</th><th style="width:26%">Customer</th><th style="width:13%">Phone</th><th style="width:20%">Email</th><th style="width:8%">Status</th><th style="width:11%">Date Expired</th><th style="width:11%">Days Left</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="7" class="empty">Waiting for host...</td></tr></tbody>
+      <thead><tr><th style="width:11%">Account Code</th><th style="width:21%">Customer</th><th style="width:10%">Phone</th><th style="width:11%">Handphone</th><th style="width:17%">Email</th><th style="width:10%">Status</th><th style="width:10%">Date Expired</th><th style="width:10%">Days Left</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="8" class="empty">Waiting for host...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -79,7 +79,7 @@
   var all = [];
   var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
   function custSql(co) {
-    return "SELECT TOP 5000 Cust_AccountCode, Cust_NAME, Cust_Phone1, Cust_Email, Cust_Status, " +
+    return "SELECT TOP 5000 Cust_AccountCode, Cust_NAME, Cust_Phone1, Cust_Mobile, Cust_Email, Cust_Status, " +
       "CONVERT(varchar(10), Cust_ExpiryDate, 120) FROM Customer c WHERE Cust_ExpiryDate IS NOT NULL" +
       (+co ? " AND EXISTS (SELECT 1 FROM CompanyCustomer cc WHERE cc.CC_CustomerID = c.Cust_ID AND cc.CC_CompanyID = " + (+co) + ")" : "") +
       " ORDER BY Cust_ExpiryDate";
@@ -161,14 +161,14 @@
   /* ── load + render ── */
   function load() {
     $('#btn-load').prop('disabled', true);
-    $('#rows').html('<tr><td colspan="7" class="empty">Loading...</td></tr>');
+    $('#rows').html('<tr><td colspan="8" class="empty">Loading...</td></tr>');
     executeSqlViaHost(custSql($('#co').val())).then(function (msg) {
       all = rowsOf(msg);
       addLog('Loaded ' + all.length + ' customers with expiry date');
       render();
     }).catch(function (err) {
       addLog('Load failed: ' + err.message);
-      $('#rows').html('<tr><td colspan="7" class="empty">Load failed: ' + $('<i>').text(err.message).html() + '</td></tr>');
+      $('#rows').html('<tr><td colspan="8" class="empty">Load failed: ' + $('<i>').text(err.message).html() + '</td></tr>');
     }).then(function () { $('#btn-load').prop('disabled', false); });
   }
 
@@ -182,16 +182,16 @@
   function render() {
     var from = $('#d-from').val(), to = $('#d-to').val(), q = $('#q').val().toLowerCase();
     view = all.filter(function (r) {
-      if ((from && r[5] < from) || (to && r[5] > to)) return false; // ISO yyyy-mm-dd compares as text
-      return !q || r.slice(0, 4).join(' ').toLowerCase().indexOf(q) >= 0;
-    }).map(function (r) { return r.concat([daysLeft(r[5])]); });
+      if ((from && r[6] < from) || (to && r[6] > to)) return false; // ISO yyyy-mm-dd compares as text
+      return !q || r.slice(0, 5).join(' ').toLowerCase().indexOf(q) >= 0;
+    }).map(function (r) { return r.concat([daysLeft(r[6])]); });
     $('#count').text(view.length + ' of ' + all.length);
     $('#btn-csv, #btn-pdf').prop('disabled', !view.length);
-    if (!view.length) { $('#rows').html('<tr><td colspan="7" class="empty">No customers match.</td></tr>'); return; }
+    if (!view.length) { $('#rows').html('<tr><td colspan="8" class="empty">No customers match.</td></tr>'); return; }
     $('#rows').empty().append(view.map(function (r) {
-      var d = r[6], cls = d < 0 ? 'p-exp' : d <= 30 ? 'p-soon' : 'p-ok';
+      var d = r[7], cls = d < 0 ? 'p-exp' : d <= 30 ? 'p-soon' : 'p-ok';
       var tr = $('<tr>');
-      [r[0], r[1], r[2], r[3], r[4], r[5]].forEach(function (v) { tr.append($('<td>').text(v == null ? '' : v)); });
+      [r[0], r[1], r[2], r[3], r[4], r[5], r[6]].forEach(function (v) { tr.append($('<td>').text(v == null ? '' : v)); });
       return tr.append($('<td>').append($('<span class="pill ' + cls + '">').text(d < 0 ? 'Expired ' + (-d) + 'd' : d + 'd')));
     }));
   }
@@ -224,7 +224,7 @@
   });
   $('#btn-csv').on('click', function () {
     var esc = function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
-    var csv = [['Account Code', 'Customer', 'Phone', 'Email', 'Status', 'Date Expired', 'Days Left']].concat(view)
+    var csv = [['Account Code', 'Customer', 'Phone', 'Handphone', 'Email', 'Status', 'Date Expired', 'Days Left']].concat(view)
       .map(function (r) { return r.map(esc).join(','); }).join('\r\n');
     var a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
