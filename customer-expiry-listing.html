@@ -1,77 +1,54 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Customer Expiry Listing - Alaya</title>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- daisyUI 5 + Tailwind 4 from CDN (no build step). Tailwind's browser build compiles classes at runtime,
+       including the ones this page adds from JS. ponytail: pre-compile to a static CSS file if the CDN is ever blocked. -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', -apple-system, 'Segoe UI', Arial, sans-serif; background:#f0f2f5; color:#1a1a1a; padding:24px 20px; line-height:1.5; }
-    .card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 1px 3px rgba(0,0,0,.06); padding:20px 24px; max-width:1200px; margin:0 auto 16px; }
-    h1 { font-size:1.3rem; font-weight:800; color:#111827; }
-    .sub { font-size:.82rem; color:#6b7280; margin:4px 0 12px; }
-    .badge { display:inline-block; padding:3px 12px; border-radius:999px; font-size:.72rem; font-weight:700; }
-    .badge-waiting { background:#fef3c7; color:#92400e; }
-    .badge-received { background:#dcfce7; color:#166534; }
-    .badge-fail { background:#fee2e2; color:#991b1b; }
-    .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
-    .bar input, .bar select { border:1px solid #d1d5db; border-radius:8px; padding:7px 10px; font-size:.82rem; font-family:inherit; }
-    .bar input { flex:1; min-width:180px; }
-    button { background:#2563eb; color:#fff; border:0; border-radius:8px; padding:8px 14px; font-size:.82rem; font-weight:600; cursor:pointer; }
-    button:disabled { background:#9ca3af; cursor:not-allowed; }
-    .btn-secondary { background:#e5e7eb; color:#111827; }
-    table { width:100%; border-collapse:collapse; font-size:.82rem; table-layout:fixed; }
-    td, th { overflow-wrap:anywhere; }
-    th { text-align:left; background:#f9fafb; padding:8px 10px; border-bottom:1px solid #e5e7eb; position:sticky; top:0; }
-    td { padding:8px 10px; border-bottom:1px solid #f3f4f6; }
-    .wrap { max-height:520px; overflow:auto; }
-    .pill { white-space:nowrap; padding:2px 10px; border-radius:999px; font-size:.72rem; font-weight:700; }
-    .p-exp { background:#fee2e2; color:#991b1b; } .p-soon { background:#fef3c7; color:#92400e; } .p-ok { background:#dcfce7; color:#166534; }
-    #log { list-style:none; font-size:.74rem; color:#6b7280; max-height:140px; overflow:auto; }
-    #log .ts { color:#9ca3af; margin-right:8px; }
-    th { position:relative; }
-    .rz { position:absolute; right:0; top:0; bottom:0; width:6px; cursor:col-resize; user-select:none; }
-    .rz:hover, .rz.on { background:#93c5fd; }
-    #print-hdr { display:none; }
-    @media print {
-      body { background:#fff; padding:0; }
-      .rz { display:none; }
-      .bar, #log, .badge, .sub, #btn-load, .log-card { display:none !important; }
-      #print-hdr { display:block; font-size:.9rem; margin-bottom:8px; }
-      .card { box-shadow:none; border:0; padding:0; }
-      .wrap { max-height:none; overflow:visible; }
-      th { position:static; }
-      tr { page-break-inside:avoid; }
-    }
-    .empty { text-align:center; color:#9ca3af; padding:24px; }
+    html[data-theme=light] { --color-primary: #2563eb; --color-primary-content: #fff; }
+    body { font-family: 'Inter', -apple-system, 'Segoe UI', Arial, sans-serif; }
+    table { table-layout: fixed; }
+    td, th { overflow-wrap: anywhere; }
+    thead th { position: sticky; top: 0; z-index: 1; }
+    .rz { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; user-select: none; }
+    .rz:hover, .rz.on { background: #93c5fd; }
+    @media print { tr { break-inside: avoid; } }
   </style>
 </head>
-<body>
-<div class="card">
-  <h1>Customer Expiry Listing</h1>
-  <div class="sub">Customers by <b>Date Expired</b> (Customer &gt; General). Read-only.
-    <span id="badge" class="badge badge-waiting">Waiting for ALAYA_INIT...</span></div>
-  <div class="bar">
-    <input id="q" placeholder="Search account code / name / phone / email..." />
-    <select id="co"><option value="0">All companies</option></select>
-    <label class="sub" style="margin:0;display:flex;gap:6px;align-items:center">From <input type="date" id="d-from" style="flex:none;min-width:0"></label>
-    <label class="sub" style="margin:0;display:flex;gap:6px;align-items:center">To <input type="date" id="d-to" style="flex:none;min-width:0"></label>
-    <button id="btn-load" disabled>Refresh</button>
-    <button id="btn-csv" class="btn-secondary" disabled>Export CSV</button>
-    <button id="btn-pdf" class="btn-secondary" disabled>Export PDF</button>
-    <span id="count" class="sub" style="margin:0"></span>
-  </div>
-  <div id="print-hdr"></div>
-  <div class="wrap">
-    <table>
-      <thead><tr><th style="width:11%">Account Code</th><th style="width:20%">Customer</th><th style="width:10%">Phone</th><th style="width:11%">Handphone</th><th style="width:17%">Email</th><th style="width:10%">Status</th><th style="width:9%">Date Expired</th><th style="width:12%">Days Left</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="8" class="empty">Waiting for host...</td></tr></tbody>
-    </table>
+<body class="bg-base-200 p-4 print:bg-white print:p-0">
+<div class="card bg-base-100 shadow max-w-6xl mx-auto mb-4 print:shadow-none">
+  <div class="card-body gap-3 print:p-0">
+    <div class="print:hidden">
+      <h1 class="text-xl font-extrabold">Customer Expiry Listing</h1>
+      <div class="text-sm opacity-70 flex items-center gap-2">Customers by <b>Date Expired</b> (Customer &gt; General). Read-only.
+        <span id="badge" class="badge badge-warning badge-sm font-bold">Waiting for ALAYA_INIT...</span></div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 print:hidden">
+      <input id="q" class="input input-sm input-bordered flex-1 min-w-48" placeholder="Search account code / name / phone / email..." />
+      <select id="co" class="select select-sm select-bordered"><option value="0">All companies</option></select>
+      <label class="flex items-center gap-1 text-sm">From <input type="date" id="d-from" class="input input-sm input-bordered"></label>
+      <label class="flex items-center gap-1 text-sm">To <input type="date" id="d-to" class="input input-sm input-bordered"></label>
+      <button id="btn-load" class="btn btn-sm btn-primary" disabled>Refresh</button>
+      <button id="btn-csv" class="btn btn-sm" disabled>Export CSV</button>
+      <button id="btn-pdf" class="btn btn-sm" disabled>Export PDF</button>
+      <span id="count" class="text-sm opacity-60"></span>
+    </div>
+    <div id="print-hdr" class="hidden print:block text-sm mb-2"></div>
+    <div class="overflow-auto max-h-[520px] rounded-box border border-base-300 print:max-h-none print:overflow-visible print:border-0">
+      <table class="table table-sm w-full">
+        <thead><tr class="bg-base-200"><th class="bg-base-200" style="width:11%">Account Code</th><th class="bg-base-200" style="width:20%">Customer</th><th class="bg-base-200" style="width:10%">Phone</th><th class="bg-base-200" style="width:11%">Handphone</th><th class="bg-base-200" style="width:17%">Email</th><th class="bg-base-200" style="width:10%">Status</th><th class="bg-base-200" style="width:9%">Date Expired</th><th class="bg-base-200" style="width:12%">Days Left</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="text-center opacity-60 py-6">Waiting for host...</td></tr></tbody>
+      </table>
+    </div>
   </div>
 </div>
-<div class="card log-card"><ul id="log"></ul></div>
+<div class="card bg-base-100 shadow max-w-6xl mx-auto print:hidden"><div class="card-body py-3"><ul id="log" class="text-xs opacity-60 max-h-36 overflow-auto"></ul></div></div>
 
 <script>
   var hostOrigin = '';
@@ -85,7 +62,7 @@
       " ORDER BY Cust_ExpiryDate";
   }
 
-  function addLog(m) { $('#log').prepend($('<li>').append($('<span class="ts">').text(new Date().toLocaleTimeString()), document.createTextNode(m))); }
+  function addLog(m) { $('#log').prepend($('<li>').append($('<span class="opacity-50 mr-2">').text(new Date().toLocaleTimeString()), document.createTextNode(m))); }
   function postToParent(type, data) { if (window.parent && window.parent !== window) window.parent.postMessage({ type: type, data: data }, '*'); }
 
   /* ── ALAYA_INIT handshake (same as todo-list-plugin.html) ── */
@@ -93,7 +70,7 @@
     var msg = e.originalEvent.data;
     if (!msg || msg.type !== 'ALAYA_INIT') return;
     hostOrigin = e.originalEvent.origin || '';
-    $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
+    $('#badge').removeClass('badge-warning').addClass('badge-success').text('ALAYA_INIT received');
     postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
     /* pre-load hidden memoQuery iframe in host for the SQL bridge */
     window.top.postMessage({ target: hostOrigin, eval:
@@ -161,14 +138,14 @@
   /* ── load + render ── */
   function load() {
     $('#btn-load').prop('disabled', true);
-    $('#rows').html('<tr><td colspan="8" class="empty">Loading...</td></tr>');
+    $('#rows').html('<tr><td colspan="8" class="text-center opacity-60 py-6">Loading...</td></tr>');
     executeSqlViaHost(custSql($('#co').val())).then(function (msg) {
       all = rowsOf(msg);
       addLog('Loaded ' + all.length + ' customers with expiry date');
       render();
     }).catch(function (err) {
       addLog('Load failed: ' + err.message);
-      $('#rows').html('<tr><td colspan="8" class="empty">Load failed: ' + $('<i>').text(err.message).html() + '</td></tr>');
+      $('#rows').html('<tr><td colspan="8" class="text-center opacity-60 py-6">Load failed: ' + $('<i>').text(err.message).html() + '</td></tr>');
     }).then(function () { $('#btn-load').prop('disabled', false); });
   }
 
@@ -187,18 +164,18 @@
     }).map(function (r) { return r.concat([daysLeft(r[6])]); });
     $('#count').text(view.length + ' of ' + all.length);
     $('#btn-csv, #btn-pdf').prop('disabled', !view.length);
-    if (!view.length) { $('#rows').html('<tr><td colspan="8" class="empty">No customers match.</td></tr>'); return; }
+    if (!view.length) { $('#rows').html('<tr><td colspan="8" class="text-center opacity-60 py-6">No customers match.</td></tr>'); return; }
     $('#rows').empty().append(view.map(function (r) {
-      var d = r[7], cls = d < 0 ? 'p-exp' : d <= 30 ? 'p-soon' : 'p-ok';
+      var d = r[7], cls = d < 0 ? 'badge-error' : d <= 30 ? 'badge-warning' : 'badge-success';
       var tr = $('<tr>');
       [r[0], r[1], r[2], r[3], r[4], r[5], r[6]].forEach(function (v) { tr.append($('<td>').text(v == null ? '' : v)); });
-      return tr.append($('<td>').append($('<span class="pill ' + cls + '">').text(d < 0 ? 'Expired ' + (-d) + 'd' : d + 'd')));
+      return tr.append($('<td>').append($('<span class="badge badge-soft badge-sm font-bold whitespace-nowrap ' + cls + '">').text(d < 0 ? 'Expired ' + (-d) + 'd' : d + 'd')));
     }));
   }
 
   /* drag a header edge to resize that column; table grows, wrapper scrolls sideways */
   $('th').each(function () {
-    var th = $(this), h = $('<span class="rz">').appendTo(th);
+    var th = $(this), h = $('<span class="rz print:hidden">').appendTo(th);
     h.on('mousedown', function (e) {
       e.preventDefault();
       var $t = $('table'), ths = $t.find('th');
