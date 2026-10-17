@@ -2608,7 +2608,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.25';
+var HELPER_LATEST = '1.5.26';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
@@ -4199,6 +4199,8 @@ function askYesNo(title, msg, cb) {
 }
 
 function runTransferMaster(from, to, company, alayaCid) {
+  if (window._transferBusy) { addLog('A transfer is already running - second start ignored', 'log-warn'); return; }   // two runs at once shared one progress counter (243/148)
+  window._transferBusy = true;
   addLog('Starting transfer: ' + from + ' ~ ' + to + ' to ' + company, 'log-info');
   $('#transfer-progress').show();
   $('#btn-transfer').prop('disabled', true);
@@ -4241,7 +4243,7 @@ function runTransferMaster(from, to, company, alayaCid) {
   if (transfers.length === 0) {
     showToast('No transfer options selected', true);
     $('#transfer-progress').hide();
-    $('#btn-transfer').prop('disabled', false);
+    $('#btn-transfer').prop('disabled', false); window._transferBusy = false;
     return;
   }
 
@@ -4281,7 +4283,7 @@ function runTransferMaster(from, to, company, alayaCid) {
     showToast('No master data from Alaya to transfer (' + what.join(' + ') + ' list empty)', true);
     addLog('Transfer blocked: ' + what.join(' + ') + ' master list empty - load returned 0 rows', 'log-err');
     $('#transfer-progress').hide();
-    $('#btn-transfer').prop('disabled', false);
+    $('#btn-transfer').prop('disabled', false); window._transferBusy = false;
     return;
   }
   addLog('Fetching source docs from Alaya for company ' + alayaCid + '...', 'log-info');
@@ -4359,7 +4361,7 @@ function runTransferMaster(from, to, company, alayaCid) {
       showToast('Transfer completed');
       showTransferResults(r.data);
       setTimeout(function() { $('#transfer-progress').hide(); }, 2000);
-      $('#btn-transfer').prop('disabled', false);
+      $('#btn-transfer').prop('disabled', false); window._transferBusy = false;
     },
     error: function(xhr) {
       stopProgressPoll();
@@ -4367,7 +4369,7 @@ function runTransferMaster(from, to, company, alayaCid) {
       addLog('Transfer FAILED: ' + xhr.status, 'log-err');
       showToast('Transfer failed', true);
       $('#transfer-progress').hide();
-      $('#btn-transfer').prop('disabled', false);
+      $('#btn-transfer').prop('disabled', false); window._transferBusy = false;
     }
   });
   }); // end fetchAllSourceDocs
