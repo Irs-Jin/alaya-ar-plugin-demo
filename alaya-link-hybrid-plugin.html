@@ -1422,7 +1422,17 @@ function v3RestoreSecrets(force) {
 
 // ── this PC's SQL connection: one MACHINE@<id> row per PC; a new PC can copy another PC's ──
 function v3MachineGroup(s, id, name) {
-  return { cid: 0, code: 'MACHINE@' + id, text: JSON.stringify({ n: name, d: s.dcfPath, h: s.fbHost, p: s.fbPort, u: s.fbUser, e: s.estreamUser, t: v3Now() }) };
+  return { cid: 0, code: 'MACHINE@' + id, text: JSON.stringify({ n: name, d: s.dcfPath, h: s.fbHost, p: s.fbPort, u: s.fbUser, e: s.estreamUser, c: s.alayaCompanyId, t: v3Now() }) };   // c = the default Alaya company of THIS PC
+}
+// default Alaya company is kept per PC (MACHINE row) - the shared GENERAL value is only the fallback for a PC that never saved
+function v3ApplyMachineCompany(machine) {
+  var row = v3Get(window._v3map, 0, 'MACHINE@' + machine.id), want = row && parseInt(row.c, 10);
+  if (!want) return;
+  settings.alayaCompanyId = want;                    // company list not loaded yet: pickDefaultCompany will use this
+  var sel = $('#alaya-company-select');
+  if (String(sel.val()) !== String(want) && sel.find('option[value="' + want + '"]').length) {
+    window._silentCompany = true; sel.val(String(want)).trigger('change'); window._silentCompany = false;
+  }
 }
 function v3OfferMachineCopy(machine) {
   // no Online/Offline check: an Online company also has a DESTKEY row, which wrongly looked like "Online" and skipped this on an Offline PC
@@ -1461,6 +1471,7 @@ function v3Finish() {
   v3RestoreSecrets().then(function() { return v3Secrets('/api/settings/machine'); }).then(function(r) {
     if (!r || !r.success) return;
     window._machine = r.data;
+    v3ApplyMachineCompany(r.data);
     v3OfferMachineCopy(r.data);
   }).catch(function() {});
 }
