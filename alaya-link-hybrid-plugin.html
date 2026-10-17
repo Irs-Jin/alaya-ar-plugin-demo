@@ -51,6 +51,10 @@
     }
     .tab-btn.active { color:#1565c0; border-bottom-color:#1565c0; }
     .tab-btn:hover:not(.active) { color:#374151; }
+    .set-subbar { display:flex; gap:4px; flex-wrap:wrap; border-bottom:1px solid #e5e7eb; margin-bottom:14px; }
+    .set-sub-btn { border:none; background:none; padding:8px 14px; font-size:0.85rem; font-weight:600; color:#6b7280; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .set-sub-btn.active { color:#1565c0; border-bottom-color:#1565c0; }
+    .set-sub-btn:hover:not(.active) { color:#374151; }
     .tab-panel { display:none; }
     .tab-panel.active { display:block; }
 
@@ -299,6 +303,14 @@
       <button id="btn-save-settings" class="btn-success">Save</button>
     </div>
 
+    <!-- same split as the desktop tool's menu: General Setting / Payment Mode / Sales Branch / Purchase Division (Advanced is the tab on the left) -->
+    <div class="set-subbar">
+      <button class="set-sub-btn active" data-sub="general">General Setting</button>
+      <button class="set-sub-btn" data-sub="pm">Payment Mode</button>
+      <button class="set-sub-btn" data-sub="br">Sales Branch</button>
+      <button class="set-sub-btn" data-sub="dv">Purchase Division</button>
+    </div>
+    <div class="set-sub" data-sub="general">
     <!-- hidden: the default http://localhost:3101 is right for a normal install. Ctrl+click the Settings heading to show. -->
     <div id="backend-conn" style="display:none;">
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin-bottom:12px;">Backend Connection</h3>
@@ -591,6 +603,8 @@
       </div>
     </div>
 
+    </div>
+    <div class="set-sub" data-sub="pm" style="display:none;">
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Payment Mode Mapping</h3>
     <div class="map-toolbar">
       <div class="map-actions">
@@ -613,6 +627,8 @@
       </table>
     </div>
 
+    </div>
+    <div class="set-sub" data-sub="br" style="display:none;">
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Sales Branch Mapping</h3>
     <div class="map-toolbar">
       <div class="map-desc">Per-branch Cash Sales A/C, Acct Code, and Item-Group A/C flag</div>
@@ -631,6 +647,8 @@
       </table>
     </div>
 
+    </div>
+    <div class="set-sub" data-sub="dv" style="display:none;">
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Purchase Division Mapping</h3>
     <div class="map-toolbar">
       <div class="map-desc">Tick = use Purchase A/C Code (Item Group) in Alaya</div>
@@ -645,6 +663,7 @@
           <tr><td colspan="2" style="padding:10px;color:#6b7280;">No divisions for this company.</td></tr>
         </tbody>
       </table>
+    </div>
     </div>
   </div>
 
@@ -4667,6 +4686,11 @@ $(document).on('click', '.transfer-group-header[data-toggle]', function() {
 });
 
 // ΓöÇΓöÇ Tab switching ΓöÇΓöÇ
+$('.set-sub-btn').on('click', function() {
+  var sub = $(this).data('sub');
+  $('.set-sub-btn').removeClass('active'); $(this).addClass('active');
+  $('.set-sub').hide().filter('[data-sub="' + sub + '"]').show();
+});
 $('.tab-btn').on('click', function() {
   var tab = $(this).data('tab');
   $('.tab-btn').removeClass('active');
