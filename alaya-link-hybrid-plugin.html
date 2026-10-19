@@ -630,13 +630,13 @@
     <div class="set-sub" data-sub="br" style="display:none;">
     <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Sales Branch Mapping</h3>
     <div class="map-toolbar">
-      <div class="map-desc">Per-branch Cash Sales A/C, Acct Code, and Item-Group A/C flag</div>
+      <div class="map-desc">Per-branch Cash Sales A/C, Acct Code, and Item-Group A/C flag.<br><b>Cash Sales A/C here is a CUSTOMER code that exists in SQL Account</b> (the customer of this branch's daily cash sales) - not a GL account such as 500-101. Leave it and Acct Code blank to use the CASH customer.</div>
     </div>
     <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
       <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
         <thead><tr style="background:#f9fafb;position:sticky;top:0;">
           <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Sales Branch Code in Alaya</th>
-          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Cash Sales A/C in SQL Acct</th>
+          <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Cash Sales A/C in SQL Acct (customer code)</th>
           <th style="padding:8px;text-align:left;border-bottom:2px solid #e5e7eb;">Acct Code in SQL Acct</th>
           <th style="padding:8px;text-align:center;border-bottom:2px solid #e5e7eb;">Item Group A/C in Alaya</th>
         </tr></thead>
@@ -2618,7 +2618,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.28';
+var HELPER_LATEST = '1.5.29';
 function checkHelperUpdate(v) {
   $('#helper-ver').text(v ? 'v' + v : 'unknown');
   $('#helper-update').remove();
