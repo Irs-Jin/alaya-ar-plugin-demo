@@ -216,7 +216,53 @@
       </select>
     </div>
 
-    <div class="sub" style="margin-top:4px;">Which documents get transferred is controlled by <b>Transfer Options</b> on the Settings tab.</div>
+    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:8px 0 12px;">Transfer Options</h3>
+    <div class="acct-cols">
+      <div class="acct-col">
+        <h4>Customer</h4>
+        <div class="opt-list">
+          <label>
+            <input type="checkbox" id="s-t-customer" checked /> <span>Transfer Customer Data</span>
+          </label>
+          <label id="sbp-group">
+            <input type="checkbox" id="s-sales-branch-proj" /> <span>Transfer Sales Branch Code as Project Code</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashsales" /> <span>Transfer Cash Sales</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpayment" /> <span>Transfer Cash Sales Payment</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-invoice" /> <span>Transfer Invoice</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cn" checked /> <span>Transfer Credit Note</span>
+          </label>
+        </div>
+      </div>
+      <div class="acct-col">
+        <h4>Vendor</h4>
+        <div class="opt-list">
+          <label>
+            <input type="checkbox" id="s-t-vendor" /> <span>Transfer Vendor Data</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpurch" /> <span>Transfer Cash Purchases</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-cashpurchpay" /> <span>Transfer Cash Purchases Payment</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-vendorinv" /> <span>Transfer Vendor Invoice</span>
+          </label>
+          <label>
+            <input type="checkbox" id="s-t-dn" /> <span>Transfer Credit Note</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="sub" style="margin:-4px 0 6px;">Ticks apply to this transfer right away; press <b>Save</b> in Settings to keep them.</div>
 
     <div class="btn-row" style="align-items:center;margin-top:12px;">
       <button id="btn-transfer" class="btn-primary">Transfer</button>
@@ -552,53 +598,6 @@
         <div class="form-group">
           <label>Credit Note Description (Max 150 Char.)</label>
           <input type="text" id="s-desc-debitnote" placeholder="RETURN" maxlength="150" />
-        </div>
-      </div>
-    </div>
-
-    <h3 style="font-size:0.9rem;font-weight:700;color:#1565c0;margin:20px 0 12px;">Transfer Options</h3>
-    <div class="acct-cols">
-      <div class="acct-col">
-        <h4>Customer</h4>
-        <div class="opt-list">
-          <label>
-            <input type="checkbox" id="s-t-customer" checked /> <span>Transfer Customer Data</span>
-          </label>
-          <label id="sbp-group">
-            <input type="checkbox" id="s-sales-branch-proj" /> <span>Transfer Sales Branch Code as Project Code</span>
-          </label>
-          <label>
-            <input type="checkbox" id="s-t-cashsales" /> <span>Transfer Cash Sales</span>
-          </label>
-          <label>
-            <input type="checkbox" id="s-t-cashpayment" /> <span>Transfer Cash Sales Payment</span>
-          </label>
-          <label>
-            <input type="checkbox" id="s-t-invoice" /> <span>Transfer Invoice</span>
-          </label>
-          <label>
-            <input type="checkbox" id="s-t-cn" checked /> <span>Transfer Credit Note</span>
-          </label>
-        </div>
-      </div>
-      <div class="acct-col">
-        <h4>Vendor</h4>
-        <div class="opt-list">
-          <label>
-            <input type="checkbox" id="s-t-vendor" /> <span>Transfer Vendor Data</span>
-          </label>
-          <label>
-            <input type="checkbox" id="s-t-cashpurch" /> <span>Transfer Cash Purchases</span>
-          </label>
-          <label>
-            <input type="checkbox" id="s-t-cashpurchpay" /> <span>Transfer Cash Purchases Payment</span>
-          </label>
-          <label>
-            <input type="checkbox" id="s-t-vendorinv" /> <span>Transfer Vendor Invoice</span>
-          </label>
-          <label>
-            <input type="checkbox" id="s-t-dn" /> <span>Transfer Credit Note</span>
-          </label>
         </div>
       </div>
     </div>
@@ -1426,13 +1425,24 @@ function v3MachineGroup(s, id, name) {
 }
 // default Alaya company is kept per PC (MACHINE row) - the shared GENERAL value is only the fallback for a PC that never saved
 function v3ApplyMachineCompany(machine) {
-  var row = v3Get(window._v3map, 0, 'MACHINE@' + machine.id), want = row && parseInt(row.c, 10);
-  if (!want) return;
-  settings.alayaCompanyId = want;                    // company list not loaded yet: pickDefaultCompany will use this
-  var sel = $('#alaya-company-select');
-  if (String(sel.val()) !== String(want) && sel.find('option[value="' + want + '"]').length) {
-    window._silentCompany = true; sel.val(String(want)).trigger('change'); window._silentCompany = false;
+  function apply(want) {
+    if (!want) return;
+    settings.alayaCompanyId = want;                    // company list not loaded yet: pickDefaultCompany will use this
+    var sel = $('#alaya-company-select');
+    if (String(sel.val()) !== String(want) && sel.find('option[value="' + want + '"]').length) {
+      window._silentCompany = true; sel.val(String(want)).trigger('change'); window._silentCompany = false;
+    }
   }
+  var row = v3Get(window._v3map, 0, 'MACHINE@' + machine.id), fromRow = row && parseInt(row.c, 10);
+  // this PC's own setting (helper config.json) wins; the MACHINE row / shared GENERAL value are only fallbacks
+  fetch(BACKEND_URL + '/api/settings/local').then(function(r) { return r.json(); })
+    .then(function(r) { apply((r && r.success && r.data && parseInt(r.data.defaultCompanyId, 10)) || fromRow); })
+    .catch(function() { apply(fromRow); });
+}
+function saveLocalDefaultCompany(id) {
+  if (!id) return;
+  fetch(BACKEND_URL + '/api/settings/local', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ defaultCompanyId: id }) }).catch(function() {});
 }
 function v3OfferMachineCopy(machine) {
   // no Online/Offline check: an Online company also has a DESTKEY row, which wrongly looked like "Online" and skipped this on an Offline PC
@@ -2608,7 +2618,7 @@ function startInstallWatch() {
   }, 2000);
 }
 // bump together with BACKEND_VERSION in server.py (and AppVer in installer\LinkSqlHybrid.iss) when a new installer is released
-var HELPER_LATEST = '1.5.27';
+var HELPER_LATEST = '1.5.28';
 function checkHelperUpdate(v) {
   $('#helper-update').remove();
   if (!v || v === HELPER_LATEST) return;
@@ -2721,6 +2731,7 @@ $('#alaya-company-select').on('change', function() {
   // old values; switching back overwrote the originals).
   var prevId = (typeof window._currentCompanyId === 'number') ? window._currentCompanyId : (settings.alayaCompanyId || 0);
   settings.alayaCompany = currentAlayaCompanyCode();
+  if (!window._silentCompany) saveLocalDefaultCompany(id);
   if (!window._silentCompany) {
     if (prevId && prevId !== id) {
       saveSettings(prevId);
@@ -4900,6 +4911,7 @@ $('#btn-save-default-company').on('click', function() {
   if (!id) { showToast('No Alaya company selected in the dropdown yet', true); return; }
   settings.alayaCompanyId = id;
   settings.alayaCompany = code;
+  saveLocalDefaultCompany(id);
   try { localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(backupOf(settings))); } catch(e) {}
   var name = $('#alaya-company-select').find('option:selected').text() || code;
   var display = code;
