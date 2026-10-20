@@ -2132,6 +2132,7 @@ function requestToken(over) {
       clientId = cid; username = usr;
       authToken = r.token_type + ' ' + r.access_token;
       addLog('Token obtained (' + (pass ? 'password' : 'devkey') + ' login as ' + usr + ')', 'log-ok');
+      if (over.quiet) { if (over.done) over.done(true); return; }   // mid-transfer refresh: do not reload the company list
       extractJwtHints(authToken);
       loadCompaniesFromApi();
     },
@@ -2139,6 +2140,7 @@ function requestToken(over) {
       var msg = '';
       try { msg = JSON.parse(r.responseText).error_description || r.responseText; } catch (e) { msg = r.responseText || 'Unknown'; }
       addLog('Token failed: ' + msg, 'log-err');
+      if (over.quiet) { if (over.done) over.done(false); return; }
       showToast('Alaya login failed: ' + msg, true);
     }
   });
@@ -3949,7 +3951,7 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
     return b + "}";
   }
   addLog('POST ' + endpoint + ' ' + JSON.stringify(bodyFor(0)));
-  var _pageCount = 0, _prevMaxID = -1;
+  var _pageCount = 0, _prevMaxID = -1, _retried401 = false;
   function errDetail(xhr) {
     var t = '';
     try { t = ' ' + String(xhr.responseText || '').slice(0, 200); } catch(e) {}
@@ -3996,6 +3998,11 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
               addLog(type + ' fetch failed (' + errDetail(xhr2) + ')', 'log-err'); cb(null);
             }
           });
+        } else if (xhr.status === 401 && !_retried401) {
+          // the Alaya token may have expired or been refused for a moment: take a fresh one and ask again, once
+          _retried401 = true;
+          addLog(type + ': 401 - taking a fresh token and trying again', 'log-warn');
+          requestToken({ quiet: true, done: function() { setTimeout(function() { page(maxID); }, 1500); } });
         } else {
           if (acc.length) { handle({ data: [] }, false); return; }
           addLog(type + ' fetch failed (' + errDetail(xhr) + ')', 'log-err');
