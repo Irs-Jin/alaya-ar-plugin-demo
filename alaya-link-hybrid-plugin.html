@@ -2108,6 +2108,14 @@ $(window).on('message', function(e) {
 });
 
 // ΓöÇΓöÇ Authentication ΓöÇΓöÇ
+// the Alaya token lasts about an hour: take a new one every 45 minutes so a page left open does not start failing with 401
+function scheduleTokenRefresh() {
+  clearTimeout(window._tokTimer);
+  window._tokTimer = setTimeout(function() {
+    addLog('Refreshing the Alaya token (45 min)', 'log-info');
+    requestToken({ quiet: true, done: function(ok) { if (!ok) addLog('Automatic token refresh failed - reload the page if a transfer reports 401', 'log-warn'); } });
+  }, 45 * 60 * 1000);
+}
 function requestToken(over) {
   over = over || {};
   var cid = over.client || settings.alayaLoginClient || clientId;
@@ -2132,6 +2140,7 @@ function requestToken(over) {
       clientId = cid; username = usr;
       authToken = r.token_type + ' ' + r.access_token;
       addLog('Token obtained (' + (pass ? 'password' : 'devkey') + ' login as ' + usr + ')', 'log-ok');
+      scheduleTokenRefresh();
       if (over.quiet) { if (over.done) over.done(true); return; }   // mid-transfer refresh: do not reload the company list
       extractJwtHints(authToken);
       loadCompaniesFromApi();
