@@ -4,6 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Link to SQL Hybrid - Module Editor Plugin</title>
+  <script>
+    // opened on its own (not inside Alaya's iframe): show only a notice, build nothing - the page needs Alaya's logged-in user
+    if (window.self === window.top) {
+      window.stop();
+      document.documentElement.innerHTML = '<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Link to SQL Hybrid</title></head>' +
+        '<body style="margin:0;background:#f8f9fc;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;"><div style="max-width:860px;margin:120px auto;padding:0 20px;">' +
+        '<div style="font-size:0.7rem;letter-spacing:0.12em;color:#6b7280;margin-bottom:12px;">LINK TO SQL HYBRID &middot; ALAYA</div>' +
+        '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:28px 32px;"><h1 style="margin:0 0 8px;font-size:1.6rem;">Open Link to SQL Hybrid inside Alaya</h1>' +
+        '<div style="color:#6b7280;">This page uses Alaya&rsquo;s logged-in user and database. Open it from your Alaya plugin menu.</div></div></div></body>';
+    }
+  </script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
