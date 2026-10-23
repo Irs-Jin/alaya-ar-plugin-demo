@@ -2066,6 +2066,7 @@ $(window).on('message', function(e) {
     hostOrigin = e.originalEvent.origin || '';
     var payload = msg.data !== undefined ? msg.data : msg;
     addLog('Received <- ALAYA_INIT');
+    try { addLog('ALAYA_INIT fields: ' + Object.keys(payload || {}).join(', '), 'log-info'); } catch (e) {}   // names only, never the values
     $('#badge').removeClass('badge-waiting').addClass('badge-received').text('ALAYA_INIT received');
     
     if (payload && payload.apiurl) apiUrl = payload.apiurl.endsWith('/') ? payload.apiurl : payload.apiurl + '/';
