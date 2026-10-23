@@ -2128,14 +2128,40 @@ $(window).on('message', function(e) {
 });
 
 // ΓöÇΓöÇ Authentication ΓöÇΓöÇ
-// the Alaya token lasts about an hour: take a new one every 45 minutes so a page left open does not start failing with 401
+// the Alaya token lasts about an hour. The devkey login cannot be repeated (its nonce is used once - seen: 'Token failed: Unknown'),
+// so the token is renewed with the refresh_token Alaya returned with it, 15 minutes before it ends
+var refreshToken = '';
+function refreshAccessToken(done) {
+  if (!refreshToken) { if (done) done(false); return; }
+  $.ajax({
+    url: apiUrl + 'token', type: 'POST', cache: false,
+    data: { grant_type: 'refresh_token', refresh_token: refreshToken, clientid: clientId },
+    success: function (r) {
+      authToken = r.token_type + ' ' + r.access_token;
+      if (r.refresh_token) refreshToken = r.refresh_token;
+      addLog('Alaya token renewed', 'log-ok');
+      scheduleTokenRefresh();
+      if (done) done(true);
+    },
+    error: function (xhr) {
+      addLog('Could not renew the Alaya token (' + xhr.status + ') - reload the page', 'log-err');
+      if (done) done(false);
+    }
+  });
+}
 function scheduleTokenRefresh() {
   clearTimeout(window._tokTimer);
-  window._tokTimer = setTimeout(function() {
-    addLog('Refreshing the Alaya token (45 min)', 'log-info');
-    requestToken({ quiet: true, done: function(ok) { if (!ok) addLog('Automatic token refresh failed - reload the page if a transfer reports 401', 'log-warn'); } });
-  }, 45 * 60 * 1000);
+  if (!refreshToken) return;
+  window._tokTimer = setTimeout(function() { refreshAccessToken(); }, 45 * 60 * 1000);
 }
+// any Alaya API call refused with 401 (session over): tell the user once, what to do
+$(document).ajaxError(function(e, xhr, settings) {
+  if (xhr.status === 401 && apiUrl && String(settings.url || '').indexOf(apiUrl) === 0 && !window._expiredShown) {
+    window._expiredShown = true;
+    showToast('The Alaya session has expired - please reload this page', true, 12000);
+    setTimeout(function() { window._expiredShown = false; }, 60000);
+  }
+});
 function requestToken(over) {
   over = over || {};
   var cid = over.client || settings.alayaLoginClient || clientId;
@@ -2159,6 +2185,7 @@ function requestToken(over) {
     success: function (r) {
       clientId = cid; username = usr;
       authToken = r.token_type + ' ' + r.access_token;
+      refreshToken = r.refresh_token || '';
       addLog('Token obtained (' + (pass ? 'password' : 'devkey') + ' login as ' + usr + ')', 'log-ok');
       scheduleTokenRefresh();
       if (over.quiet) { if (over.done) over.done(true); return; }   // mid-transfer refresh: do not reload the company list
@@ -4031,7 +4058,7 @@ function fetchDocType(type, endpoint, cid, from, to, cb) {
           // the Alaya token may have expired or been refused for a moment: take a fresh one and ask again, once
           _retried401 = true;
           addLog(type + ': 401 - taking a fresh token and trying again', 'log-warn');
-          requestToken({ quiet: true, done: function() { setTimeout(function() { page(maxID); }, 1500); } });
+          refreshAccessToken(function(ok) { if (ok) setTimeout(function() { page(maxID); }, 1000); else { addLog(type + ' fetch failed (401)', 'log-err'); cb(null); } });
         } else {
           if (acc.length) { handle({ data: [] }, false); return; }
           addLog(type + ' fetch failed (' + errDetail(xhr) + ')', 'log-err');
