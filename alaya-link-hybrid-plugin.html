@@ -697,6 +697,7 @@
 
 // ΓöÇΓöÇ Config ΓöÇΓöÇ
 var DEV_KEY = 'DEV-03DF2CF820BC4A85898FF9FCC4995A85';
+var REQUIRE_DEVKEY = false;   // true once Alaya sends the dev key in ALAYA_INIT: the hard-coded key above is then deleted and a plain ALAYA_INIT does nothing
 var PLUGIN_VERSION = '2026-09-04-fetch-bridge';
 var MEMOQUERY_CB_TARGET = 'ctl00$MainContent$UserDefinedFieldModuleEditor$cbpQueryEditor$pcEditQuery$memoQuery';
 
@@ -2074,6 +2075,12 @@ $(window).on('message', function(e) {
     if (payload && payload.client) clientId = payload.client;
     if (payload && payload.username) username = payload.username;
     
+    if (payload && payload.devkey) DEV_KEY = String(payload.devkey);          // given by Alaya (registered on the module): wins over the built-in one
+    if (REQUIRE_DEVKEY && !(payload && payload.devkey)) {
+      addLog('ALAYA_INIT carries no dev key - nothing is started', 'log-err');
+      showToast('Alaya did not provide a dev key for this plugin - ask your administrator (Module Editor > DevKey)', true, 10000);
+      return;
+    }
     addLog('api=' + apiUrl + ' client=' + clientId + ' user=' + username);
     postToParent('ALAYA_READY', { status: 'ok', receivedAt: new Date().toISOString() });
     
